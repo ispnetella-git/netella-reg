@@ -13,6 +13,9 @@ $src = __DIR__ . '/../src';
 require $src . '/Core/SnapshotDiff.php';
 require $src . '/Core/Settings.php';
 require $src . '/Core/Access.php';
+require $src . '/Core/ApiException.php';
+require $src . '/Core/Expiry.php';
+require $src . '/Core/Backup.php';
 require $src . '/Modules/Vlan/VlanName.php';
 require $src . '/Modules/Vlan/VlanRange.php';
 require $src . '/Modules/Vlan/VlanIndex.php';
@@ -22,6 +25,9 @@ require $src . '/Modules/Ipam/IpInput.php';
 require $src . '/Modules/Ipam/IpTree.php';
 
 use Ispnetella\NetellaReg\Core\Access;
+use Ispnetella\NetellaReg\Core\ApiException;
+use Ispnetella\NetellaReg\Core\Backup;
+use Ispnetella\NetellaReg\Core\Expiry;
 use Ispnetella\NetellaReg\Modules\Ipam\IpCalc;
 use Ispnetella\NetellaReg\Modules\Ipam\IpInput;
 use Ispnetella\NetellaReg\Modules\Ipam\IpTree;
@@ -309,6 +315,61 @@ check('gaps sieci /30 bez adresu sieci i rozgłoszeniowego', array_map(fn ($g) =
     [['10.0.5.1', '10.0.5.2']]);
 check('gaps wolne prefiksy agregatu', array_map(fn ($b) => IpCalc::cidr($b['start'], $b['len']), IpCalc::rangeToCidrs($ip('10.0.6.0'), $ip('10.0.255.255'))),
     ['10.0.6.0/23', '10.0.8.0/21', '10.0.16.0/20', '10.0.32.0/19', '10.0.64.0/18', '10.0.128.0/17']);
+
+// --- Expiry: termin ważności wpisów ręcznych ---
+$today = '2026-10-27';
+check('expiry pusto', Expiry::parse('', $today), null);
+check('expiry data', Expiry::parse('2026-12-31', $today), '2026-12-31');
+check('expiry dziś dozwolone', Expiry::parse('2026-10-27', $today), '2026-10-27');
+check('expiry przeszłość przy allowPast', Expiry::parse('2026-01-01', $today, true), '2026-01-01');
+$apiThrows = function (string $name, callable $fn) {
+    global $passed, $failed;
+    try {
+        $fn();
+        $failed++;
+        echo "  BŁĄD: $name - brak wyjątku\n";
+    } catch (ApiException) {
+        $passed++;
+    }
+};
+$apiThrows('expiry przeszłość', fn () => Expiry::parse('2026-10-26', $today));
+$apiThrows('expiry zły format', fn () => Expiry::parse('27.10.2026', $today));
+$apiThrows('expiry nieistniejąca data', fn () => Expiry::parse('2026-02-30', $today));
+check('expiry wygasł wczoraj', Expiry::isExpired('2026-10-26', $today), true);
+check('expiry ważny do końca dnia', Expiry::isExpired('2026-10-27', $today), false);
+check('expiry bez terminu', Expiry::isExpired(null, $today), false);
+check('expiry dni', Expiry::daysLeft('2026-11-10', $today), 14);
+check('expiry dni ujemne', Expiry::daysLeft('2026-10-20', $today), -7);
+check('expiry stan soon (14 dni)', Expiry::state('2026-11-10', $today), 'soon');
+check('expiry stan daleko', Expiry::state('2026-11-11', $today), null);
+check('expiry stan dziś', Expiry::state('2026-10-27', $today), 'soon');
+check('expiry stan minął', Expiry::state('2026-10-26', $today), 'expired');
+check('expiry present z datetime', Expiry::present(['valid_until' => '2026-10-01 00:00:00'], $today)['valid_until'], '2026-10-01');
+
+// Mapa VLAN: wygasły wpis ręczny oznaczony, numer z LibreNMS nie.
+$exIdx = new VlanIndex([
+    ['key' => 'v20:d1', 'data' => ['vlan' => 20], 'first_seen' => '2026-01-01 00:00:00', 'last_seen' => '2026-10-27 00:00:00', 'gone_at' => null],
+], new DateTimeImmutable('2026-10-27 12:00:00'), 30, 'stale', [
+    10 => ['status' => 'reserved', 'expiry' => 'expired'],
+    11 => ['status' => 'used', 'expiry' => 'soon'],
+    20 => ['status' => 'used', 'expiry' => 'expired'],
+]);
+$em = $exIdx->expiredMask();
+check('expiredMask rezerwacja po terminie', $em[9], '1');
+check('expiredMask wkrótce mija', $em[10], '0');
+check('expiredMask numer z LibreNMS', $em[19], '0');
+check('expiredMask status nadal rezerwacja', $exIdx->status(10), 'r');
+
+// --- Backup ---
+check('backup schemat zgodny', Backup::problems(['core' => 2, 'vlan' => 4], ['core' => 2, 'vlan' => 4, 'ipam' => 2]), []);
+check('backup schemat starszy', Backup::problems(['core' => 1, 'vlan' => 3], ['core' => 2, 'vlan' => 4]), []);
+check('backup schemat nowszy', count(Backup::problems(['vlan' => 5], ['vlan' => 4])), 1);
+check('backup nieznany moduł', Backup::problems(['zte' => 9], ['vlan' => 4]), []);
+check('backup ustawienia z formularza', Backup::settingsLookConfigured(['grace_days' => '30']), true);
+check('backup ustawienia puste', Backup::settingsLookConfigured([]), false);
+check('backup nazwa pliku', (bool) preg_match(Backup::FILE_PATTERN, 'netella-reg-20261027-031500-auto.json.gz'), true);
+check('backup nazwa ze ścieżką', (bool) preg_match(Backup::FILE_PATTERN, '../netella-reg-20261027-031500-auto.json.gz'), false);
+check('backup nazwa inny rodzaj', (bool) preg_match(Backup::FILE_PATTERN, 'netella-reg-20261027-031500-x.json.gz'), false);
 
 // --- Access ---
 check('matches pusta lista view', Access::matches(['user'], [], true), true);

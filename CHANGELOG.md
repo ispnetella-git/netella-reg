@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0 - 2026-10-27
+
+- **Termin ważności** wpisów ręcznych (pole „Ważne do” w formularzach VLAN i adresacji). Wpis po
+  terminie nadal zajmuje numer albo adres, ale jest oznaczony: na mapie VLAN-ów kratka w paski
+  (z licznikiem w legendzie), w drzewie adresacji plakietka „termin minął”, w listach wpisów
+  ręcznych kolumna „Ważne do” (czerwona po terminie, pomarańczowa na 14 dni przed). Adresacja:
+  w „Uwagach” lista wpisów po terminie i z bliskim terminem. Synchronizacja zapisuje jedno
+  zdarzenie „termin minął” (`expired`) na grupę. Schematy: `vlan` 4, `ipam` 2 (kolumny
+  `valid_until`, `expired_at`).
+- **Kopie zapasowe** (jak w PppoeAsr): pełna kopia bazy wtyczki i ustawień raz na dobę
+  z synchronizacji, ręcznie z ustawień albo `lnms netella-reg:backup`, pobieranie z ustawień,
+  przywracanie `lnms netella-reg:restore` (podgląd bez `--force`, kopia bieżącego stanu przed
+  przywróceniem). Kopia ustawień `storage/app/netella_reg_settings.json` i ich automatyczne
+  przywrócenie, gdy znikną. Ustawienie `backup_keep` (domyślnie 14). Doctor pokazuje ostatnią kopię.
+- Nowa trasa `/plugin/Netella-Reg/backup/<plik>`: po aktualizacji trzeba przebudować cache tras
+  (`php artisan route:cache`).
+
 ## 0.3.2 - 2026-10-27
 
 - Mapa VLAN-ów: większa czcionka numerów wierszy (12 px zamiast 10 px). Po najechaniu na kratkę

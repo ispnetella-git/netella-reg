@@ -19,6 +19,7 @@ use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\ApiException;
 use Ispnetella\NetellaReg\Core\AuditLog;
 use Ispnetella\NetellaReg\Core\Db;
+use Ispnetella\NetellaReg\Core\Expiry;
 use Ispnetella\NetellaReg\Core\Settings;
 use Ispnetella\NetellaReg\Core\Snapshot;
 use Ispnetella\NetellaReg\Core\SyncContext;
@@ -32,6 +33,9 @@ final class VlanModule extends AbstractModule
     /** Typ rekordu w migawce: wystąpienie VLAN-u na urządzeniu. */
     public const TYPE = 'occurrence';
 
+    /** Pola formularza wpisu ręcznego. */
+    private const FORM_FIELDS = ['name', 'description', 'owner', 'status', 'devices', Expiry::FIELD];
+
     public function key(): string
     {
         return self::KEY;
@@ -44,12 +48,13 @@ final class VlanModule extends AbstractModule
 
     public function schemaVersion(): int
     {
-        return 3;
+        return 4;
     }
 
     public function migrate(Connection $db, int $from): void
     {
-        // 1: tylko tabele rdzenia, 2: reg_vlan_manual, 3: grupy (batch_id) i scalenie dziennika.
+        // 1: tylko tabele rdzenia, 2: reg_vlan_manual, 3: grupy (batch_id) i scalenie dziennika,
+        // 4: termin ważności (valid_until, expired_at).
         VlanManual::migrate($db, $from);
     }
 
@@ -63,6 +68,7 @@ final class VlanModule extends AbstractModule
         // Wpisy ręczne, których numer właśnie pojawił się w LibreNMS.
         $index = $this->index($ctx->now);
         $summary['adopted'] = $this->manualRepo()->adopt(fn (int $v) => $index->inLibreNms($v), $ctx->now);
+        $summary['expired'] = $this->manualRepo()->expire($ctx->now);
 
         return $summary;
     }
@@ -142,7 +148,7 @@ final class VlanModule extends AbstractModule
         $index = $this->index();
         $res = $this->manualRepo()->create(
             (string) $request->input('range', ''),
-            $request->only(['name', 'description', 'owner', 'status', 'devices']),
+            $request->only(self::FORM_FIELDS),
             self::comment($request),
             fn (int $v) => $index->knownToLibreNms($v)
         );
@@ -158,7 +164,7 @@ final class VlanModule extends AbstractModule
         $this->requirePost($request);
         $row = $this->manualRepo()->update(
             (int) $request->input('id', 0),
-            $request->only(['name', 'description', 'owner', 'status', 'devices']),
+            $request->only(self::FORM_FIELDS),
             self::comment($request),
             $request->boolean('group')
         );
@@ -257,6 +263,7 @@ final class VlanModule extends AbstractModule
         return [
             'statuses' => $index->statusString(),
             'manual' => $index->manualMask(),
+            'expired' => $index->expiredMask(),
             'counts' => $index->counts(),
             'labels' => VlanIndex::LABELS,
             'sync' => SyncRunner::last(self::KEY),
@@ -329,7 +336,8 @@ final class VlanModule extends AbstractModule
                     'vlan' => $v,
                     'status' => $s,
                     'devices' => array_values(array_unique($devices)),
-                    'manual' => $m === null ? null : ['description' => $m['description'], 'owner' => $m['owner'], 'devices' => $m['devices']],
+                    'manual' => $m === null ? null : ['description' => $m['description'], 'owner' => $m['owner'], 'devices' => $m['devices'],
+                        'valid_until' => $m['valid_until'], 'expiry' => $m['expiry']],
                 ];
             }
         }

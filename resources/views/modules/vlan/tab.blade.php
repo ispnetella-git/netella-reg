@@ -14,6 +14,8 @@
     .nreg-vrow i.hl { outline: 2px solid #d9534f; outline-offset: -1px; }
     .nreg-vrow i.sel { outline: 2px solid #000; outline-offset: 0; }
     .nreg-vrow i.mk { box-shadow: inset 0 -3px 0 #8e44ad; }
+    /* Wpis ręczny po terminie ważności: paski na kolorze statusu. */
+    .nreg-vrow i.ex, .nreg-legend i.ex { background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.75) 0 2px, transparent 2px 4px); }
     .nreg-v-f { background: #dff0d8; }
     .nreg-v-l { background: #337ab7; }
     .nreg-v-s { background: #999; }
@@ -65,14 +67,18 @@
                 <label class="req" for="nreg-vf-range">Numer lub zakres</label>
                 <input class="form-control nreg-mono" id="nreg-vf-range" name="range" placeholder="np. 1400 albo 1400-1405">
             </div>
-            <div class="col-sm-3">
+            <div class="col-sm-2">
                 <label for="nreg-vf-status">Status</label>
                 <select class="form-control" id="nreg-vf-status" name="status">
                     <option value="used">używany</option>
                     <option value="reserved">rezerwacja</option>
                 </select>
             </div>
-            <div class="col-sm-6">
+            <div class="col-sm-2">
+                <label for="nreg-vf-valid">Ważne do</label>
+                <input class="form-control" id="nreg-vf-valid" name="valid_until" type="date" title="opcjonalnie; po terminie wpis zostaje, ale jest oznaczony jako przeterminowany">
+            </div>
+            <div class="col-sm-5">
                 <label for="nreg-vf-name">Nazwa</label>
                 <input class="form-control" id="nreg-vf-name" name="name" maxlength="64" placeholder="np. KLIENT-X-BSA">
             </div>
@@ -120,7 +126,7 @@ document.addEventListener('nreg:ready', function () {
     var grid = document.getElementById('nreg-vlan-grid'), result = document.getElementById('nreg-vlan-result');
     var detail = document.getElementById('nreg-vlan-detail'), legend = document.getElementById('nreg-vlan-legend');
     var form = document.getElementById('nreg-vlan-form'), manualList = document.getElementById('nreg-vlan-manual-list');
-    var statuses = '', manualMask = '', labels = {}, selected = null;
+    var statuses = '', manualMask = '', expiredMask = '', labels = {}, selected = null;
     var STATE_CSS = { f: 'nreg-v-f', l: 'nreg-v-l', s: 'nreg-v-s', m: 'nreg-v-m', r: 'nreg-v-r', g: 'nreg-v-g' };
 
     function cell(v) { return grid.querySelector('i[data-v="' + v + '"]'); }
@@ -135,10 +141,11 @@ document.addEventListener('nreg:ready', function () {
                 if (v < 1 || v > 4094) { h += '<i class="x"></i>'; continue; }
                 var s = statuses.charAt(v - 1) || 'f', mk = manualMask.charAt(v - 1) === '1';
                 // Pasek u dołu: wpis ręczny przy numerze, który ma też dane LibreNMS.
-                var cls = STATE_CSS[s] + (mk && s !== 'm' && s !== 'r' ? ' mk' : '');
+                var ex = expiredMask.charAt(v - 1) === '1';
+                var cls = STATE_CSS[s] + (mk && s !== 'm' && s !== 'r' ? ' mk' : '') + (ex ? ' ex' : '');
                         // Opis do podpowiedzi (data-t), bez title: natywny dymek pokazuje się z opóźnieniem.
                 h += '<i data-v="' + v + '" class="' + cls + '" data-t="' + esc(labels[s] || s)
-                    + (mk && s !== 'm' && s !== 'r' ? ' + wpis ręczny' : '') + '"></i>';
+                    + (mk && s !== 'm' && s !== 'r' ? ' + wpis ręczny' : '') + (ex ? ' · termin minął' : '') + '"></i>';
             }
             h += '</div>';
         }
@@ -149,7 +156,8 @@ document.addEventListener('nreg:ready', function () {
     function renderLegend(counts) {
         legend.innerHTML = Object.keys(labels).map(function (s) {
             return '<span><i class="' + STATE_CSS[s] + '"></i>' + esc(labels[s]) + ': <strong>' + (counts[s] || 0) + '</strong></span>';
-        }).join('') + '<span><i class="nreg-v-l" style="box-shadow: inset 0 -3px 0 #8e44ad"></i>LibreNMS + wpis ręczny</span>';
+        }).join('') + '<span><i class="nreg-v-l" style="box-shadow: inset 0 -3px 0 #8e44ad"></i>LibreNMS + wpis ręczny</span>'
+            + '<span><i class="nreg-v-r ex"></i>termin minął: <strong>' + (expiredMask.match(/1/g) || []).length + '</strong></span>';
     }
 
     function renderSync(sync) {
@@ -160,7 +168,7 @@ document.addEventListener('nreg:ready', function () {
 
     function loadMap() {
         return N.api('vlan/map').then(function (j) {
-            statuses = j.statuses; manualMask = j.manual || ''; labels = j.labels;
+            statuses = j.statuses; manualMask = j.manual || ''; expiredMask = j.expired || ''; labels = j.labels;
             renderLegend(j.counts); renderGrid(); renderSync(j.sync);
         }).catch(function (e) { grid.innerHTML = alertBox('danger', esc(e.message)); });
     }
@@ -203,7 +211,7 @@ document.addEventListener('nreg:ready', function () {
             j.occupied.forEach(function (o) {
                 h += '<tr><td><a href="#" data-vlan="' + o.vlan + '">' + o.vlan + '</a></td><td>' + esc(labels[o.status] || o.status)
                     + '</td><td>' + esc(o.devices.join(', ')) + '</td><td>'
-                    + (o.manual ? esc(o.manual.description) + (o.manual.owner ? ' <span class="nreg-muted">(' + esc(o.manual.owner) + ')</span>' : '') : '')
+                    + (o.manual ? esc(o.manual.description) + (o.manual.owner ? ' <span class="nreg-muted">(' + esc(o.manual.owner) + ')</span>' : '') + ' ' + N.expiryHtml(o.manual) : '')
                     + '</td></tr>';
             });
             result.innerHTML = h + '</tbody></table>';
@@ -259,6 +267,7 @@ document.addEventListener('nreg:ready', function () {
         return '<div class="nreg-manual"><strong>Wpis ręczny</strong> ' + adopted + '<dl style="margin-top:6px">'
             + (grp ? '<dt>Grupa</dt><dd><span class="nreg-mono">' + esc(grp.vlans) + '</span> (' + grp.count + ' numerów dodanych razem)</dd>' : '')
             + '<dt>Status</dt><dd>' + esc((statusLabels || {})[m.status] || m.status) + '</dd>'
+            + (m.valid_until ? '<dt>Ważne do</dt><dd>' + N.expiryHtml(m) + '</dd>' : '')
             + (m.name ? '<dt>Nazwa</dt><dd>' + esc(m.name) + '</dd>' : '')
             + '<dt>Opis</dt><dd>' + esc(m.description) + '</dd>'
             + (m.owner ? '<dt>Właściciel</dt><dd>' + esc(m.owner) + '</dd>' : '')
@@ -281,14 +290,14 @@ document.addEventListener('nreg:ready', function () {
                 box.innerHTML = '<p class="nreg-muted">Brak wpisów ręcznych.' + (can.canEdit ? ' Dodaj je przyciskiem „Dodaj VLAN”.' : '') + '</p>';
                 return;
             }
-            var h = '<table class="table table-condensed table-hover"><thead><tr><th>VLAN-y</th><th>Status</th><th>Stan teraz</th>'
+            var h = '<table class="table table-condensed table-hover"><thead><tr><th>VLAN-y</th><th>Status</th><th>Ważne do</th><th>Stan teraz</th>'
                 + '<th>Nazwa</th><th>Opis</th><th>Właściciel</th><th>Urządzenia</th><th>Dodał</th><th></th></tr></thead><tbody>';
             j.rows.forEach(function (m) {
                 var first = parseInt(String(m.vlans).split(/[-,]/)[0], 10);
                 var now = Object.keys(m.current).map(function (k) { return esc(k) + (m.count > 1 ? ' ' + m.current[k] : ''); }).join(', ');
                 h += '<tr><td class="nreg-mono"><a href="#" data-vlan="' + first + '">' + esc(m.vlans) + '</a>'
                     + (m.count > 1 ? ' <span class="nreg-muted">(' + m.count + ')</span>' : '') + '</td><td>' + esc(m.status_label) + '</td>'
-                    + '<td>' + now + (m.adopted_count ? ' <span class="label label-primary">przejęte: ' + m.adopted_count + '</span>' : '') + '</td>'
+                    + '<td>' + (m.adopted_count === m.count ? '' : N.expiryHtml(m)) + '</td><td>' + now + (m.adopted_count ? ' <span class="label label-primary">przejęte: ' + m.adopted_count + '</span>' : '') + '</td>'
                     + '<td>' + esc(m.name || '') + '</td><td>' + esc(m.description) + '</td><td>' + esc(m.owner || '') + '</td>'
                     + '<td>' + esc(m.devices || '') + '</td><td style="font-size:11px">' + esc(m.created_by || '?') + '<br>' + esc(m.created_at) + '</td>'
                     + '<td style="white-space:nowrap">' + manualButtons({ id: m.id }, { vlans: m.vlans, count: m.count }) + '</td></tr>';
@@ -311,7 +320,7 @@ document.addEventListener('nreg:ready', function () {
         document.getElementById('nreg-vf-title').textContent = !entry ? 'Dodaj VLAN (wpis ręczny)'
             : (group ? 'Edycja grupy VLAN ' + label + ' (' + entry.count + ')' : 'Edycja wpisu ręcznego VLAN ' + label);
         if (entry) {
-            ['status', 'name', 'description', 'owner', 'devices'].forEach(function (f) { form.elements[f].value = entry[f] || (f === 'status' ? 'used' : ''); });
+            ['status', 'name', 'description', 'owner', 'devices', 'valid_until'].forEach(function (f) { form.elements[f].value = entry[f] || (f === 'status' ? 'used' : ''); });
         }
         form.style.display = '';
         form.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -328,7 +337,7 @@ document.addEventListener('nreg:ready', function () {
             e.preventDefault();
             var err = document.getElementById('nreg-vf-error'), btn = form.querySelector('button[type="submit"]');
             var data = {};
-            ['status', 'name', 'description', 'owner', 'devices', 'comment'].forEach(function (f) { data[f] = form.elements[f].value; });
+            ['status', 'name', 'description', 'owner', 'devices', 'valid_until', 'comment'].forEach(function (f) { data[f] = form.elements[f].value; });
             var id = form.elements.id.value, path;
             if (id) { data.id = id; data.group = form.elements.group.value === '1'; path = 'vlan/manual_update'; }
             else { data.range = form.elements.range.value; path = 'vlan/manual_create'; }

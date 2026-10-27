@@ -19,6 +19,7 @@ use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\ApiException;
 use Ispnetella\NetellaReg\Core\AuditLog;
 use Ispnetella\NetellaReg\Core\Db;
+use Ispnetella\NetellaReg\Core\Expiry;
 use Ispnetella\NetellaReg\Core\Settings;
 use Ispnetella\NetellaReg\Core\Snapshot;
 use Ispnetella\NetellaReg\Core\SyncContext;
@@ -35,6 +36,9 @@ final class IpamModule extends AbstractModule
     /** Najwięcej adresów w jednej odpowiedzi drzewa. */
     private const MAX_ADDR = 1024;
 
+    /** Pola formularza wpisu ręcznego. */
+    private const FORM_FIELDS = ['role', 'name', 'description', 'owner', 'vlan', 'devices', Expiry::FIELD];
+
     public function key(): string
     {
         return self::KEY;
@@ -47,7 +51,7 @@ final class IpamModule extends AbstractModule
 
     public function schemaVersion(): int
     {
-        return 1;
+        return 2;
     }
 
     public function migrate(Connection $db, int $from): void
@@ -55,6 +59,9 @@ final class IpamModule extends AbstractModule
         if ($from < 1) {
             IpamSpaces::migrate($db);
             IpamManual::migrate($db);
+        }
+        if ($from < 2) {
+            IpamManual::migrateExpiry($db);
         }
     }
 
@@ -79,6 +86,7 @@ final class IpamModule extends AbstractModule
             $indexes[$space] = $this->index($space, $ctx->now);
         }
         $summary['adopted'] = $this->manual()->adopt($indexes, $ctx->now);
+        $summary['expired'] = $this->manual()->expire($ctx->now);
 
         return $summary;
     }
@@ -523,6 +531,10 @@ final class IpamModule extends AbstractModule
             'orphans' => array_slice($orphans, 0, 300),
             'orphans_total' => count($orphans),
             'reserved_conflicts' => $conflicts,
+            // Wpisy ręczne po terminie albo z terminem w ciągu Expiry::WARN_DAYS dni.
+            'expiry' => array_values(array_map(fn ($g) => array_intersect_key($g,
+                array_flip(['id', 'kind', 'cidr', 'ip', 'label', 'count', 'role_label', 'name', 'description', 'owner', 'valid_until', 'expiry', 'days_left'])),
+                array_filter($this->manual()->grouped($space), fn ($g) => $g['expiry'] !== null && empty($g['adopted_at'])))),
             'v6_count' => count($idx->v6()),
         ];
     }
@@ -546,7 +558,7 @@ final class IpamModule extends AbstractModule
     private function apiManualCreate(int $space, Request $request): array
     {
         $res = $this->manual()->create($space, (string) $request->input('target', ''),
-            $request->only(['role', 'name', 'description', 'owner', 'vlan', 'devices']), self::comment($request), $this->index($space));
+            $request->only(self::FORM_FIELDS), self::comment($request), $this->index($space));
 
         return $res;
     }
@@ -558,7 +570,7 @@ final class IpamModule extends AbstractModule
             throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
         }
 
-        return ['entry' => $this->manual()->update($entry['id'], $request->only(['role', 'name', 'description', 'owner', 'vlan', 'devices']),
+        return ['entry' => $this->manual()->update($entry['id'], $request->only(self::FORM_FIELDS),
             self::comment($request), $request->boolean('group'), $this->index($entry['space_id']))];
     }
 

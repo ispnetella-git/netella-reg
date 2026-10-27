@@ -12,8 +12,10 @@
 namespace Ispnetella\NetellaReg;
 
 use Illuminate\Support\ServiceProvider;
+use Ispnetella\NetellaReg\Console\BackupCommand;
 use Ispnetella\NetellaReg\Console\DoctorCommand;
 use Ispnetella\NetellaReg\Console\InstallCommand;
+use Ispnetella\NetellaReg\Console\RestoreCommand;
 use Ispnetella\NetellaReg\Console\SyncCommand;
 use Ispnetella\NetellaReg\Core\ModuleRegistry;
 use Ispnetella\NetellaReg\Hooks\DeviceOverview;
@@ -54,7 +56,7 @@ class NetellaRegProvider extends ServiceProvider
         // Komendy są dostępne także przy wyłączonej wtyczce - install i doctor
         // mają działać przed pierwszym włączeniem.
         if ($this->app->runningInConsole()) {
-            $this->commands([InstallCommand::class, SyncCommand::class, DoctorCommand::class]);
+            $this->commands([InstallCommand::class, SyncCommand::class, DoctorCommand::class, BackupCommand::class, RestoreCommand::class]);
         }
 
         // Widoki ładujemy zawsze: strona ustawień jest dostępna dla wyłączonej

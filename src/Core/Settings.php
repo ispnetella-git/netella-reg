@@ -38,6 +38,8 @@ final class Settings
         'ipam_ignore_if' => '^(jsrv|em[0-9]+\.)',
         // Adresacja: poziomy grupowania drzewa (maski węzłów wirtualnych).
         'ipam_levels' => '8,16,24',
+        // Ile pełnych kopii zapasowych trzymać (Core\Backup, jedna automatyczna na dobę).
+        'backup_keep' => 14,
         // Włączenie modułów: module_<klucz> => '1' / '0'. Brak klucza = włączony.
     ];
 

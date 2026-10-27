@@ -14,6 +14,10 @@
  *
  * Usunięcie jest miękkie (deleted_at), żeby historia przy numerze była pełna.
  *
+ * Termin ważności (valid_until, schemat 4): po terminie wpis dalej zajmuje
+ * numer, ale jest oznaczony jako "termin minął" (Core\Expiry), a sync()
+ * zapisuje jedno zdarzenie "expired" na grupę.
+ *
  * Przejęcie przez LibreNMS: gdy numer wpisany ręcznie pojawi się na aktywnym
  * urządzeniu, sync() ustawia adopted_at i dopisuje zdarzenie "adopted"
  * (jedno na grupę). Dane LibreNMS mają wtedy pierwszeństwo.
@@ -29,6 +33,7 @@ use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\ApiException;
 use Ispnetella\NetellaReg\Core\AuditLog;
 use Ispnetella\NetellaReg\Core\Db;
+use Ispnetella\NetellaReg\Core\Expiry;
 
 final class VlanManual
 {
@@ -48,7 +53,7 @@ final class VlanManual
     private const FIELDS = ['name' => 64, 'description' => 1000, 'owner' => 128, 'devices' => 1000];
 
     /** Pola opisowe - wspólne dla całej grupy. */
-    private const DATA_FIELDS = ['name', 'description', 'owner', 'status', 'devices'];
+    private const DATA_FIELDS = ['name', 'description', 'owner', 'status', 'devices', Expiry::FIELD];
 
     public function __construct(private readonly Connection $db)
     {
@@ -86,6 +91,13 @@ final class VlanManual
                 });
             }
             self::consolidateLegacy($db);
+        }
+
+        if ($from < 4 && ! $schema->hasColumn(self::TABLE, Expiry::FIELD)) {
+            $schema->table(self::TABLE, function (Blueprint $t) {
+                $t->date(Expiry::FIELD)->nullable()->after('devices')->comment('termin ważności wpisu');
+                $t->dateTime('expired_at')->nullable()->after('adopted_at')->comment('kiedy sync zapisał, że termin minął');
+            });
         }
     }
 
@@ -204,13 +216,13 @@ final class VlanManual
         $r['batch_id'] = isset($r['batch_id']) ? (int) $r['batch_id'] : null;
         $r['status_label'] = self::STATUS_LABELS[$r['status']] ?? $r['status'];
 
-        return $r;
+        return Expiry::present($r, Expiry::today());
     }
 
     /** Stan pojedynczego wpisu do dziennika: bez pól technicznych. */
     private static function auditView(array $r): array
     {
-        return array_intersect_key($r, array_flip(['vlan', 'name', 'description', 'owner', 'status', 'devices', 'adopted_at']));
+        return array_intersect_key($r, array_flip(['vlan', 'name', 'description', 'owner', 'status', 'devices', Expiry::FIELD, 'adopted_at']));
     }
 
     /** Stan grupy do dziennika: pola wspólne + lista numerów. */
@@ -248,11 +260,24 @@ final class VlanManual
             $out['status'] = $status;
         }
 
+        // Termin w przeszłości odrzucają create() i update() (tylko przy zmianie terminu).
+        if (array_key_exists(Expiry::FIELD, $input)) {
+            $out[Expiry::FIELD] = Expiry::parse($input[Expiry::FIELD], Expiry::today(), true);
+        }
+
         if ($requireDescription && ($out['description'] ?? null) === null) {
             throw new ApiException('Opis jest wymagany.');
         }
 
         return $out;
+    }
+
+    /** Nowy termin ważności nie może być w przeszłości. */
+    private static function checkFuture(?string $validUntil): void
+    {
+        if ($validUntil !== null) {
+            Expiry::parse($validUntil, Expiry::today());
+        }
     }
 
     /**
@@ -291,6 +316,7 @@ final class VlanManual
         }
 
         $fields = self::validate($input) + ['status' => self::USED];
+        self::checkFuture($fields[Expiry::FIELD] ?? null);
 
         $taken = $this->db->table(self::TABLE)->whereNull('deleted_at')->whereIn('vlan', $numbers)->pluck('vlan')->all();
         if ($taken !== []) {
@@ -360,6 +386,9 @@ final class VlanManual
 
         $rows = $group && $before['batch_id'] ? $this->batchRows($before['batch_id']) : [$before];
         $changed = array_filter($fields, fn ($v, $k) => ($before[$k] ?? null) !== $v, ARRAY_FILTER_USE_BOTH);
+        if (array_key_exists(Expiry::FIELD, $changed)) {
+            self::checkFuture($changed[Expiry::FIELD]);
+        }
 
         // Pojedyncza edycja numeru z wieloelementowej grupy odłącza go od niej.
         $batchSize = $before['batch_id'] ? count($this->batchRows($before['batch_id'])) : 1;
@@ -374,6 +403,9 @@ final class VlanManual
 
         $this->db->transaction(function () use ($changed, $ids, $detach, $before, $rows, $vlans, $comment, $group) {
             $set = $changed + ['updated_at' => date('Y-m-d H:i:s'), 'updated_by' => Access::username()];
+            if (array_key_exists(Expiry::FIELD, $changed)) {
+                $set['expired_at'] = null; // nowy termin: "termin minął" zapisze się ponownie po nim
+            }
             if ($detach) {
                 $set['batch_id'] = $before['id'];
                 // Gdy odłączany jest "pierwszy" wpis grupy, reszta dostaje nowe batch_id.
@@ -458,6 +490,42 @@ final class VlanManual
                 ['vlans' => VlanRange::compress($vlans), 'adopted_at' => $ts],
                 'wpisany ręcznie ' . $first->created_at . ($first->created_by ? ' przez ' . $first->created_by : '')
                 . ', pojawił się w LibreNMS; dane LibreNMS mają pierwszeństwo',
+                null, null, null, $now, [min($vlans), max($vlans)]);
+        }
+
+        AuditLog::insertMany($audit);
+
+        return $count;
+    }
+
+    /**
+     * Zapisuje "termin minął" dla wpisów po terminie. Wołane z sync().
+     * Wpisy przejęte przez LibreNMS pomijamy - ich termin nie ma już znaczenia.
+     * Jedna grupa = jeden wpis w dzienniku.
+     *
+     * @return int liczba numerów, którym właśnie minął termin
+     */
+    public function expire(\DateTimeImmutable $now): int
+    {
+        $ts = $now->format('Y-m-d H:i:s');
+        $byGroup = [];
+        foreach ($this->db->table(self::TABLE)->whereNull('deleted_at')->whereNull('adopted_at')->whereNull('expired_at')
+            ->whereNotNull(Expiry::FIELD)->where(Expiry::FIELD, '<', Expiry::today($now))->orderBy('vlan')->get() as $r) {
+            $byGroup[(int) ($r->batch_id ?? $r->id)][] = $r;
+        }
+
+        $audit = [];
+        $count = 0;
+        foreach ($byGroup as $batch => $rows) {
+            $this->db->table(self::TABLE)->whereIn('id', array_map(fn ($r) => $r->id, $rows))->update(['expired_at' => $ts]);
+            $vlans = array_map(fn ($r) => (int) $r->vlan, $rows);
+            $count += count($vlans);
+            $first = $rows[0];
+            $audit[] = AuditLog::row(VlanModule::KEY, self::TYPE,
+                count($rows) > 1 ? self::batchKey($batch) : self::key((int) $first->vlan, (int) $first->id),
+                AuditLog::EXPIRED, AuditLog::SOURCE_SYNC,
+                null, ['vlans' => VlanRange::compress($vlans), Expiry::FIELD => substr((string) $first->valid_until, 0, 10)],
+                'wpis nadal zajmuje numer; przedłuż termin albo usuń wpis',
                 null, null, null, $now, [min($vlans), max($vlans)]);
         }
 

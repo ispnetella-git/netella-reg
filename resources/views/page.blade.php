@@ -123,7 +123,8 @@
     var FIELD_LABELS = {
         vlans: 'VLAN-y', vlan: 'VLAN', name: 'nazwa', description: 'opis', owner: 'właściciel', status: 'status',
         devices: 'urządzenia', adopted_at: 'przejęty', tagged: 'tagowane', untagged: 'nietagowane', l3: 'L3',
-        subif: 'subinterfejsy', defined: 'w tabeli vlans', disabled: 'wyłączone', device: 'urządzenie'
+        subif: 'subinterfejsy', defined: 'w tabeli vlans', disabled: 'wyłączone', device: 'urządzenie',
+        valid_until: 'ważne do'
     };
     // Pola pomijane w linii dziennika (powtarzają informację z kolumny "Rekord").
     var SKIP_FIELDS = { count: 1, vlans: 1, device_id: 1, device: 1, hostname: 1, ips: 1, prefix: 1, family: 1, port_id: 1, space: 1 };
@@ -191,9 +192,19 @@
         if (tr && !e.target.closest('a,button')) { tr.classList.toggle('open'); }
     });
 
+    // Termin ważności wpisu ręcznego (pola valid_until, expiry, days_left z API).
+    function expiryHtml(m) {
+        if (!m || !m.valid_until) { return ''; }
+        if (m.expiry === 'expired') { return '<span class="label label-danger" title="wpis nadal zajmuje zasób">termin minął ' + esc(m.valid_until) + '</span>'; }
+        if (m.expiry === 'soon') {
+            return '<span class="label label-warning">do ' + esc(m.valid_until) + ' (' + (m.days_left === 0 ? 'mija dziś' : 'za ' + m.days_left + ' dni') + ')</span>';
+        }
+        return '<span class="nreg-muted">do ' + esc(m.valid_until) + '</span>';
+    }
+
     window.NReg = {
         boot: boot, api: api, esc: esc, diffHtml: diffHtml, who: who, short: short,
-        recordLabel: recordLabel, logTable: logTable, fieldLabels: FIELD_LABELS
+        recordLabel: recordLabel, logTable: logTable, fieldLabels: FIELD_LABELS, expiryHtml: expiryHtml
     };
 
     // Zakładka z adresu (#vlan, #audit) i zapamiętywanie wybranej.

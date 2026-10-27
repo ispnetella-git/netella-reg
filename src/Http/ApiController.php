@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Log;
 use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\ApiException;
 use Ispnetella\NetellaReg\Core\AuditLog;
+use Ispnetella\NetellaReg\Core\Backup;
 use Ispnetella\NetellaReg\Core\Db;
 use Ispnetella\NetellaReg\Core\ModuleRegistry;
 use Ispnetella\NetellaReg\Core\SyncRunner;
@@ -98,6 +99,23 @@ final class ApiController extends Controller
                 });
 
                 return ['results' => $results, 'log' => $log];
+
+            case 'backups':
+            case 'backup_create':
+                if (! Access::canAdmin()) {
+                    throw new ApiException('Kopie zapasowe są dostępne tylko dla administratora wtyczki.', 403);
+                }
+                $created = null;
+                if ($action === 'backup_create') {
+                    if (! $request->isMethod('POST')) {
+                        throw new ApiException('Wymagany POST.', 405);
+                    }
+                    $created = Backup::create(Backup::MANUAL);
+                }
+
+                return ['created' => $created, 'backups' => array_map(fn ($b) => $b + [
+                    'url' => url('plugin/' . \Ispnetella\NetellaReg\Plugin::NAME . '/backup/' . $b['file']),
+                ], Backup::list()), 'keep' => Backup::keep()];
 
             case 'status':
                 $out = [];

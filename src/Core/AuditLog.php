@@ -22,12 +22,14 @@ final class AuditLog
     public const UPDATE = 'update';
     public const DELETE = 'delete';
     public const SETTINGS = 'settings';
+    public const RESTORE = 'restore';
 
     /** Akcje synchronizacji. */
     public const LNMS_APPEARED = 'lnms_appeared';
     public const LNMS_CHANGED = 'lnms_changed';
     public const LNMS_GONE = 'lnms_gone';
     public const ADOPTED = 'adopted';
+    public const EXPIRED = 'expired';
     public const INITIAL_IMPORT = 'initial_import';
 
     public const LABELS = [
@@ -35,10 +37,12 @@ final class AuditLog
         self::UPDATE => 'zmieniono',
         self::DELETE => 'usunięto',
         self::SETTINGS => 'ustawienia',
+        self::RESTORE => 'przywrócono kopię',
         self::LNMS_APPEARED => 'pojawił się w LibreNMS',
         self::LNMS_CHANGED => 'zmienił się w LibreNMS',
         self::LNMS_GONE => 'zniknął z LibreNMS',
         self::ADOPTED => 'przejęty przez LibreNMS',
+        self::EXPIRED => 'termin minął',
         self::INITIAL_IMPORT => 'pierwszy import',
     ];
 

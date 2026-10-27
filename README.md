@@ -121,6 +121,12 @@ Strona `/plugin/Netella-Reg`:
   na urządzeniu aktywnym albo wyłączonym (statusy „LibreNMS” i „nieaktualny”). Jeden taki numer
   odrzuca całe dodawanie, a komunikat podaje zablokowane numery i resztę zakresu. Numer, który
   zniknął z LibreNMS i jest w karencji, można dodać;
+- **termin ważności** (pole „Ważne do” we wpisach VLAN i adresacji, opcjonalne): wpis po terminie
+  nie zwalnia się sam. Nadal zajmuje numer albo adres, ale jest oznaczony jako „termin minął”: na mapie
+  VLAN-ów kratka w paski, w drzewie adresacji czerwona plakietka, a w liście „Uwagi” adresacji jest
+  lista wpisów po terminie i z terminem w ciągu 14 dni. Synchronizacja zapisuje w dzienniku jedno
+  zdarzenie „termin minął” na grupę. Decyzja (przedłużyć albo usunąć) należy do człowieka. Termin
+  nie może być w przeszłości, a wpisy przejęte przez LibreNMS go nie sprawdzają;
 - zakładka **Dziennik zmian**: wszystkie zdarzenia z filtrami po module, źródle, zdarzeniu i tekście.
 
 Linki bezpośrednie: `/plugin/Netella-Reg?vlan=1400#vlan`, `/plugin/Netella-Reg?range=1400-1450#vlan`.
@@ -152,6 +158,23 @@ subinterfejsy są jedynym źródłem. Trunk z `allowed vlan 1-4094` nie zajmuje 
 
 `/plugin/settings/Netella-Reg`: włączanie modułów, uprawnienia per rola, karencja, sposób
 traktowania urządzeń wyłączonych i nazwa bazy. Zmiana ustawień też trafia do dziennika.
+
+### Kopie zapasowe
+
+Wzorowane na wtyczce PppoeAsr:
+- **pełna kopia** bazy wtyczki (wszystkie tabele `reg_*`: wpisy ręczne, przestrzenie, dziennik,
+  migawki, stan) i ustawień w pliku `storage/app/netella-reg/netella-reg-RRRRMMDD-GGMMSS-<rodzaj>.json.gz`.
+  Synchronizacja robi jedną na dobę (`auto`). Ręcznie: przycisk „Utwórz kopię teraz” w ustawieniach
+  albo `lnms netella-reg:backup` (`manual`). Trzymamy `backup_keep` kopii (domyślnie 14). Kopie
+  można pobrać z ustawień (tylko administrator wtyczki). Baza wtyczki jest osobna, więc kopie
+  LibreNMS jej zwykle nie obejmują;
+- **kopia ustawień** `storage/app/netella_reg_settings.json`, zapisywana przy zmianie. Gdy ustawienia
+  wtyczki znikną (np. `daily.sh` przeinstaluje pakiet), synchronizacja przywróci je z tej kopii
+  i zapisze to w dzienniku;
+- **przywracanie** tylko z konsoli: `lnms netella-reg:restore <plik>` pokazuje podgląd (wiersze
+  w kopii i teraz), `--force` przywraca, a `--with-settings` przywraca także ustawienia. Przed
+  przywróceniem bieżący stan trafia do kopii `pre-restore` (zostają 3 ostatnie). Kopii z nowszym
+  schematem niż kod nie da się przywrócić. Starszą migracja podnosi do bieżącej wersji.
 
 Uprawnienia: przeglądanie, edycja, usuwanie i administracja. Wyższe prawo obejmuje niższe.
 Administrator LibreNMS ma zawsze wszystkie prawa. Pusta lista przy przeglądaniu oznacza każdego

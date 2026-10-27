@@ -119,6 +119,13 @@
             <p class="pomoc">Drzewo rozwija się klasa po klasie na tych maskach, gdy nie ma tam prawdziwego prefiksu. Np. 8,16,24 albo 8,12,16,20,24.</p>
         </div>
 
+        <h5>Kopie zapasowe</h5>
+        <div class="form-group">
+            <label>Ile pełnych kopii trzymać</label>
+            <input class="form-control" style="width: 120px;" type="number" min="1" max="365" name="settings[backup_keep]" value="{{ (int) ($s['backup_keep'] ?? 14) }}">
+            <p class="pomoc">Synchronizacja robi jedną kopię na dobę, więc 14 to około dwóch tygodni. Lista kopii jest niżej.</p>
+        </div>
+
         <h5>Baza wtyczki</h5>
         <div class="form-group">
             <label>Nazwa bazy (puste = librenms_netella_reg)</label>
@@ -128,7 +135,58 @@
         <button type="submit" class="btn btn-primary"><i class="fa fa-save"></i> Zapisz</button>
     </form>
 
+    <h5>Kopie zapasowe</h5>
+    <p class="pomoc">
+        Pełna kopia bazy wtyczki (wpisy ręczne, przestrzenie, dziennik zmian, migawki LibreNMS) i ustawień, raz na dobę
+        z synchronizacji. Pliki są w <code>{{ $i['backupDir'] }}</code>. Baza wtyczki jest osobna, więc kopie LibreNMS
+        jej zwykle nie obejmują. Ustawienia mają też osobną kopię
+        @if($i['settingsBackup'])<code>{{ $i['settingsBackup'] }}</code>@else(jeszcze nie powstała)@endif:
+        gdy znikną (np. po aktualizacji LibreNMS), synchronizacja przywróci je sama i zapisze to w dzienniku.
+    </p>
+    <p>
+        <button type="button" class="btn btn-default btn-sm" id="nreg-backup-now"><i class="fa fa-download"></i> Utwórz kopię teraz</button>
+        <span id="nreg-backup-msg" class="pomoc"></span>
+    </p>
+    @if($i['backups'])
+        <table class="table table-condensed">
+            <thead><tr><th>Plik</th><th>Utworzona</th><th>Rodzaj</th><th>Rozmiar</th></tr></thead>
+            <tbody>
+            @foreach($i['backups'] as $b)
+                <tr>
+                    <td class="nreg-mono"><a href="{{ $b['url'] }}">{{ $b['file'] }}</a></td>
+                    <td>{{ $b['at'] }}</td>
+                    <td>{{ ['auto' => 'automatyczna', 'manual' => 'ręczna', 'pre-restore' => 'przed przywróceniem'][$b['reason']] ?? $b['reason'] }}</td>
+                    <td>{{ number_format($b['size'] / 1024, 0, ',', ' ') }} KiB</td>
+                </tr>
+            @endforeach
+            </tbody>
+        </table>
+    @else
+        <p class="pomoc">Nie ma jeszcze żadnej kopii.</p>
+    @endif
+    <p class="pomoc">
+        Przywracanie tylko z konsoli serwera. Bez <code>--force</code> pokazuje sam podgląd, a przed przywróceniem
+        bieżący stan trafia do kopii „przed przywróceniem”:<br>
+        <code>lnms netella-reg:restore &lt;plik&gt; [--with-settings] --force</code>
+    </p>
+
     <h5>Cron</h5>
     <p class="pomoc">Synchronizacja z LibreNMS co 5 minut (np. plik <code>/etc/cron.d/netella-reg</code>):</p>
     <code>{{ $i['cron'] }}</code>
 </div>
+
+<script>
+document.getElementById('nreg-backup-now').addEventListener('click', function () {
+    var btn = this, msg = document.getElementById('nreg-backup-msg');
+    var token = @json(csrf_token());
+    btn.disabled = true; msg.textContent = 'Tworzę kopię…';
+    fetch(@json($i['apiUrl']) + '/core/backup_create', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'X-CSRF-TOKEN': token, 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+    }).then(function (r) { return r.json(); }).then(function (j) {
+        if (!j.ok) { throw new Error(j.error || 'błąd'); }
+        msg.textContent = 'Utworzono ' + j.created.file + '. Odświeżam listę…';
+        window.location.reload();
+    }).catch(function (e) { msg.textContent = 'Nie udało się: ' + e.message; btn.disabled = false; });
+});
+</script>

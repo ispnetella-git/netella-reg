@@ -9,6 +9,7 @@
 namespace Ispnetella\NetellaReg\Console;
 
 use Illuminate\Console\Command;
+use Ispnetella\NetellaReg\Core\Backup;
 use Ispnetella\NetellaReg\Core\ModuleRegistry;
 use Ispnetella\NetellaReg\Core\SettingsWatcher;
 use Ispnetella\NetellaReg\Core\SyncRunner;
@@ -22,6 +23,12 @@ class SyncCommand extends Command
 
     public function handle(ModuleRegistry $registry): int
     {
+        // Jak w PppoeAsr: ustawienia wyzerowane (np. po przeinstalowaniu pakietu
+        // przez daily.sh) wracają z kopii, zanim cokolwiek je przeczyta.
+        if (Backup::restoreSettingsIfLost() !== null) {
+            $this->warn(date('Y-m-d H:i:s') . ' Ustawienia wtyczki były puste - przywrócono z ' . Backup::settingsPath());
+        }
+
         if (! app(\LibreNMS\Interfaces\Plugins\PluginManagerInterface::class)->pluginEnabled(Plugin::NAME)) {
             $this->line(date('Y-m-d H:i:s') . ' Wtyczka ' . Plugin::NAME . ' jest wyłączona - pomijam.');
 
@@ -45,6 +52,18 @@ class SyncCommand extends Command
             $this->error(date('Y-m-d H:i:s') . ' ' . $e->getMessage());
 
             return self::FAILURE;
+        }
+
+        // Kopie: ustawień przy zmianie, pełna raz na dobę. Błąd kopii nie psuje synchronizacji.
+        Backup::backupSettings();
+        if ($only === null) {
+            try {
+                if (($b = Backup::dailyIfDue()) !== null) {
+                    $this->line(date('Y-m-d H:i:s') . ' Kopia zapasowa ' . $b['file'] . ' (' . round($b['size'] / 1024) . ' KiB)');
+                }
+            } catch (\Throwable $e) {
+                $this->error(date('Y-m-d H:i:s') . ' Kopia zapasowa nie powstała: ' . $e->getMessage());
+            }
         }
 
         foreach ($results as $r) {

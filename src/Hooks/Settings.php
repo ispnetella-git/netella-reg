@@ -16,6 +16,7 @@
 namespace Ispnetella\NetellaReg\Hooks;
 
 use Ispnetella\NetellaReg\Core\Access;
+use Ispnetella\NetellaReg\Core\Backup;
 use Ispnetella\NetellaReg\Core\Db;
 use Ispnetella\NetellaReg\Core\ModuleRegistry;
 use Ispnetella\NetellaReg\Core\Settings as RegSettings;
@@ -73,8 +74,21 @@ class Settings implements SettingsHook
                     'perm_admin_roles' => 'Administracja',
                 ],
                 'pluginName' => Plugin::NAME,
+                'backups' => self::backups(),
+                'backupDir' => Backup::dir(),
+                'settingsBackup' => is_file(Backup::settingsPath()) ? Backup::settingsPath() : null,
+                'apiUrl' => url('plugin/' . Plugin::NAME . '/api'),
                 'cron' => '*/5 * * * * librenms /usr/bin/env php /opt/librenms/lnms netella-reg:sync -q >> /opt/librenms/logs/' . Plugin::LOG_FILE . ' 2>&1',
             ],
         ];
+    }
+
+    private static function backups(): array
+    {
+        try {
+            return array_map(fn ($b) => $b + ['url' => url('plugin/' . Plugin::NAME . '/backup/' . $b['file'])], Backup::list());
+        } catch (\Throwable) {
+            return [];
+        }
     }
 }

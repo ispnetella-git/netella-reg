@@ -16,7 +16,8 @@
  *   f  wolny
  *
  * Wpis ręczny przy numerze z LibreNMS nie zmienia statusu, ale jest widoczny
- * jako adnotacja (manualMask, manual()).
+ * jako adnotacja (manualMask, manual()). Wpis ręczny po terminie ważności
+ * dalej zajmuje numer (expiredMask oznacza go na mapie).
  *
  * Czyste, bez Laravela.
  *
@@ -115,6 +116,21 @@ final class VlanIndex
     public function knownToLibreNms(int $vlan): bool
     {
         return in_array($this->status($vlan), [self::LNMS, self::STALE], true);
+    }
+
+    /**
+     * 4094 znaki: "1" gdy numer zajmuje wpis ręczny, któremu minął termin
+     * (pole "expiry" z Core\Expiry::present). Numery z LibreNMS się nie liczą.
+     */
+    public function expiredMask(): string
+    {
+        $s = '';
+        for ($v = VlanName::MIN; $v <= VlanName::MAX; $v++) {
+            $st = $this->status($v);
+            $s .= ($this->manual[$v]['expiry'] ?? null) === 'expired' && ($st === self::MANUAL || $st === self::RESERVED) ? '1' : '0';
+        }
+
+        return $s;
     }
 
     /** 4094 znaki: "1" gdy numer ma wpis ręczny. */

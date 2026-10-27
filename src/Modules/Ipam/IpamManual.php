@@ -22,6 +22,10 @@
  * Przejęcie: adres albo sieć "używana" wpisane ręcznie, które pojawią się
  * w LibreNMS, dostają adopted_at i zdarzenie "adopted" (jedno na grupę).
  *
+ * Termin ważności (valid_until, schemat 2): po terminie wpis dalej zajmuje
+ * adres albo prefiks, ale jest oznaczony jako "termin minął" (Core\Expiry),
+ * a sync() zapisuje jedno zdarzenie "expired" na grupę.
+ *
  * Jedna akcja użytkownika = jeden wpis w dzienniku (range_from/range_to =
  * zakres adresów jako liczby, lista adresów w polu "ips").
  *
@@ -35,6 +39,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\ApiException;
 use Ispnetella\NetellaReg\Core\AuditLog;
+use Ispnetella\NetellaReg\Core\Expiry;
 
 final class IpamManual
 {
@@ -56,7 +61,7 @@ final class IpamManual
 
     private const FIELDS = ['name' => 64, 'description' => 1000, 'owner' => 128, 'devices' => 1000];
 
-    private const DATA_FIELDS = ['role', 'name', 'description', 'owner', 'vlan', 'devices'];
+    private const DATA_FIELDS = ['role', 'name', 'description', 'owner', 'vlan', 'devices', Expiry::FIELD];
 
     public function __construct(private readonly Connection $db)
     {
@@ -97,6 +102,19 @@ final class IpamManual
         });
     }
 
+    /** Schemat 2: termin ważności. */
+    public static function migrateExpiry(Connection $db): void
+    {
+        $schema = $db->getSchemaBuilder();
+        if ($schema->hasColumn(self::TABLE, Expiry::FIELD)) {
+            return;
+        }
+        $schema->table(self::TABLE, function (Blueprint $t) {
+            $t->date(Expiry::FIELD)->nullable()->after('devices')->comment('termin ważności wpisu');
+            $t->dateTime('expired_at')->nullable()->after('adopted_at')->comment('kiedy sync zapisał, że termin minął');
+        });
+    }
+
     public static function key(array $r): string
     {
         return $r['kind'] === 'prefix' ? "n:{$r['cidr']}:m{$r['id']}" : 'a:' . IpCalc::int2ip((int) $r['start']) . ":m{$r['id']}";
@@ -119,7 +137,7 @@ final class IpamManual
         $r['ip'] = $r['kind'] === 'address' && $r['start'] !== null ? IpCalc::int2ip($r['start']) : null;
         $r['role_label'] = ($r['kind'] === 'prefix' ? self::PREFIX_ROLES : self::ADDRESS_ROLES)[$r['role']] ?? $r['role'];
 
-        return $r;
+        return Expiry::present($r, Expiry::today());
     }
 
     /** @return list<array> aktywne wpisy przestrzeni */
@@ -195,11 +213,23 @@ final class IpamManual
         if (array_key_exists('role', $input)) {
             $out['role'] = (string) $input['role'];
         }
+        // Termin w przeszłości odrzucają create() i update() (tylko przy zmianie terminu).
+        if (array_key_exists(Expiry::FIELD, $input)) {
+            $out[Expiry::FIELD] = Expiry::parse($input[Expiry::FIELD], Expiry::today(), true);
+        }
         if ($requireDescription && ($out['description'] ?? null) === null) {
             throw new ApiException('Opis jest wymagany.');
         }
 
         return $out;
+    }
+
+    /** Nowy termin ważności nie może być w przeszłości. */
+    private static function checkFuture(?string $validUntil): void
+    {
+        if ($validUntil !== null) {
+            Expiry::parse($validUntil, Expiry::today());
+        }
     }
 
     /** Stan grupy do dziennika. */
@@ -223,6 +253,7 @@ final class IpamManual
         }
 
         $fields = self::validate($input);
+        self::checkFuture($fields[Expiry::FIELD] ?? null);
         $kind = $parsed['kind'] === 'prefix' ? 'prefix' : 'address';
         $roles = $kind === 'prefix' ? self::PREFIX_ROLES : self::ADDRESS_ROLES;
         $fields['role'] ??= $kind === 'prefix' ? 'aggregate' : 'used';
@@ -323,6 +354,9 @@ final class IpamManual
         if ($changed === []) {
             return $before;
         }
+        if (array_key_exists(Expiry::FIELD, $changed)) {
+            self::checkFuture($changed[Expiry::FIELD]);
+        }
         $batchSize = $before['batch_id'] ? count($this->batchRows($before['batch_id'])) : 1;
         $detach = ! $group && $batchSize > 1;
 
@@ -333,6 +367,9 @@ final class IpamManual
 
         $this->db->transaction(function () use ($changed, $ids, $detach, $before, $rows, $label, $range, $comment) {
             $set = $changed + ['updated_at' => date('Y-m-d H:i:s'), 'updated_by' => Access::username()];
+            if (array_key_exists(Expiry::FIELD, $changed)) {
+                $set['expired_at'] = null; // nowy termin: "termin minął" zapisze się ponownie po nim
+            }
             if ($detach) {
                 $set['batch_id'] = $before['id'];
                 if ($before['batch_id'] === $before['id']) {
@@ -418,6 +455,40 @@ final class IpamManual
                 AuditLog::ADOPTED, AuditLog::SOURCE_SYNC, [$k => $label, 'adopted_at' => null], [$k => $label, 'adopted_at' => $ts],
                 'wpisany ręcznie ' . $first['created_at'] . ($first['created_by'] ? ' przez ' . $first['created_by'] : '')
                 . ', pojawił się w LibreNMS; dane LibreNMS mają pierwszeństwo', null, null, null, $now, $range);
+        }
+        AuditLog::insertMany($audit);
+
+        return $count;
+    }
+
+    /**
+     * Zapisuje "termin minął" dla wpisów po terminie. Wołane z sync().
+     * Wpisy przejęte przez LibreNMS pomijamy. Jedna grupa = jeden wpis w dzienniku.
+     *
+     * @return int liczba wpisów, którym właśnie minął termin
+     */
+    public function expire(\DateTimeImmutable $now): int
+    {
+        $ts = $now->format('Y-m-d H:i:s');
+        $byGroup = [];
+        foreach ($this->db->table(self::TABLE)->whereNull('deleted_at')->whereNull('adopted_at')->whereNull('expired_at')
+            ->whereNotNull(Expiry::FIELD)->where(Expiry::FIELD, '<', Expiry::today($now))->orderBy('start')->get() as $r) {
+            $byGroup[(int) ($r->batch_id ?? $r->id)][] = self::present((array) $r);
+        }
+
+        $audit = [];
+        $count = 0;
+        foreach ($byGroup as $batch => $rows) {
+            $this->db->table(self::TABLE)->whereIn('id', array_map(fn ($r) => $r['id'], $rows))->update(['expired_at' => $ts]);
+            $count += count($rows);
+            $first = $rows[0];
+            $ips = array_filter(array_map(fn ($r) => $r['kind'] === 'address' ? $r['start'] : null, $rows), fn ($v) => $v !== null);
+            $k = $first['kind'] === 'prefix' ? 'prefix' : 'ips';
+            $label = $first['kind'] === 'prefix' ? $first['cidr'] : IpInput::compress($ips);
+            $range = $first['kind'] === 'prefix' ? [$first['start'], $first['end']] : [min($ips), max($ips)];
+            $audit[] = AuditLog::row(IpamModule::KEY, self::TYPE, count($rows) > 1 ? self::batchKey($batch) : self::key($first),
+                AuditLog::EXPIRED, AuditLog::SOURCE_SYNC, null, [$k => $label, Expiry::FIELD => $first[Expiry::FIELD]],
+                'wpis nadal zajmuje adresy; przedłuż termin albo usuń wpis', null, null, null, $now, $range);
         }
         AuditLog::insertMany($audit);
 

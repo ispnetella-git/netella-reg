@@ -9,6 +9,7 @@
 namespace Ispnetella\NetellaReg\Console;
 
 use Illuminate\Console\Command;
+use Ispnetella\NetellaReg\Core\Backup;
 use Ispnetella\NetellaReg\Core\Db;
 use Ispnetella\NetellaReg\Core\ModuleRegistry;
 use Ispnetella\NetellaReg\Core\Settings;
@@ -56,6 +57,18 @@ class DoctorCommand extends Command
 
             $this->line($line);
         }
+
+        $backups = Backup::list();
+        if ($backups === []) {
+            $this->line('Kopie zapasowe: brak (' . Backup::dir() . ')');
+        } else {
+            $this->line('Kopie zapasowe: ' . count($backups) . ', ostatnia ' . $backups[0]['file'] . ' (' . $backups[0]['at'] . ')');
+            if (strtotime($backups[0]['at']) < time() - 2 * 86400) {
+                $ok = false;
+                $this->line('  <- ostatnia kopia starsza niż 2 dni');
+            }
+        }
+        $this->line('Kopia ustawień: ' . (is_file(Backup::settingsPath()) ? Backup::settingsPath() : 'brak'));
 
         return $ok ? self::SUCCESS : self::FAILURE;
     }

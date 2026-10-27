@@ -98,7 +98,11 @@
                 <label for="nreg-if-vlan">VLAN</label>
                 <input class="form-control" id="nreg-if-vlan" name="vlan" type="number" min="1" max="4094">
             </div>
-            <div class="col-sm-6">
+            <div class="col-sm-2">
+                <label for="nreg-if-valid">Ważne do</label>
+                <input class="form-control" id="nreg-if-valid" name="valid_until" type="date" title="opcjonalnie; po terminie wpis zostaje, ale jest oznaczony jako przeterminowany">
+            </div>
+            <div class="col-sm-4">
                 <label for="nreg-if-devices">Urządzenia / lokalizacja</label>
                 <input class="form-control" id="nreg-if-devices" name="devices" maxlength="1000">
             </div>
@@ -152,7 +156,10 @@ document.addEventListener('nreg:ready', function () {
         var h = '';
         if (n.virtual) { h += '<span class="nreg-bdg v">grupa /' + n.len + '</span>'; }
         if (n.state) { h += '<span class="nreg-bdg ' + n.state + '">' + esc(STATE_BDG[n.state]) + '</span>'; }
-        if (n.manual) { h += '<span class="nreg-bdg ' + (n.manual.role === 'reserved' ? 'r' : 'm') + '">' + esc(n.manual.role_label) + '</span>'; }
+        if (n.manual) {
+            h += '<span class="nreg-bdg ' + (n.manual.role === 'reserved' ? 'r' : 'm') + '">' + esc(n.manual.role_label) + '</span>';
+            if (n.manual.expiry === 'expired') { h += '<span class="nreg-bdg d" title="termin ważności ' + esc(n.manual.valid_until) + '">termin minął</span>'; }
+        }
         n.vlans.forEach(function (v) { h += '<a class="nreg-bdg v" href="?vlan=' + v + '#vlan" title="VLAN ' + v + '">VLAN ' + v + '</a>'; });
         return h;
     }
@@ -171,7 +178,7 @@ document.addEventListener('nreg:ready', function () {
 
     function addrRow(a, depth) {
         var who = a.rows.map(function (r) { return r.device + ' ' + r['if'] + (r.alias ? ' (' + r.alias + ')' : ''); });
-        if (a.manual) { who.push((a.manual.name || a.manual.description) + ' [ręczny]'); }
+        if (a.manual) { who.push((a.manual.name || a.manual.description) + ' [ręczny' + (a.manual.expiry === 'expired' ? ', termin minął' : '') + ']'); }
         return '<div class="nreg-ta" data-open-ip="' + esc(a.ip) + '" style="padding-left:' + (depth * 16 + 22) + 'px">'
             + '<span class="ip">' + esc(a.ip) + '</span><span class="nreg-bdg ' + a.state + '">' + esc(STATE_BDG[a.state] || a.state) + '</span>'
             + (a.dup ? '<span class="nreg-bdg d" title="ten sam adres na kilku urządzeniach">duplikat</span>' : '')
@@ -282,6 +289,7 @@ document.addEventListener('nreg:ready', function () {
             + '<dl style="margin-top:6px">' + (m.name ? '<dt>Nazwa</dt><dd>' + esc(m.name) + '</dd>' : '')
             + '<dt>Opis</dt><dd>' + esc(m.description) + '</dd>' + (m.owner ? '<dt>Właściciel</dt><dd>' + esc(m.owner) + '</dd>' : '')
             + (m.vlan ? '<dt>VLAN</dt><dd><a href="?vlan=' + m.vlan + '#vlan">' + m.vlan + '</a></dd>' : '')
+            + (m.valid_until ? '<dt>Ważne do</dt><dd>' + N.expiryHtml(m) + '</dd>' : '')
             + (m.devices ? '<dt>Urządzenia</dt><dd>' + esc(m.devices) + '</dd>' : '')
             + '<dt>Dodał</dt><dd>' + esc(m.created_by || '?') + ', ' + esc(m.created_at) + '</dd></dl><div style="margin-top:6px">';
         if (can.canEdit) { h += '<button class="btn btn-default btn-xs" type="button" data-edit="' + m.id + '" data-group="0"><i class="fa fa-pencil"></i> Edytuj</button> '; }
@@ -380,9 +388,17 @@ document.addEventListener('nreg:ready', function () {
     function loadIssues() {
         var box = document.querySelector('#nreg-ip-issues > div');
         return api('issues').then(function (j) {
-            var n = j.duplicates.length + j.suspicious.length + j.reserved_conflicts.length;
+            var n = j.duplicates.length + j.suspicious.length + j.reserved_conflicts.length + (j.expiry || []).length;
             document.querySelector('#nreg-ip-issues > summary').textContent = 'Uwagi (' + n + ')' + (j.orphans_total ? ', adresy poza sieciami: ' + j.orphans_total : '');
             var h = '';
+            if ((j.expiry || []).length) {
+                h += '<h5>Wpisy ręczne po terminie albo z bliskim terminem</h5><p class="nreg-muted" style="font-size:12px">Wpis po terminie nadal zajmuje adresy.'
+                    + ' Przedłuż termin albo usuń wpis.</p>' + j.expiry.map(function (x) {
+                        var go = x.kind === 'prefix' ? 'data-goto-node="' + esc(x.cidr) + '"' : 'data-goto-ip="' + esc(x.ip) + '"';
+                        return '<div><a href="#" class="nreg-mono" ' + go + '>' + esc(x.label) + '</a>' + (x.count > 1 ? ' <span class="nreg-muted">(' + x.count + ')</span>' : '')
+                            + ' ' + N.expiryHtml(x) + ' ' + esc(x.role_label) + ' · ' + esc(x.name || x.description) + (x.owner ? ' <span class="nreg-muted">(' + esc(x.owner) + ')</span>' : '') + '</div>';
+                    }).join('');
+            }
             if (j.reserved_conflicts.length) {
                 h += '<h5>Rezerwacje z adresami z LibreNMS</h5>' + j.reserved_conflicts.map(function (c) {
                     return '<div><a href="#" data-goto-node="' + esc(c.cidr) + '" class="nreg-mono">' + esc(c.cidr) + '</a>: ' + esc(c.ips) + ' (' + c.count + ')</div>';
@@ -416,7 +432,7 @@ document.addEventListener('nreg:ready', function () {
             j.rows.forEach(function (m) { manualCache[m.id] = m; });
             document.querySelector('#nreg-ip-manual > summary').textContent = 'Wpisy ręczne (' + j.rows.length + ')';
             if (!j.rows.length) { box.innerHTML = '<p class="nreg-muted">Brak wpisów ręcznych.</p>'; return; }
-            box.innerHTML = '<table class="table table-condensed table-hover" style="font-size:12px"><thead><tr><th>Adres / prefiks</th><th>Rola</th><th>Nazwa</th>'
+            box.innerHTML = '<table class="table table-condensed table-hover" style="font-size:12px"><thead><tr><th>Adres / prefiks</th><th>Rola</th><th>Ważne do</th><th>Nazwa</th>'
                 + '<th>Opis</th><th>Właściciel</th><th>VLAN</th><th>Dodał</th><th></th></tr></thead><tbody>' + j.rows.map(function (m) {
                     var many = m.count > 1, go = m.kind === 'prefix' ? 'data-goto-node="' + esc(m.cidr) + '"' : 'data-goto-ip="' + esc(m.ip) + '"';
                     var btn = '';
@@ -424,7 +440,7 @@ document.addEventListener('nreg:ready', function () {
                     if (can.canDelete) { btn += '<button class="btn btn-danger btn-xs" type="button" data-del="' + m.id + '" data-group="' + (many ? 1 : 0) + '" data-label="' + esc(m.label) + '"><i class="fa fa-trash"></i> Usuń' + (many ? ' grupę' : '') + '</button>'; }
                     return '<tr><td><a href="#" class="nreg-mono" ' + go + '>' + esc(m.label) + '</a>' + (many ? ' <span class="nreg-muted">(' + m.count + ')</span>' : '') + '</td>'
                         + '<td>' + esc(m.role_label) + (m.adopted_at ? ' <span class="label label-primary">przejęty</span>' : '') + (m.current ? ' <small class="nreg-muted">' + esc(m.current) + '</small>' : '') + '</td>'
-                        + '<td>' + esc(m.name || '') + '</td><td>' + esc(m.description) + '</td><td>' + esc(m.owner || '') + '</td>'
+                        + '<td>' + (m.adopted_at ? '' : N.expiryHtml(m)) + '</td><td>' + esc(m.name || '') + '</td><td>' + esc(m.description) + '</td><td>' + esc(m.owner || '') + '</td>'
                         + '<td>' + (m.vlan ? '<a href="?vlan=' + m.vlan + '#vlan">' + m.vlan + '</a>' : '') + '</td>'
                         + '<td style="font-size:11px">' + esc(m.created_by || '?') + '<br>' + esc(m.created_at) + '</td><td style="white-space:nowrap">' + btn + '</td></tr>';
                 }).join('') + '</tbody></table>';
@@ -452,7 +468,7 @@ document.addEventListener('nreg:ready', function () {
         t.disabled = !!entry;
         fillRoles(entry ? entry.kind === 'prefix' : isPrefix(t.value), entry ? entry.role : null);
         document.getElementById('nreg-if-title').textContent = entry ? (group ? 'Edycja grupy ' + entry.label : 'Edycja wpisu ' + (entry.ip || entry.cidr)) : 'Dodaj adresację (wpis ręczny)';
-        if (entry) { ['name', 'description', 'owner', 'vlan', 'devices'].forEach(function (f) { form.elements[f].value = entry[f] || ''; }); }
+        if (entry) { ['name', 'description', 'owner', 'vlan', 'devices', 'valid_until'].forEach(function (f) { form.elements[f].value = entry[f] || ''; }); }
         form.style.display = '';
         form.scrollIntoView({ behavior: 'smooth', block: 'center' });
         (entry ? form.elements.description : t).focus();
@@ -469,7 +485,7 @@ document.addEventListener('nreg:ready', function () {
         form.addEventListener('submit', function (e) {
             e.preventDefault();
             var err = document.getElementById('nreg-if-error'), btn = form.querySelector('button[type="submit"]'), data = {};
-            ['role', 'name', 'description', 'owner', 'vlan', 'devices', 'comment'].forEach(function (f) { data[f] = form.elements[f].value; });
+            ['role', 'name', 'description', 'owner', 'vlan', 'devices', 'valid_until', 'comment'].forEach(function (f) { data[f] = form.elements[f].value; });
             var id = form.elements.id.value, path;
             if (id) { data.id = id; data.group = form.elements.group.value === '1'; path = 'manual_update'; }
             else { data.target = form.elements.target.value; path = 'manual_create'; }
