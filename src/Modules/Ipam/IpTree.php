@@ -62,8 +62,38 @@ final class IpTree
         }
 
         $this->linkParents();
+
+        // Poziomy grupowania nie mają sensu wewnątrz prawdziwej sieci (np. /24 w sieci
+        // 172.19.0.0/16): adres wyglądałby wtedy na leżący poza siecią. Usuwamy je
+        // i łączymy drzewo od nowa.
+        $drop = array_filter(array_keys($this->nodes), fn ($c) => isset($this->nodes[$c]['sources']['virtual']) && $this->inSubnet($c));
+        if ($drop !== []) {
+            foreach ($drop as $c) {
+                unset($this->nodes[$c]);
+            }
+            foreach ($this->nodes as &$n) {
+                $n['parent'] = null;
+                $n['children'] = [];
+            }
+            unset($n);
+            $this->roots = [];
+            $this->linkParents();
+        }
+
         $this->placeAddresses($addresses);
         $this->computeStats();
+    }
+
+    /** Czy węzeł leży wewnątrz prawdziwej sieci (podsieć interfejsu, sieć używana, pula). */
+    private function inSubnet(string $cidr): bool
+    {
+        for ($p = $this->nodes[$cidr]['parent']; $p !== null; $p = $this->nodes[$p]['parent']) {
+            if ($this->nodes[$p]['subnet'] && ! isset($this->nodes[$p]['sources']['virtual'])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function addNode(int $start, int $len, string $src, array $meta, bool $subnet): void
@@ -272,6 +302,32 @@ final class IpTree
     public function busyIntervals(string $cidr): array
     {
         return $this->nodes[$cidr]['occ'] ?? [];
+    }
+
+    /**
+     * Wolne miejsce do pokazania w drzewie między dziećmi węzła. Inaczej niż przy
+     * zajętości, dziecko wirtualne liczy się tu w całości: jego wolne miejsce
+     * widać po rozwinięciu go, a w rodzicu wolne bloki nie mogą na nie nachodzić.
+     * W sieci pomijamy adres sieci i rozgłoszeniowy.
+     *
+     * @return list<array{0:int,1:int}>
+     */
+    public function gaps(string $cidr): array
+    {
+        $n = $this->nodes[$cidr] ?? null;
+        if ($n === null) {
+            return [];
+        }
+        $busy = [];
+        foreach ($n['children'] as $c) {
+            $busy[] = [$this->nodes[$c]['start'], $this->nodes[$c]['end']];
+        }
+        foreach ($n['addr'] as $i) {
+            $busy[] = [$this->addresses[$i]['ip'], $this->addresses[$i]['ip']];
+        }
+        [$fs, $fe] = $n['subnet'] && $n['len'] <= 30 ? [$n['start'] + 1, $n['end'] - 1] : [$n['start'], $n['end']];
+
+        return IpCalc::freeIntervals($fs, $fe, IpCalc::merge($busy));
     }
 
     /** Czy węzeł jest tylko poziomem grupowania (bez prawdziwego prefiksu). */

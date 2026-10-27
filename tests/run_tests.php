@@ -293,6 +293,23 @@ check('tree ścieżka', $tree->path('45.10.136.0/24'), ['45.0.0.0/8', '45.10.0.0
 $empty = new IpTree([], [], [8, 16, 24]);
 check('tree pusty', $empty->roots(), []);
 
+// Adres w sieci /16 nie trafia do wirtualnego /24 wewnątrz niej (błąd z 172.19.0.1/16).
+$t16 = new IpTree([$pfx('172.19.0.0/16')], [['ip' => $ip('172.19.0.1')]], [8, 16, 24]);
+check('tree: adres w sieci /16', $t16->deepest($ip('172.19.0.1')), '172.19.0.0/16');
+check('tree: brak wirtualnego /24 w sieci', $t16->node('172.19.0.0/24'), null);
+check('tree: wirtualny /8 nad siecią zostaje', $t16->node('172.19.0.0/16')['parent'], '172.0.0.0/8');
+// W agregacie (nie sieci) poziomy grupowania zostają.
+$tAgg = new IpTree([$pfx('10.0.0.0/16', 'manual', false), $pfx('10.0.5.0/30')], [], [8, 16, 24]);
+check('tree: wirtualny /24 w agregacie', IpTree::isVirtual($tAgg->node('10.0.5.0/24')), true);
+
+// Wolne miejsce do drzewa: dziecko wirtualne liczy się w całości.
+check('gaps agregatu /16', array_map(fn ($g) => [IpCalc::int2ip($g[0]), IpCalc::int2ip($g[1])], $tAgg->gaps('10.0.0.0/16')),
+    [['10.0.0.0', '10.0.4.255'], ['10.0.6.0', '10.0.255.255']]);
+check('gaps sieci /30 bez adresu sieci i rozgłoszeniowego', array_map(fn ($g) => [IpCalc::int2ip($g[0]), IpCalc::int2ip($g[1])], $tAgg->gaps('10.0.5.0/30')),
+    [['10.0.5.1', '10.0.5.2']]);
+check('gaps wolne prefiksy agregatu', array_map(fn ($b) => IpCalc::cidr($b['start'], $b['len']), IpCalc::rangeToCidrs($ip('10.0.6.0'), $ip('10.0.255.255'))),
+    ['10.0.6.0/23', '10.0.8.0/21', '10.0.16.0/20', '10.0.32.0/19', '10.0.64.0/18', '10.0.128.0/17']);
+
 // --- Access ---
 check('matches pusta lista view', Access::matches(['user'], [], true), true);
 check('matches pusta lista edit', Access::matches(['user'], [], false), false);

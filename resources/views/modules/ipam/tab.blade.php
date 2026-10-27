@@ -12,7 +12,7 @@
     .nreg-tn:hover { background: rgba(128,128,128,.12); }
     .nreg-tn.sel { background: rgba(51,122,183,.18); }
     .nreg-tn .tg { width: 14px; text-align: center; cursor: pointer; opacity: .8; flex: 0 0 14px; }
-    .nreg-tn .cidr { font-family: monospace; cursor: pointer; min-width: 135px; }
+    .nreg-tn .cidr { font-family: monospace; font-size: 13px; cursor: pointer; min-width: 145px; }
     .nreg-tn .lbl { overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; min-width: 40px; opacity: .85; }
     .nreg-tn .cnt { font-family: monospace; font-size: 11px; opacity: .8; min-width: 92px; text-align: right; }
     .nreg-bar { display: inline-block; width: 70px; height: 8px; background: rgba(128,128,128,.25); border-radius: 4px; overflow: hidden; flex: 0 0 70px; }
@@ -25,9 +25,16 @@
     .nreg-bdg.d { background: #d9534f; }
     .nreg-ta { display: flex; gap: 8px; font-size: 12px; padding: 1px 4px; white-space: nowrap; cursor: pointer; }
     .nreg-ta:hover { background: rgba(128,128,128,.12); }
-    .nreg-ta .ip { font-family: monospace; min-width: 110px; }
+    .nreg-ta .ip { font-family: monospace; font-size: 13px; min-width: 120px; }
+    /* Wolne miejsce w drzewie: niebieskie, kursywą; kliknięcie = dodaj wpis ręczny. */
+    .nreg-tf { display: flex; gap: 8px; align-items: center; font-size: 12px; padding: 1px 4px; white-space: nowrap; color: #337ab7; font-style: italic; }
+    .nreg-tf .ip { font-family: monospace; font-size: 13px; min-width: 145px; }
+    .nreg-tf.add { cursor: pointer; }
+    .nreg-tf.add:hover { background: rgba(51,122,183,.12); }
+    .nreg-tf .plus { font-style: normal; opacity: 0; }
+    .nreg-tf.add:hover .plus { opacity: 1; }
     .nreg-ta .who { overflow: hidden; text-overflow: ellipsis; opacity: .85; }
-    .nreg-chips a { display: inline-block; font-family: monospace; font-size: 11px; margin: 0 4px 4px 0; padding: 1px 6px; border: 1px solid rgba(128,128,128,.45); border-radius: 3px; }
+    .nreg-chips a { display: inline-block; font-family: monospace; font-size: 12px; margin: 0 4px 4px 0; padding: 1px 6px; border: 1px solid rgba(128,128,128,.45); border-radius: 3px; }
     .nreg-ip-right h4 { margin-top: 4px; }
     .nreg-ip-right dl dt { float: left; width: 110px; font-weight: normal; opacity: .75; }
     .nreg-ip-right dl dd { margin-left: 120px; }
@@ -151,7 +158,8 @@ document.addEventListener('nreg:ready', function () {
     }
 
     function nodeRow(n, depth) {
-        var expandable = n.children > 0 || n.direct > 0;
+        // Każdy prefiks da się rozwinąć: nawet pusty pokazuje swoje wolne miejsce.
+        var expandable = n.len < 32;
         var s = n.stats;
         return '<div class="nreg-tn" data-cidr="' + esc(n.cidr) + '" style="padding-left:' + (depth * 16 + 4) + 'px">'
             + '<span class="tg" data-toggle-node="' + esc(n.cidr) + '">' + (expandable ? '▸' : '·') + '</span>'
@@ -170,14 +178,35 @@ document.addEventListener('nreg:ready', function () {
             + '<span class="who">' + esc(who.join(' · ')) + '</span></div>';
     }
 
+    // Wolny prefiks (w agregacie i grupie) albo wolne adresy hostów (w sieci).
+    function freeRow(f, depth) {
+        var target, text, info;
+        if (f.type === 'prefix') {
+            target = f.cidr; text = f.cidr; info = 'wolny · ' + f.size + ' adr.';
+        } else {
+            target = f.count === 1 ? f.first : f.first + '-' + f.last;
+            text = f.count === 1 ? f.first : f.first + ' – ' + f.last;
+            info = 'wolne · ' + f.count + ' adr.';
+        }
+        // Do formularza tylko to, co da się dodać jednym wpisem (zakres adresów do 1024).
+        var addable = can.canEdit && (f.type === 'prefix' || f.count <= 1024);
+        return '<div class="nreg-tf' + (addable ? ' add' : '') + '"' + (addable ? ' data-add="' + esc(target) + '" title="kliknij, aby dodać wpis ręczny"' : '')
+            + ' style="padding-left:' + (depth * 16 + 22) + 'px"><span class="ip">' + esc(text) + '</span><span>' + esc(info) + '</span>'
+            + (addable ? '<span class="plus"><i class="fa fa-plus"></i> dodaj</span>' : '') + '</div>';
+    }
+
     function depthOf(el) { return parseInt(el.getAttribute('data-depth') || '0', 10); }
 
     function loadChildren(cidr, container, depth) {
         return api('tree', { node: cidr || '' }).then(function (j) {
             labels = j.labels;
             if (!cidr) { renderSync(j.sync, j.v6_count); }
-            var h = j.children.map(function (n) { return nodeRow(n, depth); }).join('');
-            h += j.addresses.map(function (a) { return addrRow(a, depth); }).join('');
+            // Dzieci, adresy i wolne miejsce po kolei według adresu początkowego.
+            var items = j.children.map(function (n) { return { n: n.n, html: nodeRow(n, depth) }; })
+                .concat(j.addresses.map(function (a) { return { n: a.n, html: addrRow(a, depth) }; }))
+                .concat((j.free || []).map(function (f) { return { n: f.n, html: freeRow(f, depth) }; }));
+            items.sort(function (x, y) { return x.n - y.n; });
+            var h = items.map(function (i) { return i.html; }).join('');
             if (j.addresses_total > j.addresses.length) {
                 h += '<div class="nreg-muted" style="padding-left:' + (depth * 16 + 22) + 'px;font-size:11px">… i ' + (j.addresses_total - j.addresses.length) + ' więcej</div>';
             }
@@ -369,7 +398,9 @@ document.addEventListener('nreg:ready', function () {
                 }).join('');
             }
             if (j.orphans_total) {
-                h += '<h5>Adresy poza sieciami (' + j.orphans_total + ')</h5><p class="nreg-muted" style="font-size:12px">Np. aliasy /32. Leżą tylko w poziomach grupowania.</p><div class="nreg-chips">'
+                h += '<h5>Adresy bez sieci (' + j.orphans_total + ')</h5><p class="nreg-muted" style="font-size:12px">Adresy, które nie należą do żadnej sieci z LibreNMS'
+                    + ' ani do prefiksu ręcznego, zwykle z maską /32 (loopbacki, aliasy). W drzewie leżą tylko w poziomach grupowania.'
+                    + ' Żeby je opisać, obejmij je prefiksem ręcznym (np. agregatem).</p><div class="nreg-chips">'
                     + j.orphans.map(function (o) { return '<a href="#" data-goto-ip="' + esc(o.ip) + '" title="' + esc(o.device + ' ' + o['if']) + '">' + esc(o.ip) + '/' + o.len + '</a>'; }).join('') + '</div>';
             }
             if (j.v6_count) { h += '<p class="nreg-muted" style="font-size:12px">IPv6: ' + j.v6_count + ' adresów zapisanych, drzewo IPv6 w kolejnej wersji.</p>'; }
@@ -504,7 +535,12 @@ document.addEventListener('nreg:ready', function () {
             e.preventDefault();
             var c = t.getAttribute('data-goto-node');
             api('search', { q: c }).then(function (j) { expandPath(j.path); openNode(j.path.length ? j.path[j.path.length - 1] : c); });
-        } else if ((t = e.target.closest('[data-add]'))) { e.preventDefault(); openForm(null, t.getAttribute('data-add')); }
+        } else if ((t = e.target.closest('[data-add]'))) {
+            e.preventDefault();
+            openForm(null, t.getAttribute('data-add'));
+            // Z wolnego miejsca w drzewie najczęściej dodaje się sieć, a nie agregat.
+            if (form && t.classList.contains('nreg-tf') && form.elements.role.querySelector('option[value="used"]')) { form.elements.role.value = 'used'; }
+        }
         else if ((t = e.target.closest('button[data-edit]'))) {
             var m = manualCache[t.getAttribute('data-edit')];
             if (m) { openForm(m, null, t.getAttribute('data-group') === '1'); }

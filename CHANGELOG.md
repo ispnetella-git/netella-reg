@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.1 - 2026-10-27
+
+- Adresacja, poprawka: poziomy grupowania (/8, /16, /24) nie powstają już wewnątrz prawdziwej sieci.
+  Wcześniej np. 172.19.0.1 z sieci 172.19.0.0/16 trafiał do sztucznego 172.19.0.0/24 i był pokazywany
+  jako „adres poza siecią”.
+- Drzewo: wolne miejsce między zajętymi pozycjami jest widoczne niebieską kursywą. W agregatach
+  i grupach to wyrównane prefiksy CIDR, w sieciach przedziały wolnych hostów. Kliknięcie otwiera
+  formularz dodania z wpisanym prefiksem lub zakresem (rola domyślnie „sieć używana”).
+- Każdy prefiks da się rozwinąć, także pusty (pokazuje wtedy swoje wolne miejsce).
+- Czcionka adresów i prefiksów w drzewie większa o 1 px. Sekcja „Adresy poza sieciami” nazywa się
+  teraz „Adresy bez sieci” i ma dokładniejszy opis.
+
 ## 0.3.0 - 2026-10-27
 
 - Nowy moduł **Adresacja IP** (`ipam`, schemat 1, tabele `reg_ipam_manual` i `reg_ipam_space`).

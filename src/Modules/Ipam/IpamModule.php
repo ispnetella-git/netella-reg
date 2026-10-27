@@ -224,6 +224,7 @@ final class IpamModule extends AbstractModule
 
         return [
             'cidr' => $n['cidr'],
+            'n' => $n['start'],
             'len' => $n['len'],
             'first' => IpCalc::int2ip($n['start']),
             'last' => IpCalc::int2ip($n['end']),
@@ -254,6 +255,7 @@ final class IpamModule extends AbstractModule
 
         return [
             'ip' => IpCalc::int2ip($ip),
+            'n' => $ip,
             'state' => $idx->status($ip),
             'rows' => $rows,
             'manual' => $a['manual'] ?? null,
@@ -291,10 +293,42 @@ final class IpamModule extends AbstractModule
             'children' => array_map(fn ($c) => $this->nodeInfo($idx, $tree->node($c)), $children),
             'addresses' => array_map(fn ($ip) => $this->addrInfo($idx, $ip, $dups), array_slice($ips, 0, self::MAX_ADDR)),
             'addresses_total' => count($ips),
+            'free' => $node === '' ? [] : $this->treeFree($tree, $node),
             'labels' => IpamIndex::LABELS,
             'sync' => SyncRunner::last(self::KEY),
             'v6_count' => count($idx->v6()),
         ];
+    }
+
+    /** Najwięcej wolnych pozycji pokazywanych w jednym rozwinięciu drzewa. */
+    private const MAX_FREE = 256;
+
+    /**
+     * Wolne miejsce w rozwiniętym węźle, do wplecenia między dzieci.
+     *   - w agregacie i grupie: wyrównane prefiksy CIDR (maska zgodna z granicą bloku),
+     *   - w sieci: przedziały wolnych adresów hostów.
+     *
+     * @return list<array>
+     */
+    private function treeFree(IpTree $tree, string $cidr): array
+    {
+        $n = $tree->node($cidr);
+        $out = [];
+        foreach ($tree->gaps($cidr) as [$a, $b]) {
+            if ($n['subnet']) {
+                $out[] = ['type' => 'hosts', 'n' => $a, 'first' => IpCalc::int2ip($a), 'last' => IpCalc::int2ip($b), 'count' => $b - $a + 1];
+            } else {
+                foreach (IpCalc::rangeToCidrs($a, $b) as $blk) {
+                    $out[] = ['type' => 'prefix', 'n' => $blk['start'], 'cidr' => IpCalc::cidr($blk['start'], $blk['len']),
+                        'len' => $blk['len'], 'size' => IpCalc::size($blk['len'])];
+                }
+            }
+            if (count($out) >= self::MAX_FREE) {
+                break;
+            }
+        }
+
+        return array_slice($out, 0, self::MAX_FREE);
     }
 
     private function apiNode(int $space, string $cidr): array
