@@ -1,0 +1,530 @@
+{{-- Zakładka modułu adresacji: drzewo IPv4 wg masek, szczegóły sieci i adresu,
+     wyszukiwanie, wolne bloki, wpisy ręczne, uwagi.
+
+     Adres ?ip=10.0.0.1#ipam albo ?prefix=10.0.0.0/24#ipam rozwija drzewo do
+     wskazanego miejsca - z takich linków korzysta panel na stronie urządzenia. --}}
+
+<style>
+    .nreg-ip-cols { display: flex; gap: 16px; align-items: flex-start; }
+    .nreg-ip-left { flex: 1 1 58%; min-width: 0; }
+    .nreg-ip-right { flex: 1 1 42%; min-width: 0; position: sticky; top: 60px; max-height: calc(100vh - 80px); overflow: auto; }
+    .nreg-tn { display: flex; align-items: center; gap: 6px; padding: 1px 4px; font-size: 12px; white-space: nowrap; border-radius: 3px; }
+    .nreg-tn:hover { background: rgba(128,128,128,.12); }
+    .nreg-tn.sel { background: rgba(51,122,183,.18); }
+    .nreg-tn .tg { width: 14px; text-align: center; cursor: pointer; opacity: .8; flex: 0 0 14px; }
+    .nreg-tn .cidr { font-family: monospace; cursor: pointer; min-width: 135px; }
+    .nreg-tn .lbl { overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; min-width: 40px; opacity: .85; }
+    .nreg-tn .cnt { font-family: monospace; font-size: 11px; opacity: .8; min-width: 92px; text-align: right; }
+    .nreg-bar { display: inline-block; width: 70px; height: 8px; background: rgba(128,128,128,.25); border-radius: 4px; overflow: hidden; flex: 0 0 70px; }
+    .nreg-bar i { display: block; height: 100%; background: #5cb85c; }
+    .nreg-bar i.w { background: #f0ad4e; }
+    .nreg-bar i.c { background: #d9534f; }
+    .nreg-bdg { font-size: 10px; padding: 1px 5px; border-radius: 3px; color: #fff; }
+    .nreg-bdg.l { background: #337ab7; } .nreg-bdg.s { background: #999; } .nreg-bdg.m { background: #8e44ad; }
+    .nreg-bdg.r { background: #5bc0de; } .nreg-bdg.g { background: #f0ad4e; } .nreg-bdg.v { background: transparent; color: inherit; border: 1px solid rgba(128,128,128,.5); }
+    .nreg-bdg.d { background: #d9534f; }
+    .nreg-ta { display: flex; gap: 8px; font-size: 12px; padding: 1px 4px; white-space: nowrap; cursor: pointer; }
+    .nreg-ta:hover { background: rgba(128,128,128,.12); }
+    .nreg-ta .ip { font-family: monospace; min-width: 110px; }
+    .nreg-ta .who { overflow: hidden; text-overflow: ellipsis; opacity: .85; }
+    .nreg-chips a { display: inline-block; font-family: monospace; font-size: 11px; margin: 0 4px 4px 0; padding: 1px 6px; border: 1px solid rgba(128,128,128,.45); border-radius: 3px; }
+    .nreg-ip-right h4 { margin-top: 4px; }
+    .nreg-ip-right dl dt { float: left; width: 110px; font-weight: normal; opacity: .75; }
+    .nreg-ip-right dl dd { margin-left: 120px; }
+    #nreg-ip-issues summary, #nreg-ip-manual summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
+</style>
+
+<div class="nreg-toolbar">
+    <label style="margin:0">Przestrzeń:</label>
+    <select class="form-control" id="nreg-ip-space" style="width:auto;height:30px;padding:4px 8px"></select>
+    @if($nregBoot['canAdmin'])
+        <button class="btn btn-default btn-xs" type="button" id="nreg-ip-newspace" title="Nowa przestrzeń adresowa (VRF, klient)"><i class="fa fa-plus"></i></button>
+    @endif
+    <form id="nreg-ip-search">
+        <input class="form-control" id="nreg-ip-q" placeholder="adres, prefiks albo tekst" style="width: 220px;">
+        <button class="btn btn-primary btn-sm" type="submit"><i class="fa fa-search"></i> Szukaj</button>
+    </form>
+    <form id="nreg-ip-free">
+        <span>Wolne</span>
+        <input class="form-control nreg-num" type="number" min="8" max="32" value="29" id="nreg-ip-len" style="width:64px !important">
+        <span>w</span>
+        <input class="form-control nreg-mono" id="nreg-ip-within" placeholder="np. 45.10.136.0/22" style="width: 160px;">
+        <button class="btn btn-default btn-sm" type="submit"><i class="fa fa-search"></i> Znajdź</button>
+    </form>
+    @if($nregBoot['canEdit'])
+        <button class="btn btn-success btn-sm" id="nreg-ip-add" type="button"><i class="fa fa-plus"></i> Dodaj adresację</button>
+    @endif
+    <span class="nreg-sub" id="nreg-ip-sync"></span>
+</div>
+
+@if($nregBoot['canEdit'])
+    <form class="nreg-form" id="nreg-ip-form" style="display:none" autocomplete="off">
+        <h4 id="nreg-if-title" style="margin-top:0">Dodaj adresację</h4>
+        <input type="hidden" name="id">
+        <input type="hidden" name="group" value="0">
+        <div class="row">
+            <div class="col-sm-4">
+                <label class="req" for="nreg-if-target">Adres, zakres albo prefiks</label>
+                <input class="form-control nreg-mono" id="nreg-if-target" name="target" placeholder="10.0.0.0/24, 10.0.0.5 albo 10.0.0.10-20">
+            </div>
+            <div class="col-sm-3">
+                <label for="nreg-if-role">Rola</label>
+                <select class="form-control" id="nreg-if-role" name="role"></select>
+            </div>
+            <div class="col-sm-5">
+                <label for="nreg-if-name">Nazwa</label>
+                <input class="form-control" id="nreg-if-name" name="name" maxlength="64">
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-sm-12">
+                <label class="req" for="nreg-if-description">Opis</label>
+                <textarea class="form-control" id="nreg-if-description" name="description" rows="2" maxlength="1000"></textarea>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-sm-4">
+                <label for="nreg-if-owner">Właściciel / klient</label>
+                <input class="form-control" id="nreg-if-owner" name="owner" maxlength="128">
+            </div>
+            <div class="col-sm-2">
+                <label for="nreg-if-vlan">VLAN</label>
+                <input class="form-control" id="nreg-if-vlan" name="vlan" type="number" min="1" max="4094">
+            </div>
+            <div class="col-sm-6">
+                <label for="nreg-if-devices">Urządzenia / lokalizacja</label>
+                <input class="form-control" id="nreg-if-devices" name="devices" maxlength="1000">
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-sm-12">
+                <label for="nreg-if-comment">Komentarz do zmiany (trafi do dziennika)</label>
+                <input class="form-control" id="nreg-if-comment" name="comment" maxlength="1000">
+            </div>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit"><i class="fa fa-save"></i> Zapisz</button>
+        <button class="btn btn-default btn-sm" type="button" id="nreg-if-cancel">Anuluj</button>
+        <span class="text-danger" id="nreg-if-error" style="margin-left:10px"></span>
+    </form>
+@endif
+
+<div id="nreg-ip-result"></div>
+<details id="nreg-ip-issues"><summary>Uwagi</summary><div></div></details>
+<details id="nreg-ip-manual"><summary>Wpisy ręczne</summary><div></div></details>
+
+<div class="nreg-ip-cols">
+    <div class="nreg-ip-left"><div id="nreg-ip-tree"><p class="nreg-muted">Ładowanie drzewa…</p></div></div>
+    <div class="nreg-ip-right" id="nreg-ip-detail"><p class="nreg-muted">Kliknij sieć albo adres, żeby zobaczyć szczegóły.</p></div>
+</div>
+
+<script>
+document.addEventListener('nreg:ready', function () {
+    'use strict';
+    var N = window.NReg, esc = N.esc, can = N.boot;
+    var tab = document.getElementById('nreg-tab-ipam');
+    var treeEl = document.getElementById('nreg-ip-tree'), detail = document.getElementById('nreg-ip-detail');
+    var result = document.getElementById('nreg-ip-result'), form = document.getElementById('nreg-ip-form');
+    var spaceSel = document.getElementById('nreg-ip-space');
+    var space = 1, labels = {}, prefixRoles = {}, addressRoles = {}, manualCache = {}, selectedEl = null, loaded = false;
+    var STATE_BDG = { l: 'LibreNMS', s: 'nieaktualny', m: 'ręczny', r: 'rezerwacja', g: 'zniknął' };
+
+    Object.assign(N.fieldLabels, { ips: 'adresy', prefix: 'prefiks', role: 'rola', ip: 'adres', len: 'maska', 'if': 'interfejs',
+        alias: 'opis portu', network: 'sieć', ctx: 'VRF', vlan: 'VLAN' });
+
+    function alertBox(kind, html) { return '<div class="alert alert-' + kind + '">' + html + '</div>'; }
+    function api(path, params, method) { params = Object.assign({ space: space }, params || {}); return N.api('ipam/' + path, params, method); }
+
+    // ---------------------------------------------------------------- drzewo
+
+    function bar(util) {
+        var cls = util >= 90 ? 'c' : (util >= 70 ? 'w' : '');
+        return '<span class="nreg-bar" title="zajętość ' + util + '%"><i class="' + cls + '" style="width:' + Math.min(100, util) + '%"></i></span>';
+    }
+
+    function nodeBadges(n) {
+        var h = '';
+        if (n.virtual) { h += '<span class="nreg-bdg v">grupa /' + n.len + '</span>'; }
+        if (n.state) { h += '<span class="nreg-bdg ' + n.state + '">' + esc(STATE_BDG[n.state]) + '</span>'; }
+        if (n.manual) { h += '<span class="nreg-bdg ' + (n.manual.role === 'reserved' ? 'r' : 'm') + '">' + esc(n.manual.role_label) + '</span>'; }
+        n.vlans.forEach(function (v) { h += '<a class="nreg-bdg v" href="?vlan=' + v + '#vlan" title="VLAN ' + v + '">VLAN ' + v + '</a>'; });
+        return h;
+    }
+
+    function nodeRow(n, depth) {
+        var expandable = n.children > 0 || n.direct > 0;
+        var s = n.stats;
+        return '<div class="nreg-tn" data-cidr="' + esc(n.cidr) + '" style="padding-left:' + (depth * 16 + 4) + 'px">'
+            + '<span class="tg" data-toggle-node="' + esc(n.cidr) + '">' + (expandable ? '▸' : '·') + '</span>'
+            + '<span class="cidr" data-open-node="' + esc(n.cidr) + '">' + esc(n.cidr) + '</span>' + nodeBadges(n)
+            + '<span class="lbl" title="' + esc(n.label || '') + '">' + esc(n.label || '') + '</span>'
+            + bar(s.util) + '<span class="cnt" title="zajęte / pojemność, adresów: ' + s.addresses + '">' + s.used + '/' + s.capacity + '</span></div>'
+            + '<div class="nreg-tc" data-children-of="' + esc(n.cidr) + '" style="display:none"></div>';
+    }
+
+    function addrRow(a, depth) {
+        var who = a.rows.map(function (r) { return r.device + ' ' + r['if'] + (r.alias ? ' (' + r.alias + ')' : ''); });
+        if (a.manual) { who.push((a.manual.name || a.manual.description) + ' [ręczny]'); }
+        return '<div class="nreg-ta" data-open-ip="' + esc(a.ip) + '" style="padding-left:' + (depth * 16 + 22) + 'px">'
+            + '<span class="ip">' + esc(a.ip) + '</span><span class="nreg-bdg ' + a.state + '">' + esc(STATE_BDG[a.state] || a.state) + '</span>'
+            + (a.dup ? '<span class="nreg-bdg d" title="ten sam adres na kilku urządzeniach">duplikat</span>' : '')
+            + '<span class="who">' + esc(who.join(' · ')) + '</span></div>';
+    }
+
+    function depthOf(el) { return parseInt(el.getAttribute('data-depth') || '0', 10); }
+
+    function loadChildren(cidr, container, depth) {
+        return api('tree', { node: cidr || '' }).then(function (j) {
+            labels = j.labels;
+            if (!cidr) { renderSync(j.sync, j.v6_count); }
+            var h = j.children.map(function (n) { return nodeRow(n, depth); }).join('');
+            h += j.addresses.map(function (a) { return addrRow(a, depth); }).join('');
+            if (j.addresses_total > j.addresses.length) {
+                h += '<div class="nreg-muted" style="padding-left:' + (depth * 16 + 22) + 'px;font-size:11px">… i ' + (j.addresses_total - j.addresses.length) + ' więcej</div>';
+            }
+            container.innerHTML = h || '<p class="nreg-muted" style="padding-left:' + (depth * 16 + 4) + 'px">Brak adresacji w tej przestrzeni.</p>';
+            container.querySelectorAll('.nreg-tc').forEach(function (c) { c.setAttribute('data-depth', depth + 1); });
+            container.setAttribute('data-loaded', '1');
+        });
+    }
+
+    function toggle(cidr, open) {
+        var row = treeEl.querySelector('.nreg-tn[data-cidr="' + cidr + '"]');
+        var box = treeEl.querySelector('.nreg-tc[data-children-of="' + cidr + '"]');
+        if (!row || !box) { return Promise.resolve(); }
+        var tg = row.querySelector('.tg');
+        if (tg.textContent === '·') { return Promise.resolve(); }
+        var show = open === undefined ? box.style.display === 'none' : open;
+        box.style.display = show ? '' : 'none';
+        tg.textContent = show ? '▾' : '▸';
+        if (show && !box.getAttribute('data-loaded')) {
+            box.innerHTML = '<p class="nreg-muted" style="font-size:11px;padding-left:20px">Ładowanie…</p>';
+            return loadChildren(cidr, box, depthOf(box));
+        }
+        return Promise.resolve();
+    }
+
+    function loadRoot() {
+        treeEl.innerHTML = '<p class="nreg-muted">Ładowanie drzewa…</p>';
+        treeEl.setAttribute('data-depth', '0');
+        return loadChildren('', treeEl, 0).catch(function (e) { treeEl.innerHTML = alertBox('danger', esc(e.message)); });
+    }
+
+    // Rozwija drzewo wzdłuż ścieżki i zaznacza ostatni węzeł.
+    function expandPath(path, ip) {
+        var p = Promise.resolve();
+        path.forEach(function (cidr) { p = p.then(function () { return toggle(cidr, true); }); });
+        return p.then(function () {
+            var el = ip ? treeEl.querySelector('.nreg-ta[data-open-ip="' + ip + '"]') : null;
+            el = el || (path.length ? treeEl.querySelector('.nreg-tn[data-cidr="' + path[path.length - 1] + '"]') : null);
+            if (el) { select(el); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        });
+    }
+
+    function select(el) {
+        if (selectedEl) { selectedEl.classList.remove('sel'); }
+        selectedEl = el; el.classList.add('sel');
+    }
+
+    function renderSync(sync, v6) {
+        var el = document.getElementById('nreg-ip-sync');
+        el.innerHTML = sync ? 'Dane z LibreNMS z ' + esc(sync.at) + (sync.ok ? '' : ' <span class="text-danger">(błąd: ' + esc(sync.error) + ')</span>')
+            + (v6 ? ' &middot; IPv6: ' + v6 + ' adresów (bez drzewa)' : '')
+            : '<span class="text-warning">Brak synchronizacji modułu adresacji.</span>';
+    }
+
+    // ---------------------------------------------------------------- szczegóły
+
+    function lnmsTable(rows, withIp) {
+        if (!rows.length) { return ''; }
+        return '<table class="table table-condensed" style="font-size:12px"><thead><tr><th>Urządzenie</th><th>Interfejs</th><th>Opis portu</th>'
+            + (withIp ? '<th>Adres</th>' : '<th>Maska</th>') + '<th>Stan</th></tr></thead><tbody>'
+            + rows.map(function (r) {
+                return '<tr><td><a href="' + esc(can.deviceUrl + '/' + r.device_id) + '">' + esc(r.device) + '</a></td><td>' + esc(r['if'])
+                    + (r.vlan ? ' <a href="?vlan=' + r.vlan + '#vlan">VLAN ' + r.vlan + '</a>' : '') + '</td><td>' + esc(r.alias || '') + '</td>'
+                    + '<td class="nreg-mono">' + esc(withIp ? r.ip : '/' + r.len) + '</td><td><span class="nreg-bdg ' + r.state + '">' + esc(STATE_BDG[r.state]) + '</span>'
+                    + (r.gone_at ? ' <small>' + esc(r.gone_at) + '</small>' : '') + '</td></tr>';
+            }).join('') + '</tbody></table>';
+    }
+
+    function manualBlock(m) {
+        manualCache[m.id] = m;
+        var h = '<div class="nreg-manual"><strong>Wpis ręczny</strong> <span class="nreg-bdg ' + (m.role === 'reserved' ? 'r' : 'm') + '">' + esc(m.role_label) + '</span> '
+            + (m.adopted_at ? '<span class="label label-primary">przejęty przez LibreNMS ' + esc(m.adopted_at) + '</span>' : '')
+            + '<dl style="margin-top:6px">' + (m.name ? '<dt>Nazwa</dt><dd>' + esc(m.name) + '</dd>' : '')
+            + '<dt>Opis</dt><dd>' + esc(m.description) + '</dd>' + (m.owner ? '<dt>Właściciel</dt><dd>' + esc(m.owner) + '</dd>' : '')
+            + (m.vlan ? '<dt>VLAN</dt><dd><a href="?vlan=' + m.vlan + '#vlan">' + m.vlan + '</a></dd>' : '')
+            + (m.devices ? '<dt>Urządzenia</dt><dd>' + esc(m.devices) + '</dd>' : '')
+            + '<dt>Dodał</dt><dd>' + esc(m.created_by || '?') + ', ' + esc(m.created_at) + '</dd></dl><div style="margin-top:6px">';
+        if (can.canEdit) { h += '<button class="btn btn-default btn-xs" type="button" data-edit="' + m.id + '" data-group="0"><i class="fa fa-pencil"></i> Edytuj</button> '; }
+        if (can.canDelete) { h += '<button class="btn btn-danger btn-xs" type="button" data-del="' + m.id + '" data-group="0" data-label="' + esc(m.ip || m.cidr) + '"><i class="fa fa-trash"></i> Usuń</button>'; }
+        return h + '</div></div>';
+    }
+
+    function openNode(cidr) {
+        detail.innerHTML = '<p class="nreg-muted">Ładowanie ' + esc(cidr) + '…</p>';
+        api('node', { cidr: cidr }).then(function (j) {
+            var n = j.node, s = n.stats;
+            var h = '<h4 class="nreg-mono">' + esc(n.cidr) + ' ' + nodeBadges(n) + '</h4>'
+                + '<dl><dt>Zakres</dt><dd class="nreg-mono">' + esc(n.first) + ' – ' + esc(n.last) + '</dd>'
+                + '<dt>Rozmiar</dt><dd>' + s.size + (n.subnet && n.len <= 30 ? ' (hostów: ' + s.capacity + ')' : '') + '</dd>'
+                + '<dt>Zajęte</dt><dd>' + s.used + ' z ' + s.capacity + ' (' + s.util + '%) ' + bar(s.util) + '</dd>'
+                + '<dt>Adresów</dt><dd>' + s.addresses + '</dd>'
+                + (n.label ? '<dt>Opis</dt><dd>' + esc(n.label) + '</dd>' : '') + '</dl>';
+            if (n.virtual) { h += '<p class="nreg-muted" style="font-size:12px">To poziom grupowania /' + n.len + ' - nie ma tu prawdziwego prefiksu.</p>'; }
+            if (n.lnms.length) { h += '<h5>Na interfejsach (LibreNMS)</h5>' + lnmsTable(n.lnms, true); }
+            if (n.manual) { h += manualBlock(n.manual); }
+            else if (can.canEdit) {
+                h += '<p><button class="btn btn-success btn-xs" type="button" data-add="' + esc(n.cidr) + '"><i class="fa fa-plus"></i> Opisz ten prefiks (wpis ręczny)</button></p>';
+            }
+            if (n.subnet) {
+                h += '<h5>Wolne adresy hostów (' + j.free_ranges_total + ' przedziałów)</h5><div class="nreg-chips">'
+                    + j.free_ranges.map(function (r) {
+                        var t = r.first === r.last ? r.first : r.first + ' – ' + r.last;
+                        return '<a href="#" data-add="' + esc(r.first === r.last ? r.first : r.first + '-' + r.last) + '" title="dodaj jako wpis ręczny">' + esc(t) + ' (' + r.count + ')</a>';
+                    }).join('') + '</div>';
+            } else if (j.free_blocks.length) {
+                h += '<h5>Wolne bloki (największe)</h5><div class="nreg-chips">'
+                    + j.free_blocks.map(function (b) { return '<a href="#" data-add="' + esc(b.cidr) + '" title="dodaj jako wpis ręczny">' + esc(b.cidr) + '</a>'; }).join('') + '</div>';
+            }
+            h += '<h5>Historia</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
+            detail.innerHTML = h;
+            document.getElementById('nreg-ip-within').value = n.cidr;
+        }).catch(function (e) { detail.innerHTML = alertBox('danger', esc(e.message)); });
+    }
+
+    function openIp(ip) {
+        detail.innerHTML = '<p class="nreg-muted">Ładowanie ' + esc(ip) + '…</p>';
+        api('search', { q: ip }).then(function (j) {
+            var a = j.address;
+            var h = '<h4 class="nreg-mono">' + esc(ip) + (a ? ' <span class="nreg-bdg ' + a.state + '">' + esc(STATE_BDG[a.state]) + '</span>' : '')
+                + (a && a.dup ? ' <span class="nreg-bdg d">duplikat</span>' : '') + '</h4>'
+                + (j.path.length ? '<p style="font-size:12px">Sieć: <a href="#" data-open-node="' + esc(j.path[j.path.length - 1]) + '" class="nreg-mono">' + esc(j.path[j.path.length - 1]) + '</a></p>' : '');
+            if (!a) {
+                h += '<p>Adres jest wolny w tej przestrzeni.</p>';
+                if (can.canEdit) { h += '<p><button class="btn btn-success btn-xs" type="button" data-add="' + esc(ip) + '"><i class="fa fa-plus"></i> Dodaj jako wpis ręczny</button></p>'; }
+            } else {
+                if (a.rows.length) { h += '<h5>LibreNMS</h5>' + lnmsTable(a.rows, false); }
+                if (a.dup) { h += '<div class="alert alert-warning" style="padding:6px 10px">Ten adres jest na kilku urządzeniach jednocześnie.</div>'; }
+                if (a.manual) { h += manualBlock(a.manual); }
+            }
+            h += '<h5>Historia</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
+            detail.innerHTML = h;
+        }).catch(function (e) { detail.innerHTML = alertBox('danger', esc(e.message)); });
+    }
+
+    // ---------------------------------------------------------------- wyszukiwanie i wolne
+
+    document.getElementById('nreg-ip-search').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var q = document.getElementById('nreg-ip-q').value.trim();
+        if (!q) { return; }
+        result.innerHTML = '';
+        api('search', { q: q }).then(function (j) {
+            if (j.kind === 'address') { expandPath(j.path, j.ip); openIp(j.ip); return; }
+            if (j.kind === 'prefix') {
+                if (!j.exact) { result.innerHTML = alertBox('info', 'Nie ma prefiksu ' + esc(j.cidr) + ' w drzewie. Pokazuję najbliższą sieć, która go zawiera.'); }
+                expandPath(j.path); if (j.path.length) { openNode(j.path[j.path.length - 1]); }
+                return;
+            }
+            if (!j.hits.length) { result.innerHTML = alertBox('warning', 'Nic nie znaleziono dla „' + esc(q) + '”.'); return; }
+            result.innerHTML = alertBox('info', 'Znaleziono ' + j.hits.length + ':<br>' + j.hits.map(function (h) {
+                return '<a href="#" class="nreg-mono" ' + (h.type === 'address' ? 'data-goto-ip="' : 'data-goto-node="') + esc(h.value) + '" data-path="'
+                    + esc(JSON.stringify(h.path)) + '">' + esc(h.value) + '</a> <span class="nreg-muted">' + esc(h.label || '') + '</span>';
+            }).join('<br>'));
+        }).catch(function (e2) { result.innerHTML = alertBox('danger', esc(e2.message)); });
+    });
+
+    document.getElementById('nreg-ip-free').addEventListener('submit', function (e) {
+        e.preventDefault();
+        api('free', { within: document.getElementById('nreg-ip-within').value.trim(), len: document.getElementById('nreg-ip-len').value, count: 10 })
+            .then(function (j) {
+                result.innerHTML = j.blocks.length
+                    ? alertBox('success', 'Wolne /' + j.len + ' w ' + esc(j.within) + ': <span class="nreg-chips">' + j.blocks.map(function (b) {
+                        return '<a href="#" data-add="' + esc(b) + '" title="dodaj jako wpis ręczny">' + esc(b) + '</a>';
+                    }).join('') + '</span>')
+                    : alertBox('warning', 'Brak wolnych /' + j.len + ' w ' + esc(j.within) + '.');
+            }).catch(function (e2) { result.innerHTML = alertBox('danger', esc(e2.message)); });
+    });
+
+    // ---------------------------------------------------------------- uwagi i wpisy ręczne
+
+    function loadIssues() {
+        var box = document.querySelector('#nreg-ip-issues > div');
+        return api('issues').then(function (j) {
+            var n = j.duplicates.length + j.suspicious.length + j.reserved_conflicts.length;
+            document.querySelector('#nreg-ip-issues > summary').textContent = 'Uwagi (' + n + ')' + (j.orphans_total ? ', adresy poza sieciami: ' + j.orphans_total : '');
+            var h = '';
+            if (j.reserved_conflicts.length) {
+                h += '<h5>Rezerwacje z adresami z LibreNMS</h5>' + j.reserved_conflicts.map(function (c) {
+                    return '<div><a href="#" data-goto-node="' + esc(c.cidr) + '" class="nreg-mono">' + esc(c.cidr) + '</a>: ' + esc(c.ips) + ' (' + c.count + ')</div>';
+                }).join('');
+            }
+            if (j.duplicates.length) {
+                h += '<h5>Ten sam adres na kilku urządzeniach (' + j.duplicates.length + ')</h5><p class="nreg-muted" style="font-size:12px">Bywa celowe (CGNAT, adresy domyślne, anycast).</p>'
+                    + j.duplicates.map(function (d) { return '<div><a href="#" data-goto-ip="' + esc(d.ip) + '" class="nreg-mono">' + esc(d.ip) + '</a>: ' + esc(d.devices.join(', ')) + '</div>'; }).join('');
+            }
+            if (j.suspicious.length) {
+                h += '<h5>Podejrzane maski (krótsze niż /8)</h5>' + j.suspicious.map(function (s) {
+                    return '<div class="nreg-mono">' + esc(s.ip) + '/' + s.len + ' <span class="nreg-muted">' + esc(s.device + ' ' + s['if']) + '</span></div>';
+                }).join('');
+            }
+            if (j.orphans_total) {
+                h += '<h5>Adresy poza sieciami (' + j.orphans_total + ')</h5><p class="nreg-muted" style="font-size:12px">Np. aliasy /32. Leżą tylko w poziomach grupowania.</p><div class="nreg-chips">'
+                    + j.orphans.map(function (o) { return '<a href="#" data-goto-ip="' + esc(o.ip) + '" title="' + esc(o.device + ' ' + o['if']) + '">' + esc(o.ip) + '/' + o.len + '</a>'; }).join('') + '</div>';
+            }
+            if (j.v6_count) { h += '<p class="nreg-muted" style="font-size:12px">IPv6: ' + j.v6_count + ' adresów zapisanych, drzewo IPv6 w kolejnej wersji.</p>'; }
+            box.innerHTML = h || '<p class="nreg-muted">Brak uwag.</p>';
+        }).catch(function (e) { box.innerHTML = alertBox('danger', esc(e.message)); });
+    }
+
+    function loadManual() {
+        var box = document.querySelector('#nreg-ip-manual > div');
+        return api('manual_list').then(function (j) {
+            prefixRoles = j.prefix_roles; addressRoles = j.address_roles;
+            manualCache = {};
+            j.rows.forEach(function (m) { manualCache[m.id] = m; });
+            document.querySelector('#nreg-ip-manual > summary').textContent = 'Wpisy ręczne (' + j.rows.length + ')';
+            if (!j.rows.length) { box.innerHTML = '<p class="nreg-muted">Brak wpisów ręcznych.</p>'; return; }
+            box.innerHTML = '<table class="table table-condensed table-hover" style="font-size:12px"><thead><tr><th>Adres / prefiks</th><th>Rola</th><th>Nazwa</th>'
+                + '<th>Opis</th><th>Właściciel</th><th>VLAN</th><th>Dodał</th><th></th></tr></thead><tbody>' + j.rows.map(function (m) {
+                    var many = m.count > 1, go = m.kind === 'prefix' ? 'data-goto-node="' + esc(m.cidr) + '"' : 'data-goto-ip="' + esc(m.ip) + '"';
+                    var btn = '';
+                    if (can.canEdit) { btn += '<button class="btn btn-default btn-xs" type="button" data-edit="' + m.id + '" data-group="' + (many ? 1 : 0) + '"><i class="fa fa-pencil"></i> Edytuj' + (many ? ' grupę (' + m.count + ')' : '') + '</button> '; }
+                    if (can.canDelete) { btn += '<button class="btn btn-danger btn-xs" type="button" data-del="' + m.id + '" data-group="' + (many ? 1 : 0) + '" data-label="' + esc(m.label) + '"><i class="fa fa-trash"></i> Usuń' + (many ? ' grupę' : '') + '</button>'; }
+                    return '<tr><td><a href="#" class="nreg-mono" ' + go + '>' + esc(m.label) + '</a>' + (many ? ' <span class="nreg-muted">(' + m.count + ')</span>' : '') + '</td>'
+                        + '<td>' + esc(m.role_label) + (m.adopted_at ? ' <span class="label label-primary">przejęty</span>' : '') + (m.current ? ' <small class="nreg-muted">' + esc(m.current) + '</small>' : '') + '</td>'
+                        + '<td>' + esc(m.name || '') + '</td><td>' + esc(m.description) + '</td><td>' + esc(m.owner || '') + '</td>'
+                        + '<td>' + (m.vlan ? '<a href="?vlan=' + m.vlan + '#vlan">' + m.vlan + '</a>' : '') + '</td>'
+                        + '<td style="font-size:11px">' + esc(m.created_by || '?') + '<br>' + esc(m.created_at) + '</td><td style="white-space:nowrap">' + btn + '</td></tr>';
+                }).join('') + '</tbody></table>';
+        }).catch(function (e) { box.innerHTML = alertBox('danger', esc(e.message)); });
+    }
+
+    // ---------------------------------------------------------------- formularz
+
+    function isPrefix(text) { var m = /\/(\d{1,2})\s*$/.exec(text.trim()); return !!m && parseInt(m[1], 10) < 32 && !/[,\s;-]/.test(text.trim().replace(/\/\d+$/, '')); }
+
+    function fillRoles(prefix, current) {
+        var sel = form.elements.role, roles = prefix ? prefixRoles : addressRoles;
+        sel.innerHTML = Object.keys(roles).map(function (k) { return '<option value="' + k + '">' + esc(roles[k]) + '</option>'; }).join('');
+        if (current && roles[current]) { sel.value = current; }
+    }
+
+    function openForm(entry, target, group) {
+        if (!form) { return; }
+        form.reset();
+        document.getElementById('nreg-if-error').textContent = '';
+        form.elements.id.value = entry ? entry.id : '';
+        form.elements.group.value = group ? '1' : '0';
+        var t = form.elements.target;
+        t.value = entry ? (group ? entry.label : (entry.ip || entry.cidr)) : (target || '');
+        t.disabled = !!entry;
+        fillRoles(entry ? entry.kind === 'prefix' : isPrefix(t.value), entry ? entry.role : null);
+        document.getElementById('nreg-if-title').textContent = entry ? (group ? 'Edycja grupy ' + entry.label : 'Edycja wpisu ' + (entry.ip || entry.cidr)) : 'Dodaj adresację (wpis ręczny)';
+        if (entry) { ['name', 'description', 'owner', 'vlan', 'devices'].forEach(function (f) { form.elements[f].value = entry[f] || ''; }); }
+        form.style.display = '';
+        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        (entry ? form.elements.description : t).focus();
+    }
+
+    function refreshAll() {
+        return Promise.all([loadRoot(), loadManual(), loadIssues()]);
+    }
+
+    if (form) {
+        form.elements.target.addEventListener('input', function () { fillRoles(isPrefix(form.elements.target.value), form.elements.role.value); });
+        document.getElementById('nreg-if-cancel').addEventListener('click', function () { form.style.display = 'none'; });
+        document.getElementById('nreg-ip-add').addEventListener('click', function () { openForm(null, document.getElementById('nreg-ip-within').value); });
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var err = document.getElementById('nreg-if-error'), btn = form.querySelector('button[type="submit"]'), data = {};
+            ['role', 'name', 'description', 'owner', 'vlan', 'devices', 'comment'].forEach(function (f) { data[f] = form.elements[f].value; });
+            var id = form.elements.id.value, path;
+            if (id) { data.id = id; data.group = form.elements.group.value === '1'; path = 'manual_update'; }
+            else { data.target = form.elements.target.value; path = 'manual_create'; }
+            btn.disabled = true; err.textContent = '';
+            api(path, data, 'POST').then(function (j) {
+                form.style.display = 'none';
+                result.innerHTML = alertBox('success', id ? 'Zapisano zmiany.' : 'Dodano ' + (j.kind === 'prefix' ? 'prefiks ' : j.count + ' adres(ów) jako jedną pozycję: ') + '<span class="nreg-mono">' + esc(j.label) + '</span>.');
+                return refreshAll();
+            }).catch(function (e2) { err.textContent = e2.message; }).then(function () { btn.disabled = false; });
+        });
+    }
+
+    function deleteEntry(id, label, group) {
+        if (!window.confirm('Usunąć wpis ręczny ' + label + (group ? ' (całą grupę)' : '') + '? Zostanie w dzienniku zmian.')) { return; }
+        var comment = window.prompt('Komentarz do usunięcia (opcjonalnie, trafi do dziennika):', '');
+        if (comment === null) { return; }
+        api('manual_delete', { id: id, comment: comment, group: group }, 'POST').then(function (j) {
+            result.innerHTML = alertBox('success', 'Usunięto wpis ręczny <span class="nreg-mono">' + esc(j.deleted) + '</span>.');
+            detail.innerHTML = '';
+            return refreshAll();
+        }).catch(function (e) { result.innerHTML = alertBox('danger', esc(e.message)); });
+    }
+
+    // ---------------------------------------------------------------- przestrzenie
+
+    function loadSpaces() {
+        return N.api('ipam/spaces').then(function (j) {
+            spaceSel.innerHTML = j.spaces.map(function (s) {
+                return '<option value="' + s.id + '">' + esc(s.name) + (s.vrf ? ' (VRF ' + esc(s.vrf) + ')' : '') + '</option>';
+            }).join('');
+            spaceSel.value = String(space);
+        });
+    }
+    spaceSel.addEventListener('change', function () { space = parseInt(spaceSel.value, 10) || 1; detail.innerHTML = ''; refreshAll(); });
+    var newSpace = document.getElementById('nreg-ip-newspace');
+    if (newSpace) {
+        newSpace.addEventListener('click', function () {
+            var name = window.prompt('Nazwa nowej przestrzeni adresowej (np. VRF albo klient):', '');
+            if (!name) { return; }
+            var vrf = window.prompt('Nazwa VRF w LibreNMS (context_name) przypisywana do tej przestrzeni - opcjonalnie:', '') || '';
+            N.api('ipam/space_create', { name: name, vrf: vrf }, 'POST').then(function (j) {
+                space = j.space.id; return loadSpaces().then(refreshAll);
+            }).catch(function (e) { result.innerHTML = alertBox('danger', esc(e.message)); });
+        });
+    }
+
+    // ---------------------------------------------------------------- kliknięcia
+
+    tab.addEventListener('click', function (e) {
+        var t;
+        if ((t = e.target.closest('[data-toggle-node]'))) { toggle(t.getAttribute('data-toggle-node')); }
+        else if ((t = e.target.closest('[data-open-node]'))) {
+            e.preventDefault();
+            var row = treeEl.querySelector('.nreg-tn[data-cidr="' + t.getAttribute('data-open-node') + '"]');
+            if (row) { select(row); }
+            openNode(t.getAttribute('data-open-node'));
+        } else if ((t = e.target.closest('[data-open-ip]'))) { select(t); openIp(t.getAttribute('data-open-ip')); }
+        else if ((t = e.target.closest('[data-goto-ip]'))) {
+            e.preventDefault();
+            var ip = t.getAttribute('data-goto-ip');
+            api('search', { q: ip }).then(function (j) { expandPath(j.path, ip); openIp(ip); });
+        } else if ((t = e.target.closest('[data-goto-node]'))) {
+            e.preventDefault();
+            var c = t.getAttribute('data-goto-node');
+            api('search', { q: c }).then(function (j) { expandPath(j.path); openNode(j.path.length ? j.path[j.path.length - 1] : c); });
+        } else if ((t = e.target.closest('[data-add]'))) { e.preventDefault(); openForm(null, t.getAttribute('data-add')); }
+        else if ((t = e.target.closest('button[data-edit]'))) {
+            var m = manualCache[t.getAttribute('data-edit')];
+            if (m) { openForm(m, null, t.getAttribute('data-group') === '1'); }
+        } else if ((t = e.target.closest('button[data-del]'))) {
+            deleteEntry(t.getAttribute('data-del'), t.getAttribute('data-label'), t.getAttribute('data-group') === '1');
+        }
+    });
+
+    // Drzewo ładujemy przy pierwszym otwarciu zakładki (albo od razu, gdy jest aktywna).
+    function start() {
+        if (loaded) { return; }
+        loaded = true;
+        loadSpaces().then(function () { return Promise.all([loadRoot(), loadManual(), loadIssues()]); }).then(function () {
+            var q = new URLSearchParams(location.search);
+            var ip = q.get('ip'), pfx = q.get('prefix');
+            if (ip) { api('search', { q: ip }).then(function (j) { expandPath(j.path, ip); openIp(ip); }); }
+            else if (pfx) { api('search', { q: pfx }).then(function (j) { expandPath(j.path); if (j.path.length) { openNode(j.path[j.path.length - 1]); } }); }
+        });
+    }
+    document.addEventListener('nreg:tab', function (e) { if (e.detail === 'ipam') { start(); } });
+    if (tab.classList.contains('active')) { start(); }
+});
+</script>

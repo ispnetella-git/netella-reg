@@ -25,14 +25,6 @@
     .nreg-ports { font-size: 12px; }
     .nreg-ports summary { cursor: pointer; }
     #nreg-vlan-detail h4 { margin-top: 14px; }
-    .nreg-form { border: 1px solid rgba(128,128,128,.35); border-radius: 4px; padding: 10px 12px; margin-bottom: 10px; max-width: 900px; }
-    .nreg-form .row { margin-bottom: 6px; }
-    .nreg-form label { font-weight: 600; margin-bottom: 2px; font-size: 12px; }
-    .nreg-form .req::after { content: ' *'; color: #d9534f; }
-    .nreg-manual { border-left: 4px solid #8e44ad; padding: 6px 10px; margin: 8px 0; }
-    .nreg-manual dl { margin: 0; }
-    .nreg-manual dt { float: left; width: 130px; font-weight: normal; opacity: .75; }
-    .nreg-manual dd { margin-left: 140px; }
     #nreg-vlan-manual-list summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
 </style>
 

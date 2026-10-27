@@ -5,11 +5,42 @@ Dane bierze z bazy LibreNMS. Każdą zmianę, zarówno wykrytą w LibreNMS, jak 
 przez użytkownika, zapisuje w dzienniku. Jest zbudowana z modułów, a nowe moduły dokłada się
 bez zmian w rdzeniu.
 
-Stan na 0.2.0:
-- **rdzeń**: własna baza, schemat wersjonowany per moduł, uprawnienia per rola, dziennik zmian,
-  migawki stanu LibreNMS, synchronizacja z crona, komendy `lnms`;
-- **moduł VLAN**: mapa numerów 1–4094 w całej sieci, sprawdzanie zakresu, wpisy ręczne i rezerwacje,
-  szukanie wolnych numerów, szczegóły i historia numeru, panel na stronie urządzenia.
+Stan na 0.3.0:
+- **rdzeń**: własna baza, schemat wersjonowany per moduł, uprawnienia per rola, dziennik zmian
+  (jedna akcja = jedna linia), migawki stanu LibreNMS, synchronizacja z crona, komendy `lnms`;
+- **moduł VLAN**: mapa numerów 1–4094 w całej sieci, sprawdzanie zakresu, wpisy ręczne i rezerwacje
+  (grupy), szukanie wolnych numerów, szczegóły i historia numeru, panel na stronie urządzenia;
+- **moduł Adresacja IP**: drzewo IPv4 grupowane według masek, zajętość i wolne bloki, wyszukiwanie,
+  szukanie wolnej podsieci, wpisy ręczne (adresy, zakresy, agregaty, pule, rezerwacje), przestrzenie
+  adresowe, uwagi (duplikaty, adresy poza sieciami), panel na stronie urządzenia. IPv6 jest
+  zapisywane, ale bez drzewa.
+
+### Adresacja IP
+
+Źródło: `ipv4_addresses`, `ipv6_addresses`, `ports`, `devices` w LibreNMS. Każdy adres na porcie
+to jeden rekord (host, interfejs, opis portu, maska, VLAN z nazwy interfejsu).
+
+- **Drzewo:** sieci z interfejsów (np. `45.10.136.0/24`) i prefiksy ręczne. Tam, gdzie nie ma
+  prawdziwego prefiksu, są poziomy grupowania (domyślnie /8 → /16 → /24, ustawienie „Poziomy
+  grupowania”). Pasek pokazuje zajętość. W sieciach liczą się hosty, bez adresu sieci i rozgłoszeniowego.
+- **Szczegóły sieci:** interfejsy z LibreNMS, wpis ręczny, wolne bloki (w agregatach i grupach) albo
+  wolne adresy hostów (w sieciach), historia. Kliknięcie wolnego bloku otwiera formularz dodania.
+- **Szukaj:** adres (rozwija drzewo do niego), prefiks albo tekst (opisy, urządzenia, interfejsy).
+- **Wolne /N w prefiksie:** pierwsze wolne, wyrównane bloki danej maski.
+- **Dodaj adresację** (prawo edycji): `10.0.0.0/24` (prefiks z rolą agregat, pula, rezerwacja albo
+  sieć używana), `10.0.0.5`, `10.0.0.10-20`, `10.0.0.10-10.0.0.40` albo lista adresów (do 1024 naraz,
+  jedna grupa i jeden wpis w dzienniku). Wymagany opis, opcjonalnie nazwa, właściciel, VLAN, urządzenia.
+- **Blokady:** adresu widocznego w LibreNMS nie da się dodać. Sieci z LibreNMS nie da się dodać jako
+  „sieć używana” (można jako agregat, żeby ją opisać). Rezerwacji nie da się dodać, gdy LibreNMS ma
+  w prefiksie adresy. Przejęcie przez LibreNMS działa jak w module VLAN.
+- **Przestrzenie adresowe:** „Global” plus przestrzenie dodawane przez administratora (przycisk „+”).
+  Adres z LibreNMS trafia do przestrzeni, której pole VRF równa się jego `context_name`.
+- **Uwagi:** ten sam adres na kilku aktywnych urządzeniach, maski krótsze niż /8, adresy poza
+  sieciami (np. aliasy /32) i rezerwacje, w których pojawiły się adresy z LibreNMS.
+- Pomijane domyślnie: 127.0.0.0/8, 169.254.0.0/16, 0.0.0.0/8, interfejsy Junipera `emN.x` i `jsrv`,
+  IPv6 link-local. Ustawienia „Pomijane zakresy” i „Pomijane interfejsy”.
+
+Linki: `/plugin/Netella-Reg?ip=45.10.136.1#ipam`, `/plugin/Netella-Reg?prefix=45.10.136.0/24#ipam`.
 
 Plan kolejnych wersji jest w `../PROPOZYCJA.md` (rozdział 11).
 
@@ -138,7 +169,8 @@ tylko osoba z prawem administracji.
 | `src/Hooks/` | `Page`, `MenuEntry`, `Settings`, `DeviceOverview` |
 | `src/Http/ApiController.php` | API `GET/POST /plugin/Netella-Reg/api/<moduł>/<akcja>` |
 | `src/Console/` | `netella-reg:install`, `:sync`, `:doctor` |
-| `src/Modules/Vlan/` | moduł VLAN: `VlanCollector` (odczyt LibreNMS), `VlanName` (VLAN z nazwy interfejsu), `VlanRange`, `VlanIndex` (statusy) |
+| `src/Modules/Vlan/` | moduł VLAN: `VlanCollector` (odczyt LibreNMS), `VlanName` (VLAN z nazwy interfejsu), `VlanRange`, `VlanIndex` (statusy), `VlanManual` (wpisy ręczne, grupy) |
+| `src/Modules/Ipam/` | moduł adresacji: `IpCalc` (obliczenia IPv4), `IpInput` (wpisywane adresy/zakresy), `IpTree` (drzewo, zajętość, wolne bloki), `IpamCollector`, `IpamIndex` (statusy), `IpamManual`, `IpamSpaces` |
 | `resources/views/` | strona, ustawienia, zakładki modułów, panel urządzenia |
 | `tests/run_tests.php` | testy logiki bez Laravela |
 
@@ -150,7 +182,9 @@ tylko osoba z prawem administracji.
 | `reg_audit` | dziennik zmian, tylko dopisywany: kto, kiedy, co, stan przed i po (JSON) |
 | `reg_snapshot` | ostatni stan LibreNMS per moduł i rekord: hash, dane, `first_seen`, `last_seen`, `gone_at` |
 | `reg_state` | klucz-wartość: wyniki synchronizacji, ostatnio widziane ustawienia |
-| `reg_vlan_manual` | moduł VLAN: wpisy ręczne (jeden aktywny na numer, usuwanie miękkie, `adopted_at` = przejęcie przez LibreNMS) |
+| `reg_vlan_manual` | moduł VLAN: wpisy ręczne (jeden aktywny na numer, `batch_id` = grupa, usuwanie miękkie, `adopted_at` = przejęcie przez LibreNMS) |
+| `reg_ipam_manual` | adresacja: wpisy ręczne (adres albo prefiks z rolą, przestrzeń, `batch_id`, usuwanie miękkie, `adopted_at`) |
+| `reg_ipam_space` | adresacja: przestrzenie adresowe (Global = 1, pole `vrf` = `context_name` z LibreNMS) |
 
 ### Synchronizacja i dziennik
 

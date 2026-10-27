@@ -20,6 +20,7 @@ use Ispnetella\NetellaReg\Hooks\DeviceOverview;
 use Ispnetella\NetellaReg\Hooks\MenuEntry;
 use Ispnetella\NetellaReg\Hooks\Page;
 use Ispnetella\NetellaReg\Hooks\Settings;
+use Ispnetella\NetellaReg\Modules\Ipam\IpamModule;
 use Ispnetella\NetellaReg\Modules\Vlan\VlanModule;
 use LibreNMS\Interfaces\Plugins\Hooks\DeviceOverviewHook;
 use LibreNMS\Interfaces\Plugins\Hooks\MenuEntryHook;
@@ -35,6 +36,7 @@ class NetellaRegProvider extends ServiceProvider
             $registry = new ModuleRegistry();
             // Moduły wbudowane. Kolejność = kolejność zakładek.
             $registry->register(new VlanModule());
+            $registry->register(new IpamModule());
 
             return $registry;
         });

@@ -31,8 +31,12 @@ final class Snapshot
      * @param  array<string,array>  $current
      * @return array{appeared:int,changed:int,gone:int,returned:int,total:int,initial:bool}
      */
-    public function apply(string $module, string $type, array $current, \DateTimeImmutable $now): array
+    public function apply(string $module, string $type, array $current, \DateTimeImmutable $now, ?callable $rangeOf = null): array
     {
+        // Zakres liczbowy rekordu do dziennika (np. adres IPv4 jako liczba), żeby
+        // historia sieci znajdowała zdarzenia jej adresów. null = bez zakresu.
+        $range = fn (string $key, ?array $data) => $rangeOf !== null && $data !== null ? $rangeOf($key, $data) : null;
+
         $ts = $now->format('Y-m-d H:i:s');
 
         $previous = [];
@@ -50,7 +54,7 @@ final class Snapshot
         $diff = SnapshotDiff::compute($previous, $current);
         $audit = [];
 
-        $this->db->transaction(function () use ($module, $type, $diff, $ts, $now, $initial, &$audit) {
+        $this->db->transaction(function () use ($module, $type, $diff, $ts, $now, $initial, $range, &$audit) {
             $inserts = [];
             foreach ($diff['appeared'] as $key => $data) {
                 $inserts[] = [
@@ -65,7 +69,7 @@ final class Snapshot
                 ];
                 if (! $initial) {
                     $audit[] = AuditLog::row($module, $type, (string) $key, AuditLog::LNMS_APPEARED,
-                        AuditLog::SOURCE_SYNC, null, $data, null, null, null, null, $now);
+                        AuditLog::SOURCE_SYNC, null, $data, null, null, null, null, $now, $range((string) $key, $data));
                 }
             }
             foreach (array_chunk($inserts, 500) as $chunk) {
@@ -76,13 +80,13 @@ final class Snapshot
                 $this->update($module, $type, (string) $key, $after, $ts);
                 [$b, $a] = SnapshotDiff::changedFields($before, $after);
                 $audit[] = AuditLog::row($module, $type, (string) $key, AuditLog::LNMS_CHANGED,
-                    AuditLog::SOURCE_SYNC, $b, $a, null, null, null, null, $now);
+                    AuditLog::SOURCE_SYNC, $b, $a, null, null, null, null, $now, $range((string) $key, $after));
             }
 
             foreach ($diff['returned'] as $key => [$before, $after]) {
                 $this->update($module, $type, (string) $key, $after, $ts);
                 $audit[] = AuditLog::row($module, $type, (string) $key, AuditLog::LNMS_APPEARED,
-                    AuditLog::SOURCE_SYNC, $before, $after, 'wrócił po zniknięciu', null, null, null, $now);
+                    AuditLog::SOURCE_SYNC, $before, $after, 'wrócił po zniknięciu', null, null, null, $now, $range((string) $key, $after));
             }
 
             foreach (array_chunk(array_keys($diff['gone']), 500) as $keys) {
@@ -92,7 +96,7 @@ final class Snapshot
             }
             foreach ($diff['gone'] as $key => $before) {
                 $audit[] = AuditLog::row($module, $type, (string) $key, AuditLog::LNMS_GONE,
-                    AuditLog::SOURCE_SYNC, $before, null, null, null, null, null, $now);
+                    AuditLog::SOURCE_SYNC, $before, null, null, null, null, null, $now, $range((string) $key, $before));
             }
 
             // Wszystko, co nadal jest w LibreNMS, było widziane teraz.

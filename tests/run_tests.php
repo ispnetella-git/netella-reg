@@ -17,8 +17,14 @@ require $src . '/Modules/Vlan/VlanName.php';
 require $src . '/Modules/Vlan/VlanRange.php';
 require $src . '/Modules/Vlan/VlanIndex.php';
 require $src . '/Modules/Vlan/VlanManual.php';
+require $src . '/Modules/Ipam/IpCalc.php';
+require $src . '/Modules/Ipam/IpInput.php';
+require $src . '/Modules/Ipam/IpTree.php';
 
 use Ispnetella\NetellaReg\Core\Access;
+use Ispnetella\NetellaReg\Modules\Ipam\IpCalc;
+use Ispnetella\NetellaReg\Modules\Ipam\IpInput;
+use Ispnetella\NetellaReg\Modules\Ipam\IpTree;
 use Ispnetella\NetellaReg\Core\SnapshotDiff;
 use Ispnetella\NetellaReg\Modules\Vlan\VlanIndex;
 use Ispnetella\NetellaReg\Modules\Vlan\VlanManual;
@@ -212,6 +218,80 @@ check('diff appeared', array_keys($d['appeared']), ['k6']);
 check('diff gone', array_keys($d['gone']), ['k4']);
 check('changedFields', SnapshotDiff::changedFields(['a' => 1, 'b' => 2, 'c' => [1]], ['a' => 1, 'b' => 3, 'd' => 4, 'c' => [1]]),
     [['b' => 2, 'd' => null], ['b' => 3, 'd' => 4]]);
+
+// --- IpCalc ---
+$ip = fn (string $s) => IpCalc::ip2int($s);
+check('ip2int', $ip('10.0.0.1'), 167772161);
+check('ip2int 255.255.255.255', $ip('255.255.255.255'), 4294967295);
+check('ip2int zły', $ip('10.0.0.256'), null);
+check('int2ip', IpCalc::int2ip(3232235777), '192.168.1.1');
+check('mask /24', IpCalc::mask(24), 0xFFFFFF00);
+check('mask /0', IpCalc::mask(0), 0);
+check('network', IpCalc::int2ip(IpCalc::network($ip('45.10.136.77'), 24)), '45.10.136.0');
+check('parseV4 prefiks', IpCalc::parseV4('45.10.136.0/24')['cidr'], '45.10.136.0/24');
+check('parseV4 adres', [IpCalc::parseV4('10.0.0.5')['len'], IpCalc::parseV4('10.0.0.5')['cidr']], [32, '10.0.0.5/32']);
+check('parseV4 normalizuje', IpCalc::parseV4('10.0.0.5/24')['cidr'], '10.0.0.0/24');
+throws('parseV4 strict bity hosta', fn () => IpCalc::parseV4('10.0.0.5/24', true));
+throws('parseV4 śmieci', fn () => IpCalc::parseV4('10.0.0/24'));
+throws('parseV4 /33', fn () => IpCalc::parseV4('10.0.0.0/33'));
+check('normalizeV6', IpCalc::normalizeV6('2001:0db8:0000::0001'), '2001:db8::1');
+check('normalizeV6 zły', IpCalc::normalizeV6('10.0.0.1'), null);
+$c = fn ($a, $b) => array_map(fn ($x) => IpCalc::cidr($x['start'], $x['len']), IpCalc::rangeToCidrs($ip($a), $ip($b)));
+check('rangeToCidrs .20-.63', $c('10.0.0.20', '10.0.0.63'), ['10.0.0.20/30', '10.0.0.24/29', '10.0.0.32/27']);
+check('rangeToCidrs cała /24', $c('10.0.0.0', '10.0.0.255'), ['10.0.0.0/24']);
+check('rangeToCidrs 1 adres', $c('10.0.0.7', '10.0.0.7'), ['10.0.0.7/32']);
+check('rangeToCidrs 0.0.0.0-255.255.255.255', $c('0.0.0.0', '255.255.255.255'), ['0.0.0.0/0']);
+check('freeIntervals', IpCalc::freeIntervals(0, 99, [[10, 19], [15, 30], [50, 50], [120, 130]]), [[0, 9], [31, 49], [51, 99]]);
+check('freeIntervals pełny', IpCalc::freeIntervals(0, 9, [[0, 20]]), []);
+check('merge', IpCalc::merge([[5, 6], [0, 2], [3, 3], [10, 12]]), [[0, 3], [5, 6], [10, 12]]);
+check('coveredCount', IpCalc::coveredCount([[0, 9], [5, 14], [20, 20]]), 16);
+check('findFreeBlocks /29', array_map(fn ($s) => IpCalc::int2ip($s),
+    IpCalc::findFreeBlocks($ip('10.0.0.0'), $ip('10.0.0.255'), [[$ip('10.0.0.0'), $ip('10.0.0.9')]], 29, 3)),
+    ['10.0.0.16', '10.0.0.24', '10.0.0.32']);
+check('usable /24', IpCalc::usable(24), 254);
+check('usable /31', IpCalc::usable(31), 2);
+
+// --- IpInput ---
+check('input prefiks', IpInput::parse('10.0.0.0/24')['prefix']['cidr'], '10.0.0.0/24');
+throws('input prefiks z bitami hosta', fn () => IpInput::parse('10.0.0.1/24'));
+check('input adres', IpInput::parse('10.0.0.5')['addresses'], [$ip('10.0.0.5')]);
+check('input adres /32', IpInput::parse('10.0.0.5/32')['addresses'], [$ip('10.0.0.5')]);
+check('input zakres skrót', count(IpInput::parse('10.0.0.10-20')['addresses']), 11);
+check('input zakres pełny', IpInput::compress(IpInput::parse('10.0.0.250-10.0.1.2')['addresses']), '10.0.0.250-10.0.1.2');
+check('input lista', IpInput::compress(IpInput::parse('10.0.0.7, 10.0.0.1 10.0.0.2')['addresses']), '10.0.0.1-10.0.0.2, 10.0.0.7');
+throws('input prefiks w liście', fn () => IpInput::parse('10.0.0.1, 10.0.0.0/24'));
+throws('input za dużo', fn () => IpInput::parse('10.0.0.0-10.0.8.0'));
+throws('input pusty', fn () => IpInput::parse(' '));
+throws('input śmieci', fn () => IpInput::parse('abc'));
+
+// --- IpTree ---
+$pfx = fn (string $cidr, string $src = 'lnms', bool $subnet = true) => ['start' => IpCalc::parseV4($cidr)['start'], 'len' => IpCalc::parseV4($cidr)['len'], 'src' => $src, 'subnet' => $subnet];
+$tree = new IpTree(
+    [$pfx('45.10.136.0/24'), $pfx('45.10.136.0/22', 'manual', false), $pfx('10.218.8.0/30'), $pfx('10.218.8.4/30')],
+    [['ip' => $ip('45.10.136.1')], ['ip' => $ip('45.10.136.2')], ['ip' => $ip('10.218.8.1')], ['ip' => $ip('10.218.8.5')], ['ip' => $ip('10.218.0.3')]],
+    [8, 16, 24]
+);
+check('tree korzenie', $tree->roots(), ['10.0.0.0/8', '45.0.0.0/8']);
+check('tree rodzic /24', $tree->node('45.10.136.0/24')['parent'], '45.10.136.0/22');
+check('tree rodzic /22 (wirtualny /16)', $tree->node('45.10.136.0/22')['parent'], '45.10.0.0/16');
+check('tree /22 nie ma wirtualnego /24 nad sobą', $tree->node('45.10.136.0/24')['sources'], ['lnms' => true]);
+check('tree wirtualny', IpTree::isVirtual($tree->node('45.10.0.0/16')), true);
+check('tree adres w /24', $tree->deepest($ip('45.10.136.2')), '45.10.136.0/24');
+check('tree adres poza siecią -> wirtualny /24', $tree->deepest($ip('10.218.0.3')), '10.218.0.0/24');
+check('tree /30 pod wirtualnym /24', $tree->node('10.218.8.0/30')['parent'], '10.218.8.0/24');
+$s24 = $tree->node('45.10.136.0/24')['stats'];
+check('tree /24 sieć: hosty', [$s24['capacity'], $s24['used'], $s24['free'], $s24['addresses']], [254, 2, 252, 2]);
+$s22 = $tree->node('45.10.136.0/22')['stats'];
+check('tree /22 agregat: zajęta jedna /24', [$s22['capacity'], $s22['used'], $s22['util']], [1024, 256, 25.0]);
+$s16 = $tree->node('45.10.0.0/16')['stats'];
+check('tree wirtualny /16 liczy tylko /22', [$s16['used'], $s16['addresses']], [1024, 2]);
+$s8 = $tree->node('10.0.0.0/8')['stats'];
+check('tree wirtualny /8 przezroczysty (2x /30 + 1 adres)', $s8['used'], 9);
+check('tree wolne bloki /22', array_column($tree->freeBlocks('45.10.136.0/22', 5), 'cidr'), ['45.10.138.0/23', '45.10.137.0/24']);
+check('tree wolne /30 sieci', $tree->node('10.218.8.0/30')['stats']['free'], 1);
+check('tree ścieżka', $tree->path('45.10.136.0/24'), ['45.0.0.0/8', '45.10.0.0/16', '45.10.136.0/22', '45.10.136.0/24']);
+$empty = new IpTree([], [], [8, 16, 24]);
+check('tree pusty', $empty->roots(), []);
 
 // --- Access ---
 check('matches pusta lista view', Access::matches(['user'], [], true), true);

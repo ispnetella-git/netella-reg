@@ -31,6 +31,13 @@ final class Settings
         // Rekordy z urządzeń wyłączonych w LibreNMS: 'stale' = zajęte, ale
         // oznaczone jako nieaktualne; 'ignore' = traktowane jak wolne.
         'disabled_devices' => 'stale',
+        // Adresacja: zakresy IPv4 pomijane przy synchronizacji (loopback, link-local, "this network").
+        'ipam_ignore' => '127.0.0.0/8, 169.254.0.0/16, 0.0.0.0/8',
+        // Adresacja: interfejsy pomijane (regex, bez ograniczników). Domyślnie wewnętrzne
+        // interfejsy Junipera emN.x i jsrv z adresami 128.0.0.x/2.
+        'ipam_ignore_if' => '^(jsrv|em[0-9]+\.)',
+        // Adresacja: poziomy grupowania drzewa (maski węzłów wirtualnych).
+        'ipam_levels' => '8,16,24',
         // Włączenie modułów: module_<klucz> => '1' / '0'. Brak klucza = włączony.
     ];
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.0 - 2026-10-27
+
+- Nowy moduł **Adresacja IP** (`ipam`, schemat 1, tabele `reg_ipam_manual` i `reg_ipam_space`).
+  - Synchronizacja adresów z LibreNMS (`ipv4_addresses`, `ipv6_addresses`) przez migawkę i dziennik.
+    Zdarzenia mają zakres = adres jako liczba, więc historia sieci pokazuje zmiany jej adresów.
+  - Drzewo IPv4: sieci z interfejsów, prefiksy ręczne i poziomy grupowania (ustawienie, domyślnie
+    8,16,24). Zajętość, wolne bloki i wolne hosty, szczegóły sieci i adresu z historią.
+  - Wyszukiwanie (adres, prefiks, tekst), szukanie wolnych bloków /N w prefiksie.
+  - Wpisy ręczne: adresy, zakresy i listy (grupa, jeden wpis w dzienniku), prefiksy z rolą agregat,
+    pula, rezerwacja albo sieć używana. Blokady dla danych, które LibreNMS już ma. Przejęcie przez LibreNMS.
+  - Przestrzenie adresowe (Global + dodawane przez administratora, dopasowanie po VRF).
+  - Uwagi: duplikaty adresów na aktywnych urządzeniach, maski krótsze niż /8, adresy poza sieciami,
+    rezerwacje z adresami z LibreNMS.
+  - Ustawienia: pomijane zakresy, pomijane interfejsy (domyślnie wewnętrzne Junipera), poziomy grupowania.
+  - Panel adresów na stronie urządzenia.
+- Rdzeń: `AuditLog::page()` przyjmuje listę prefiksów kluczy i filtr `overlaps`, a `Snapshot::apply()`
+  przyjmuje funkcję zakresu rekordu.
+- Dziennik rozpoznaje rekordy adresacji („IP 10.0.0.5 · urządzenie interfejs”, „10.0.0.0/24 (wpis)”).
+
 ## 0.2.3 - 2026-10-27
 
 - Dziennik: jedna akcja użytkownika to jeden wpis. Dodanie zakresu (np. 1313-1399) zapisuje jeden

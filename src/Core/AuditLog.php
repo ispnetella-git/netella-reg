@@ -140,15 +140,20 @@ final class AuditLog
             $q->whereIn('entity_key', $filters['keys']);
         }
 
-        $prefix = $filters['key_prefix'] ?? '';
+        // key_prefix (napis albo lista), covers (liczba) i overlaps ([od, do]) łączy OR.
+        $prefixes = array_filter((array) ($filters['key_prefix'] ?? []), fn ($p) => $p !== '');
         $covers = $filters['covers'] ?? null;
-        if ($prefix !== '' || $covers !== null) {
-            $q->where(function ($w) use ($prefix, $covers) {
-                if ($prefix !== '') {
+        $overlaps = $filters['overlaps'] ?? null;
+        if ($prefixes !== [] || $covers !== null || $overlaps !== null) {
+            $q->where(function ($w) use ($prefixes, $covers, $overlaps) {
+                foreach ($prefixes as $prefix) {
                     $w->orWhere('entity_key', 'like', addcslashes($prefix, '%_\\') . '%');
                 }
                 if ($covers !== null) {
                     $w->orWhere(fn ($r) => $r->where('range_from', '<=', (int) $covers)->where('range_to', '>=', (int) $covers));
+                }
+                if ($overlaps !== null) {
+                    $w->orWhere(fn ($r) => $r->where('range_from', '<=', (int) $overlaps[1])->where('range_to', '>=', (int) $overlaps[0]));
                 }
             });
         }

@@ -31,6 +31,15 @@
     .nreg-pager { display: flex; gap: 8px; align-items: center; }
     .nreg-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
     .nreg-filters .form-control { height: 30px; padding: 4px 8px; width: auto; }
+    /* Wspólne dla modułów: formularz wpisu ręcznego i blok wpisu w szczegółach. */
+    .nreg-form { border: 1px solid rgba(128,128,128,.35); border-radius: 4px; padding: 10px 12px; margin-bottom: 10px; max-width: 900px; }
+    .nreg-form .row { margin-bottom: 6px; }
+    .nreg-form label { font-weight: 600; margin-bottom: 2px; font-size: 12px; }
+    .nreg-form .req::after { content: ' *'; color: #d9534f; }
+    .nreg-manual { border-left: 4px solid #8e44ad; padding: 6px 10px; margin: 8px 0; }
+    .nreg-manual dl { margin: 0; }
+    .nreg-manual dt { float: left; width: 130px; font-weight: normal; opacity: .75; }
+    .nreg-manual dd { margin-left: 140px; }
 </style>
 
 <div class="container-fluid nreg">
@@ -117,7 +126,7 @@
         subif: 'subinterfejsy', defined: 'w tabeli vlans', disabled: 'wyłączone', device: 'urządzenie'
     };
     // Pola pomijane w linii dziennika (powtarzają informację z kolumny "Rekord").
-    var SKIP_FIELDS = { count: 1, vlans: 1, vlan: 1, device_id: 1, device: 1, hostname: 1 };
+    var SKIP_FIELDS = { count: 1, vlans: 1, device_id: 1, device: 1, hostname: 1, ips: 1, prefix: 1, family: 1, port_id: 1, space: 1 };
 
     // Zmiany z dziennika w jednej linii: "pole: przed → po · pole2: …".
     function diffHtml(row) {
@@ -144,9 +153,16 @@
         var list = a.vlans || b.vlans, count = a.count || b.count;
         if (row.entity_key === '*') { return 'wszystkie'; }
         if (row.module === 'core') { return 'ustawienia'; }
-        if (list) { return 'VLAN ' + esc(list) + (count > 1 ? ' <span class="nreg-muted">(' + count + ')</span>' : ''); }
+        var more = count > 1 ? ' <span class="nreg-muted">(' + count + ')</span>' : '';
+        if (list) { return 'VLAN ' + esc(list) + more; }
+        if (a.ips || b.ips) { return 'IP ' + esc(a.ips || b.ips) + more; }
+        if (a.prefix || b.prefix) { return esc(a.prefix || b.prefix); }
         if ((m = /^v(\d+):d(\d+)$/.exec(row.entity_key))) { return 'VLAN ' + m[1] + ' · ' + esc(a.device || b.device || ('urządzenie ' + m[2])); }
         if ((m = /^v(\d+):m\d+$/.exec(row.entity_key))) { return 'VLAN ' + m[1] + ' <span class="nreg-muted">(wpis)</span>'; }
+        if ((m = /^a:([^/]+)\/(\d+):p\d+$/.exec(row.entity_key))) { return 'IP ' + esc(m[1]) + '/' + m[2] + ' · ' + esc(a.device || b.device || '') + ' ' + esc(a['if'] || b['if'] || ''); }
+        if ((m = /^a:([^:]+):m\d+$/.exec(row.entity_key))) { return 'IP ' + esc(m[1]) + ' <span class="nreg-muted">(wpis)</span>'; }
+        if ((m = /^n:([^:]+):m\d+$/.exec(row.entity_key))) { return esc(m[1]) + ' <span class="nreg-muted">(wpis)</span>'; }
+        if ((m = /^s(\d+)$/.exec(row.entity_key))) { return 'przestrzeń ' + esc(a.name || b.name || m[1]); }
         return esc(row.entity_key);
     }
 

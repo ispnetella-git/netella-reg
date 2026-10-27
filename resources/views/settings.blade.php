@@ -17,6 +17,7 @@
     .nreg-adm .pomoc { font-size: 12px; opacity: .75; margin: 0 0 8px; }
     .nreg-adm .table { width: auto; }
     .nreg-adm code { white-space: pre-wrap; word-break: break-all; }
+    .nreg-adm .nreg-mono { font-family: monospace; }
 </style>
 
 <div class="nreg-adm">
@@ -99,6 +100,23 @@
                 <option value="ignore" @selected(($s['disabled_devices'] ?? '') === 'ignore')>ignorowane (traktowane jak wolne)</option>
             </select>
             <p class="pomoc">LibreNMS zostawia w bazie dane urządzeń wyłączonych, nawet sprzed wielu miesięcy.</p>
+        </div>
+
+        <h5>Adresacja IP</h5>
+        <div class="form-group">
+            <label>Pomijane zakresy IPv4</label>
+            <input class="form-control nreg-mono" style="width: 520px;" name="settings[ipam_ignore]" value="{{ $s['ipam_ignore'] ?? '' }}">
+            <p class="pomoc">Prefiksy po przecinku. Adresy z tych zakresów nie trafiają do rejestru (np. loopback 127.0.0.0/8).</p>
+        </div>
+        <div class="form-group">
+            <label>Pomijane interfejsy (wyrażenie regularne)</label>
+            <input class="form-control nreg-mono" style="width: 520px;" name="settings[ipam_ignore_if]" value="{{ $s['ipam_ignore_if'] ?? '' }}">
+            <p class="pomoc">Domyślnie wewnętrzne interfejsy Junipera (em0.0, jsrv.1) z adresami 128.0.0.x/2. Puste = nic nie pomijamy.</p>
+        </div>
+        <div class="form-group">
+            <label>Poziomy grupowania drzewa (maski)</label>
+            <input class="form-control nreg-mono" style="width: 200px;" name="settings[ipam_levels]" value="{{ $s['ipam_levels'] ?? '8,16,24' }}">
+            <p class="pomoc">Drzewo rozwija się klasa po klasie na tych maskach, gdy nie ma tam prawdziwego prefiksu. Np. 8,16,24 albo 8,12,16,20,24.</p>
         </div>
 
         <h5>Baza wtyczki</h5>
