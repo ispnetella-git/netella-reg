@@ -16,10 +16,12 @@ require $src . '/Core/Access.php';
 require $src . '/Modules/Vlan/VlanName.php';
 require $src . '/Modules/Vlan/VlanRange.php';
 require $src . '/Modules/Vlan/VlanIndex.php';
+require $src . '/Modules/Vlan/VlanManual.php';
 
 use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\SnapshotDiff;
 use Ispnetella\NetellaReg\Modules\Vlan\VlanIndex;
+use Ispnetella\NetellaReg\Modules\Vlan\VlanManual;
 use Ispnetella\NetellaReg\Modules\Vlan\VlanName;
 use Ispnetella\NetellaReg\Modules\Vlan\VlanRange;
 
@@ -172,6 +174,16 @@ check('manual: maska', [strlen($im->manualMask()), substr_count($im->manualMask(
 check('manual: wolny ciąg omija wpisy', VlanRange::findFreeRun(fn ($v) => $im->isFree($v), 3, 1400), [1402, 1403, 1404]);
 $im2 = new VlanIndex($rows, $now, 30, 'ignore', $manual);
 check('manual+ignore: 200 rezerwacja', $im2->status(200), VlanIndex::RESERVED);
+
+// --- blokada dodawania numerów widocznych w LibreNMS ---
+$plain = new VlanIndex($rows, $now, 30, 'stale');
+check('known: 100 aktywny', $plain->knownToLibreNms(100), true);
+check('known: 200 tylko wyłączone', $plain->knownToLibreNms(200), true);
+check('known: 300 zniknął (karencja)', $plain->knownToLibreNms(300), false);
+check('known: 1 wolny', $plain->knownToLibreNms(1), false);
+check('known: 200 przy ignore', (new VlanIndex($rows, $now, 30, 'ignore'))->knownToLibreNms(200), false);
+check('blocked z zakresu', VlanManual::blocked([99, 100, 200, 300, 301], fn ($v) => $plain->knownToLibreNms($v)), [100, 200]);
+check('blocked pusty', VlanManual::blocked([1, 2], fn ($v) => $plain->knownToLibreNms($v)), []);
 
 // --- SnapshotDiff ---
 check('hash niezależny od kolejności kluczy', SnapshotDiff::hash(['a' => 1, 'b' => [2, 3]]), SnapshotDiff::hash(['b' => [2, 3], 'a' => 1]));

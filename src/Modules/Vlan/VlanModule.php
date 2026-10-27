@@ -136,13 +136,12 @@ final class VlanModule extends AbstractModule
             (string) $request->input('range', ''),
             $request->only(['name', 'description', 'owner', 'status', 'devices']),
             self::comment($request),
-            fn (int $v) => $index->inLibreNms($v)
+            fn (int $v) => $index->knownToLibreNms($v)
         );
 
         return [
             'created' => VlanRange::compress($res['created']),
             'count' => count($res['created']),
-            'already_in_librenms' => VlanRange::compress($res['already_in_librenms']),
         ];
     }
 

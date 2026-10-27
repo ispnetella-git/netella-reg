@@ -86,7 +86,10 @@ Strona `/plugin/Netella-Reg`:
   Wymagany jest opis. Opcjonalnie: nazwa, właściciel, status (używany albo rezerwacja), urządzenia
   i komentarz do dziennika. Wpis można dodać też z wyniku sprawdzania zakresu i ze szczegółów
   numeru. Wszystkie wpisy są na liście „Wpisy ręczne” pod mapą. Edycja wymaga prawa edycji,
-  a usunięcie prawa usuwania;
+  a usunięcie prawa usuwania. **Blokada:** nie da się dodać numeru, który LibreNMS widzi teraz
+  na urządzeniu aktywnym albo wyłączonym (statusy „LibreNMS” i „nieaktualny”). Jeden taki numer
+  odrzuca całe dodawanie, a komunikat podaje zablokowane numery i resztę zakresu. Numer, który
+  zniknął z LibreNMS i jest w karencji, można dodać;
 - zakładka **Dziennik zmian**: wszystkie zdarzenia z filtrami po module, źródle, zdarzeniu i tekście.
 
 Linki bezpośrednie: `/plugin/Netella-Reg?vlan=1400#vlan`, `/plugin/Netella-Reg?range=1400-1450#vlan`.
@@ -103,11 +106,10 @@ Linki bezpośrednie: `/plugin/Netella-Reg?vlan=1400#vlan`, `/plugin/Netella-Reg?
 | wolny | nic z powyższych |
 
 Kolejność w tabeli to priorytet: **dane LibreNMS mają pierwszeństwo** przed wpisem ręcznym.
-Jeśli numer z wpisem ręcznym jest też w LibreNMS, kratka ma kolor LibreNMS i fioletowy pasek
-u dołu, a wpis jest adnotacją. Gdy numer wpisany ręcznie pojawi się później w LibreNMS,
-synchronizacja oznacza wpis jako „przejęty przez LibreNMS”, z datą przejęcia. W szczegółach
-numeru widać wtedy, kto i kiedy dodał go wcześniej ręcznie. Jeśli numer potem zniknie z LibreNMS,
-wraca status wpisu ręcznego.
+Wpis ręczny może powstać tylko dla numeru, którego LibreNMS nie widzi. Gdy taki numer pojawi się
+później w LibreNMS, synchronizacja oznacza wpis jako „przejęty przez LibreNMS”, z datą przejęcia.
+Kratka ma wtedy kolor LibreNMS i fioletowy pasek u dołu, a w szczegółach numeru widać, kto i kiedy
+dodał go wcześniej ręcznie. Jeśli numer potem zniknie z LibreNMS, wraca status wpisu ręcznego.
 
 Numer jest zajęty, jeśli występuje na **którymkolwiek** urządzeniu w sieci. Źródła w LibreNMS:
 tabela `vlans` (definicje), `ports_vlans` (porty) i nazwy interfejsów: `Vlanif1400`, `Vlan1400`,

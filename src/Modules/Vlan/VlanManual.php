@@ -151,12 +151,29 @@ final class VlanManual
     }
 
     /**
+     * Numery, których nie wolno dodać ręcznie, bo LibreNMS już je widzi.
+     *
+     * @param  list<int>  $numbers
+     * @param  callable(int):bool  $knownToLibreNms
+     * @return list<int>
+     */
+    public static function blocked(array $numbers, callable $knownToLibreNms): array
+    {
+        return array_values(array_filter($numbers, fn (int $v) => $knownToLibreNms($v)));
+    }
+
+    /**
      * Dodaje wpisy dla wszystkich numerów z zakresu.
      *
-     * @param  callable(int):bool  $inLibreNms  czy numer jest teraz na aktywnym urządzeniu
-     * @return array{created:list<int>,already_in_librenms:list<int>}
+     * Blokada: numer widoczny w LibreNMS (na aktywnym albo wyłączonym urządzeniu)
+     * nie może dostać wpisu ręcznego - LibreNMS jest dla niego źródłem prawdy.
+     * Jeden zablokowany numer odrzuca całe żądanie, żeby nie powstał zakres
+     * z dziurami, o których użytkownik nie wie.
+     *
+     * @param  callable(int):bool  $knownToLibreNms
+     * @return array{created:list<int>}
      */
-    public function create(string $range, array $input, ?string $comment, callable $inLibreNms): array
+    public function create(string $range, array $input, ?string $comment, callable $knownToLibreNms): array
     {
         try {
             $numbers = VlanRange::parse($range);
@@ -176,26 +193,26 @@ final class VlanManual
                 . VlanRange::compress(array_map('intval', $taken)));
         }
 
+        $blocked = self::blocked($numbers, $knownToLibreNms);
+        if ($blocked !== []) {
+            $free = array_values(array_diff($numbers, $blocked));
+            throw new ApiException('Tych numerów nie można dodać ręcznie, bo są już w LibreNMS: '
+                . VlanRange::compress($blocked) . '.'
+                . ($free !== [] ? ' Bez nich zostaje: ' . VlanRange::compress($free) . '.' : ''), 409);
+        }
+
         $now = date('Y-m-d H:i:s');
         $user = Access::username();
-        $inLnms = [];
 
-        $this->db->transaction(function () use ($numbers, $fields, $now, $user, $comment, $inLibreNms, &$inLnms) {
+        $this->db->transaction(function () use ($numbers, $fields, $now, $user, $comment) {
             foreach ($numbers as $vlan) {
-                // Numer już widoczny w LibreNMS: wpis jest od razu przejęty,
-                // bez osobnego zdarzenia "adopted".
-                $adopted = $inLibreNms($vlan) ? $now : null;
-                if ($adopted !== null) {
-                    $inLnms[] = $vlan;
-                }
-
                 $row = $fields + [
                     'vlan' => $vlan,
                     'created_at' => $now,
                     'created_by' => $user,
                     'updated_at' => $now,
                     'updated_by' => $user,
-                    'adopted_at' => $adopted,
+                    'adopted_at' => null,
                 ];
                 $id = (int) $this->db->table(self::TABLE)->insertGetId($row);
 
@@ -204,7 +221,7 @@ final class VlanManual
             }
         });
 
-        return ['created' => $numbers, 'already_in_librenms' => $inLnms];
+        return ['created' => $numbers];
     }
 
     public function update(int $id, array $input, ?string $comment): array

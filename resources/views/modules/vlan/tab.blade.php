@@ -322,11 +322,7 @@ document.addEventListener('nreg:ready', function () {
                 if (id) {
                     result.innerHTML = alertBox('success', 'Zapisano zmiany wpisu VLAN ' + esc(j.entry.vlan) + '.');
                 } else {
-                    var h = 'Dodano ' + j.count + ' wpis(ów): <span class="nreg-mono">' + esc(j.created) + '</span>.';
-                    if (j.already_in_librenms) {
-                        h += '<br>Numery <span class="nreg-mono">' + esc(j.already_in_librenms) + '</span> są już w LibreNMS. Wpis zostaje jako adnotacja, a pierwszeństwo mają dane LibreNMS.';
-                    }
-                    result.innerHTML = alertBox(j.already_in_librenms ? 'warning' : 'success', h);
+                    result.innerHTML = alertBox('success', 'Dodano ' + j.count + ' wpis(ów): <span class="nreg-mono">' + esc(j.created) + '</span>.');
                     highlight(expand(j.created));
                 }
                 return refreshAll();
@@ -374,7 +370,8 @@ document.addEventListener('nreg:ready', function () {
             if (j.manual) {
                 manualCache[j.manual.id] = j.manual;
                 h += manualBlock(j.manual, j.status_labels);
-            } else if (can.canEdit) {
+            } else if (can.canEdit && j.status !== 'l' && j.status !== 's') {
+                // Numerów widocznych w LibreNMS nie da się dodać ręcznie (blokada w API).
                 h += '<p><button class="btn btn-success btn-xs" type="button" data-add="' + j.vlan + '"><i class="fa fa-plus"></i> Dodaj wpis ręczny</button></p>';
             }
             if (!j.occurrences.length) {

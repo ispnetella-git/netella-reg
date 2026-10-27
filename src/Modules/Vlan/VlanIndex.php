@@ -107,6 +107,16 @@ final class VlanIndex
         return $this->status($vlan) === self::LNMS;
     }
 
+    /**
+     * Czy LibreNMS widzi numer teraz: na aktywnym urządzeniu albo tylko na
+     * wyłączonych (gdy są liczone jako nieaktualne). Takiego numeru nie da
+     * się dodać ręcznie. Zniknięcie w karencji się nie liczy.
+     */
+    public function knownToLibreNms(int $vlan): bool
+    {
+        return in_array($this->status($vlan), [self::LNMS, self::STALE], true);
+    }
+
     /** 4094 znaki: "1" gdy numer ma wpis ręczny. */
     public function manualMask(): string
     {

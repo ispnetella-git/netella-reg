@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2 - 2026-10-27
+
+- Blokada: nie można dodać ręcznie numeru VLAN, który LibreNMS widzi teraz (na urządzeniu aktywnym albo
+  wyłączonym). Jeden zablokowany numer odrzuca całe dodawanie (HTTP 409). Komunikat podaje zablokowane
+  numery i resztę zakresu. Numer w karencji po zniknięciu z LibreNMS można dodać.
+- W szczegółach numeru widocznego w LibreNMS nie ma przycisku „Dodaj wpis ręczny”.
+
 ## 0.2.1 - 2026-10-27
 
 - API `vlan/manual_update`: edycja samych wybranych pól (np. statusu) bez przesyłania opisu. Wcześniej
