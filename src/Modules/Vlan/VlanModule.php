@@ -3,9 +3,10 @@
 /*
  * VlanModule.php - moduł VLAN: zajętość numerów 1-4094 w całej sieci.
  *
- * Wersja 0.1 jest tylko do odczytu: dane z LibreNMS przez migawkę
- * (Core\Snapshot), mapa numerów, sprawdzanie zakresu, szukanie wolnych
- * numerów i historia zmian. Wpisy ręczne i rezerwacje dojdą w 0.2.
+ * Dane z LibreNMS przez migawkę (Core\Snapshot) i wpisy ręczne (VlanManual):
+ * mapa numerów, sprawdzanie zakresu, szukanie wolnych numerów, dodawanie,
+ * edycja i usuwanie wpisów ręcznych, przejmowanie ich przez LibreNMS
+ * i historia zmian.
  *
  * Part of the Netella-Reg LibreNMS plugin. Licencja GPL-3.0-or-later.
  */
@@ -14,6 +15,7 @@ namespace Ispnetella\NetellaReg\Modules\Vlan;
 
 use Illuminate\Database\Connection;
 use Illuminate\Http\Request;
+use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\ApiException;
 use Ispnetella\NetellaReg\Core\AuditLog;
 use Ispnetella\NetellaReg\Core\Db;
@@ -42,13 +44,15 @@ final class VlanModule extends AbstractModule
 
     public function schemaVersion(): int
     {
-        return 1;
+        return 2;
     }
 
     public function migrate(Connection $db, int $from): void
     {
-        // 0.1 korzysta tylko z tabel rdzenia (reg_snapshot, reg_audit).
-        // Tabela wpisów ręcznych reg_vlan_manual dojdzie w wersji 2 schematu.
+        // Wersja 1 korzystała tylko z tabel rdzenia (reg_snapshot, reg_audit).
+        if ($from < 2) {
+            VlanManual::migrate($db);
+        }
     }
 
     public function sync(SyncContext $ctx): array
@@ -56,7 +60,23 @@ final class VlanModule extends AbstractModule
         $current = (new VlanCollector())->collect();
         $ctx->log(count($current) . ' wystąpień VLAN-ów w LibreNMS');
 
-        return $ctx->snapshot->apply(self::KEY, self::TYPE, $current, $ctx->now);
+        $summary = $ctx->snapshot->apply(self::KEY, self::TYPE, $current, $ctx->now);
+
+        // Wpisy ręczne, których numer właśnie pojawił się w LibreNMS.
+        $index = $this->index($ctx->now);
+        $summary['adopted'] = $this->manualRepo()->adopt(fn (int $v) => $index->inLibreNms($v), $ctx->now);
+
+        return $summary;
+    }
+
+    /** Usuwanie wpisów wymaga prawa "usuwanie", pozostałe zmiany "edycja". */
+    public function apiPermission(string $action, string $method): string
+    {
+        return match ($action) {
+            'manual_delete' => Access::DELETE,
+            'manual_create', 'manual_update' => Access::EDIT,
+            default => Access::VIEW,
+        };
     }
 
     public function tabView(): ?string
@@ -75,8 +95,80 @@ final class VlanModule extends AbstractModule
                 (int) $request->query('from', VlanName::MIN),
                 (int) $request->query('to', VlanName::MAX)
             ),
+            'manual_list' => $this->apiManualList(),
+            'manual_create' => $this->apiManualCreate($request),
+            'manual_update' => $this->apiManualUpdate($request),
+            'manual_delete' => $this->apiManualDelete($request),
             default => parent::api($action, $request),
         };
+    }
+
+    private function requirePost(Request $request): void
+    {
+        if (! $request->isMethod('POST')) {
+            throw new ApiException('Wymagany POST.', 405);
+        }
+    }
+
+    private static function comment(Request $request): ?string
+    {
+        $c = trim((string) $request->input('comment', ''));
+
+        return $c === '' ? null : mb_substr($c, 0, 1000);
+    }
+
+    private function apiManualList(): array
+    {
+        $index = $this->index();
+        $rows = array_values(array_map(fn (array $m) => $m + [
+            'current' => $index->status($m['vlan']),
+            'current_label' => VlanIndex::LABELS[$index->status($m['vlan'])],
+        ], $this->manualRepo()->active()));
+
+        return ['rows' => $rows, 'status_labels' => VlanManual::STATUS_LABELS];
+    }
+
+    private function apiManualCreate(Request $request): array
+    {
+        $this->requirePost($request);
+        $index = $this->index();
+        $res = $this->manualRepo()->create(
+            (string) $request->input('range', ''),
+            $request->only(['name', 'description', 'owner', 'status', 'devices']),
+            self::comment($request),
+            fn (int $v) => $index->inLibreNms($v)
+        );
+
+        return [
+            'created' => VlanRange::compress($res['created']),
+            'count' => count($res['created']),
+            'already_in_librenms' => VlanRange::compress($res['already_in_librenms']),
+        ];
+    }
+
+    private function apiManualUpdate(Request $request): array
+    {
+        $this->requirePost($request);
+        $row = $this->manualRepo()->update(
+            (int) $request->input('id', 0),
+            $request->only(['name', 'description', 'owner', 'status', 'devices']),
+            self::comment($request)
+        );
+
+        return ['entry' => $row];
+    }
+
+    private function apiManualDelete(Request $request): array
+    {
+        $this->requirePost($request);
+        $this->manualRepo()->delete((int) $request->input('id', 0), self::comment($request));
+
+        return ['deleted' => true];
+    }
+
+    private function manualRepo(): VlanManual
+    {
+        return new VlanManual(Db::connection());
     }
 
     public function deviceOverview(int $deviceId): ?array
@@ -105,13 +197,14 @@ final class VlanModule extends AbstractModule
         return new Snapshot(Db::connection());
     }
 
-    private function index(): VlanIndex
+    private function index(?\DateTimeImmutable $now = null): VlanIndex
     {
         return new VlanIndex(
             $this->snapshot()->rows(self::KEY, self::TYPE),
-            new \DateTimeImmutable(),
+            $now ?? new \DateTimeImmutable(),
             Settings::graceDays(),
-            Settings::disabledMode()
+            Settings::disabledMode(),
+            $this->manualRepo()->active()
         );
     }
 
@@ -121,6 +214,7 @@ final class VlanModule extends AbstractModule
 
         return [
             'statuses' => $index->statusString(),
+            'manual' => $index->manualMask(),
             'counts' => $index->counts(),
             'labels' => VlanIndex::LABELS,
             'sync' => SyncRunner::last(self::KEY),
@@ -157,6 +251,9 @@ final class VlanModule extends AbstractModule
             'status' => $index->status($vlan),
             'status_label' => VlanIndex::LABELS[$index->status($vlan)],
             'names' => $names,
+            // Wpis ręczny: przy numerze z LibreNMS to adnotacja, inaczej źródło statusu.
+            'manual' => $index->manual($vlan),
+            'status_labels' => VlanManual::STATUS_LABELS,
             'occurrences' => $occ,
             'history' => AuditLog::page(['module' => self::KEY, 'key_prefix' => "v{$vlan}:"], 1, 100)['rows'],
         ];
@@ -184,7 +281,13 @@ final class VlanModule extends AbstractModule
                         $devices[] = $o['data']['device'] ?? '?';
                     }
                 }
-                $items[] = ['vlan' => $v, 'status' => $s, 'devices' => array_values(array_unique($devices))];
+                $m = $index->manual($v);
+                $items[] = [
+                    'vlan' => $v,
+                    'status' => $s,
+                    'devices' => array_values(array_unique($devices)),
+                    'manual' => $m === null ? null : ['description' => $m['description'], 'owner' => $m['owner'], 'devices' => $m['devices']],
+                ];
             }
         }
 

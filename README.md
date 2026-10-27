@@ -5,10 +5,10 @@ Dane bierze z bazy LibreNMS. Każdą zmianę, zarówno wykrytą w LibreNMS, jak 
 przez użytkownika, zapisuje w dzienniku. Jest zbudowana z modułów, a nowe moduły dokłada się
 bez zmian w rdzeniu.
 
-Stan na 0.1.0:
+Stan na 0.2.0:
 - **rdzeń**: własna baza, schemat wersjonowany per moduł, uprawnienia per rola, dziennik zmian,
   migawki stanu LibreNMS, synchronizacja z crona, komendy `lnms`;
-- **moduł VLAN** (tylko odczyt): mapa numerów 1–4094 w całej sieci, sprawdzanie zakresu,
+- **moduł VLAN**: mapa numerów 1–4094 w całej sieci, sprawdzanie zakresu, wpisy ręczne i rezerwacje,
   szukanie wolnych numerów, szczegóły i historia numeru, panel na stronie urządzenia.
 
 Plan kolejnych wersji jest w `../PROPOZYCJA.md` (rozdział 11).
@@ -82,6 +82,11 @@ Strona `/plugin/Netella-Reg`:
   tagowane i nietagowane, interfejsy L3, subinterfejsy, daty widzenia i historię zmian. Pole
   „Zakres” sprawdza np. `1400-1450` (także `1400 to 1450` i listy po przecinku). „Znajdź N
   kolejnych wolnych” szuka pierwszego wolnego ciągu numerów;
+- **Dodaj VLAN** (prawo edycji): wpis ręczny dla numeru lub zakresu (do 500 numerów naraz).
+  Wymagany jest opis. Opcjonalnie: nazwa, właściciel, status (używany albo rezerwacja), urządzenia
+  i komentarz do dziennika. Wpis można dodać też z wyniku sprawdzania zakresu i ze szczegółów
+  numeru. Wszystkie wpisy są na liście „Wpisy ręczne” pod mapą. Edycja wymaga prawa edycji,
+  a usunięcie prawa usuwania;
 - zakładka **Dziennik zmian**: wszystkie zdarzenia z filtrami po module, źródle, zdarzeniu i tekście.
 
 Linki bezpośrednie: `/plugin/Netella-Reg?vlan=1400#vlan`, `/plugin/Netella-Reg?range=1400-1450#vlan`.
@@ -92,8 +97,17 @@ Linki bezpośrednie: `/plugin/Netella-Reg?vlan=1400#vlan`, `/plugin/Netella-Reg?
 |---|---|
 | LibreNMS | numer jest na co najmniej jednym aktywnym urządzeniu |
 | nieaktualny | numer jest tylko na urządzeniach wyłączonych w LibreNMS (ustawienie „Urządzenia wyłączone”) |
+| wpis ręczny | LibreNMS nie widzi numeru, ale jest wpis ręczny ze statusem „używany” |
+| rezerwacja | LibreNMS nie widzi numeru, ale jest wpis ręczny ze statusem „rezerwacja” |
 | zniknął | numer zniknął z LibreNMS i trwa karencja (domyślnie 30 dni) |
 | wolny | nic z powyższych |
+
+Kolejność w tabeli to priorytet: **dane LibreNMS mają pierwszeństwo** przed wpisem ręcznym.
+Jeśli numer z wpisem ręcznym jest też w LibreNMS, kratka ma kolor LibreNMS i fioletowy pasek
+u dołu, a wpis jest adnotacją. Gdy numer wpisany ręcznie pojawi się później w LibreNMS,
+synchronizacja oznacza wpis jako „przejęty przez LibreNMS”, z datą przejęcia. W szczegółach
+numeru widać wtedy, kto i kiedy dodał go wcześniej ręcznie. Jeśli numer potem zniknie z LibreNMS,
+wraca status wpisu ręcznego.
 
 Numer jest zajęty, jeśli występuje na **którymkolwiek** urządzeniu w sieci. Źródła w LibreNMS:
 tabela `vlans` (definicje), `ports_vlans` (porty) i nazwy interfejsów: `Vlanif1400`, `Vlan1400`,
@@ -134,6 +148,7 @@ tylko osoba z prawem administracji.
 | `reg_audit` | dziennik zmian, tylko dopisywany: kto, kiedy, co, stan przed i po (JSON) |
 | `reg_snapshot` | ostatni stan LibreNMS per moduł i rekord: hash, dane, `first_seen`, `last_seen`, `gone_at` |
 | `reg_state` | klucz-wartość: wyniki synchronizacji, ostatnio widziane ustawienia |
+| `reg_vlan_manual` | moduł VLAN: wpisy ręczne (jeden aktywny na numer, usuwanie miękkie, `adopted_at` = przejęcie przez LibreNMS) |
 
 ### Synchronizacja i dziennik
 

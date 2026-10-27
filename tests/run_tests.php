@@ -138,7 +138,7 @@ check('index 1 wolny', $idx->status(1), VlanIndex::FREE);
 check('index wystąpienia 100', count($idx->occurrences(100)), 2);
 check('index długość mapy', strlen($idx->statusString()), 4094);
 check('index znak 100', $idx->statusString()[99], 'l');
-check('index liczniki', $idx->counts(), ['f' => 4090, 'l' => 1, 's' => 2, 'g' => 1]);
+check('index liczniki', $idx->counts(), ['f' => 4090, 'l' => 1, 's' => 2, 'm' => 0, 'r' => 0, 'g' => 1]);
 
 $idx2 = new VlanIndex($rows, $now, 30, 'ignore');
 check('ignore: 200 wolny', $idx2->status(200), VlanIndex::FREE);
@@ -147,6 +147,31 @@ check('ignore: 100 aktywny', $idx2->status(100), VlanIndex::LNMS);
 
 $idx3 = new VlanIndex($rows, $now, 0, 'stale');
 check('karencja 0: 300 wolny', $idx3->status(300), VlanIndex::FREE);
+
+// --- VlanIndex: wpisy ręczne ---
+$manual = [
+    100 => ['status' => 'used'],      // LibreNMS ma pierwszeństwo
+    200 => ['status' => 'reserved'],  // nieaktualny (wyłączone) wygrywa z rezerwacją
+    300 => ['status' => 'reserved'],  // rezerwacja wygrywa ze zniknięciem
+    1400 => ['status' => 'used'],
+    1401 => ['status' => 'reserved'],
+    5000 => ['status' => 'used'],     // poza zakresem - pomijany
+];
+$im = new VlanIndex($rows, $now, 30, 'stale', $manual);
+check('manual: 100 nadal LibreNMS', $im->status(100), VlanIndex::LNMS);
+check('manual: 100 ma adnotację', $im->manual(100), ['status' => 'used']);
+check('manual: 200 stale > reserved', $im->status(200), VlanIndex::STALE);
+check('manual: 300 reserved > gone', $im->status(300), VlanIndex::RESERVED);
+check('manual: 1400 ręczny', $im->status(1400), VlanIndex::MANUAL);
+check('manual: 1401 rezerwacja', $im->status(1401), VlanIndex::RESERVED);
+check('manual: 1401 zajęty', $im->isFree(1401), false);
+check('manual: 1402 wolny', $im->isFree(1402), true);
+check('manual: inLibreNms 100', $im->inLibreNms(100), true);
+check('manual: inLibreNms 1400', $im->inLibreNms(1400), false);
+check('manual: maska', [strlen($im->manualMask()), substr_count($im->manualMask(), '1'), $im->manualMask()[1399]], [4094, 5, '1']);
+check('manual: wolny ciąg omija wpisy', VlanRange::findFreeRun(fn ($v) => $im->isFree($v), 3, 1400), [1402, 1403, 1404]);
+$im2 = new VlanIndex($rows, $now, 30, 'ignore', $manual);
+check('manual+ignore: 200 rezerwacja', $im2->status(200), VlanIndex::RESERVED);
 
 // --- SnapshotDiff ---
 check('hash niezależny od kolejności kluczy', SnapshotDiff::hash(['a' => 1, 'b' => [2, 3]]), SnapshotDiff::hash(['b' => [2, 3], 'a' => 1]));

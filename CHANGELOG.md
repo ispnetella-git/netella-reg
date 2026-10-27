@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0 - 2026-10-27
+
+- Moduł VLAN: dodawanie VLAN-ów ręcznie (przycisk „Dodaj VLAN”, także prosto z wyniku
+  sprawdzania zakresu i ze szczegółów numeru). Wymagane są numer lub zakres (do 500 numerów
+  naraz) oraz opis. Opcjonalnie: nazwa, właściciel, status (używany albo rezerwacja),
+  urządzenia i komentarz do dziennika.
+- Edycja (prawo „edycja”) i usuwanie (prawo „usuwanie”) wpisów. Usunięcie jest miękkie, a każda
+  zmiana trafia do dziennika ze stanem przed i po.
+- Nowe statusy na mapie: wpis ręczny i rezerwacja. Wpis przy numerze widocznym w LibreNMS jest
+  adnotacją (pasek u dołu kratki), a status pochodzi z LibreNMS.
+- Przejęcie przez LibreNMS: gdy numer wpisany ręcznie pojawi się na aktywnym urządzeniu,
+  synchronizacja ustawia `adopted_at` i zapisuje zdarzenie „przejęty przez LibreNMS”. Dane
+  LibreNMS mają wtedy pierwszeństwo, a wpis pokazuje, kto i kiedy dodał go wcześniej.
+- Lista „Wpisy ręczne” w zakładce VLAN-y. Szukanie wolnych numerów pomija wpisy ręczne.
+- Schemat modułu `vlan` w wersji 2: tabela `reg_vlan_manual`.
+
 ## 0.1.0 - 2026-10-27
 
 Pierwsza wersja.
