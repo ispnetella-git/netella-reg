@@ -6,8 +6,8 @@
 
 <style>
     .nreg-vgrid { overflow-x: auto; padding-bottom: 6px; user-select: none; }
-    .nreg-vrow { display: flex; align-items: center; height: 12px; margin-bottom: 1px; white-space: nowrap; }
-    .nreg-vrow > b { display: inline-block; width: 42px; font: 10px monospace; font-weight: normal; text-align: right; padding-right: 6px; opacity: .7; }
+    .nreg-vrow { display: flex; align-items: center; height: 13px; margin-bottom: 1px; white-space: nowrap; }
+    .nreg-vrow > b { display: inline-block; width: 46px; font: 12px/13px monospace; font-weight: normal; text-align: right; padding-right: 6px; opacity: .85; }
     .nreg-vrow i { display: inline-block; width: 10px; height: 11px; margin-right: 1px; cursor: pointer; border-radius: 1px; }
     .nreg-vrow i:nth-of-type(10n) { margin-right: 4px; }
     .nreg-vrow i.x { visibility: hidden; cursor: default; }
@@ -20,6 +20,9 @@
     .nreg-v-m { background: #8e44ad; }
     .nreg-v-r { background: #5bc0de; }
     .nreg-v-g { background: #f0ad4e; }
+    .nreg-vtip { position: fixed; z-index: 1000; pointer-events: none; display: none; padding: 2px 7px; border-radius: 3px;
+                 background: rgba(0, 0, 0, .85); color: #fff; font-size: 12px; white-space: nowrap; }
+    .nreg-vtip b { font-family: monospace; font-size: 13px; }
     .nreg-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; margin: 4px 0 8px; }
     .nreg-legend span i { display: inline-block; width: 12px; height: 12px; vertical-align: -2px; margin-right: 4px; border-radius: 2px; }
     .nreg-ports { font-size: 12px; }
@@ -106,6 +109,7 @@
 <div id="nreg-vlan-result"></div>
 <div class="nreg-legend" id="nreg-vlan-legend"></div>
 <div class="nreg-vgrid" id="nreg-vlan-grid"><p class="nreg-muted">Ładowanie mapy…</p></div>
+<div class="nreg-vtip" id="nreg-vlan-tip"></div>
 <details id="nreg-vlan-manual-list"><summary>Wpisy ręczne</summary><div></div></details>
 <div id="nreg-vlan-detail"></div>
 
@@ -132,7 +136,8 @@ document.addEventListener('nreg:ready', function () {
                 var s = statuses.charAt(v - 1) || 'f', mk = manualMask.charAt(v - 1) === '1';
                 // Pasek u dołu: wpis ręczny przy numerze, który ma też dane LibreNMS.
                 var cls = STATE_CSS[s] + (mk && s !== 'm' && s !== 'r' ? ' mk' : '');
-                h += '<i data-v="' + v + '" class="' + cls + '" title="VLAN ' + v + ': ' + esc(labels[s] || s)
+                        // Opis do podpowiedzi (data-t), bez title: natywny dymek pokazuje się z opóźnieniem.
+                h += '<i data-v="' + v + '" class="' + cls + '" data-t="' + esc(labels[s] || s)
                     + (mk && s !== 'm' && s !== 'r' ? ' + wpis ręczny' : '') + '"></i>';
             }
             h += '</div>';
@@ -413,6 +418,23 @@ document.addEventListener('nreg:ready', function () {
         }).catch(function (e) { detail.innerHTML = alertBox('danger', esc(e.message)); });
     }
 
+    // Podpowiedź z numerem VLAN pokazywana od razu po najechaniu na kratkę.
+    var tip = document.getElementById('nreg-vlan-tip');
+    document.body.appendChild(tip); // fixed względem okna, niezależnie od kontenerów strony
+    grid.addEventListener('mousemove', function (e) {
+        var i = e.target.closest('i[data-v]');
+        if (!i) { tip.style.display = 'none'; return; }
+        var v = i.getAttribute('data-v');
+        if (tip.getAttribute('data-v') !== v) {
+            tip.setAttribute('data-v', v);
+            tip.innerHTML = 'VLAN <b>' + v + '</b> · ' + esc(i.getAttribute('data-t') || '');
+        }
+        tip.style.display = 'block';
+        var x = e.clientX + 12, y = e.clientY + 14;
+        if (x + tip.offsetWidth > window.innerWidth - 4) { x = e.clientX - tip.offsetWidth - 8; }
+        tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    });
+    grid.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
     grid.addEventListener('click', function (e) {
         var i = e.target.closest('i[data-v]');
         if (i) { showDetail(parseInt(i.getAttribute('data-v'), 10)); }

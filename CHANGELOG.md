@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2 - 2026-10-27
+
+- Mapa VLAN-ów: większa czcionka numerów wierszy (12 px zamiast 10 px). Po najechaniu na kratkę
+  od razu pokazuje się dymek z numerem VLAN i statusem (zamiast natywnego dymka z opóźnieniem).
+
 ## 0.3.1 - 2026-10-27
 
 - Adresacja, poprawka: poziomy grupowania (/8, /16, /24) nie powstają już wewnątrz prawdziwej sieci.
