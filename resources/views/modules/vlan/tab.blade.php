@@ -2,7 +2,11 @@
      szukanie wolnych numerów, wpisy ręczne, szczegóły i historia numeru.
 
      Adres ?vlan=1400#vlan otwiera szczegóły numeru, ?range=1400-1450#vlan
-     sprawdza zakres - z takich linków korzysta panel na stronie urządzenia. --}}
+     sprawdza zakres - z takich linków korzysta panel na stronie urządzenia.
+
+     Zaznaczanie na mapie: przeciągnięcie = zakres, Ctrl (Cmd) + klik lub przeciągnięcie
+     dokłada albo zdejmuje numery, Shift + klik = zakres od ostatniego numeru. Zaznaczenie
+     trafia do pola „Zakres” i od razu jest sprawdzane. --}}
 
 <style>
     .nreg-vgrid { overflow-x: auto; padding-bottom: 6px; user-select: none; }
@@ -21,7 +25,7 @@
     .nreg-v-f { background: #dff0d8; }
     .nreg-v-l { background: #337ab7; }
     .nreg-v-s { background: #999; }
-    .nreg-v-m { background: #8e44ad; }
+    .nreg-v-m { background: #b57edc; }
     .nreg-v-r { background: #5bc0de; }
     .nreg-v-g { background: #f0ad4e; }
     .nreg-vtip { position: fixed; z-index: 1000; pointer-events: none; display: none; padding: 2px 7px; border-radius: 3px;
@@ -116,6 +120,7 @@
 
 <div id="nreg-vlan-result"></div>
 <div class="nreg-legend" id="nreg-vlan-legend"></div>
+<div class="nreg-sub" style="margin:-4px 0 6px">Kliknięcie: szczegóły numeru. Przeciągnięcie: zaznacza zakres. Ctrl + klik lub przeciągnięcie: dokłada albo zdejmuje numery. Shift + klik: zakres od ostatniego numeru. Esc: czyści zaznaczenie.</div>
 <div class="nreg-vgrid" id="nreg-vlan-grid"><p class="nreg-muted">Ładowanie mapy…</p></div>
 <div class="nreg-vtip" id="nreg-vlan-tip"></div>
 <details id="nreg-vlan-manual-list"><summary>Wpisy ręczne</summary><div></div></details>
@@ -129,6 +134,7 @@ document.addEventListener('nreg:ready', function () {
     var detail = document.getElementById('nreg-vlan-detail'), legend = document.getElementById('nreg-vlan-legend');
     var form = document.getElementById('nreg-vlan-form'), manualList = document.getElementById('nreg-vlan-manual-list');
     var statuses = '', manualMask = '', expiredMask = '', labels = {}, selected = null;
+    var pick = {}; // numery zaznaczone na mapie (podświetlone), klucz = numer
     var STATE_CSS = { f: 'nreg-v-f', l: 'nreg-v-l', s: 'nreg-v-s', m: 'nreg-v-m', r: 'nreg-v-r', g: 'nreg-v-g' };
 
     function cell(v) { return grid.querySelector('i[data-v="' + v + '"]'); }
@@ -153,6 +159,7 @@ document.addEventListener('nreg:ready', function () {
         }
         grid.innerHTML = h;
         if (selected) { var o = cell(selected); if (o) { o.classList.add('sel'); } }
+        Object.keys(pick).forEach(function (v) { var p = cell(v); if (p) { p.classList.add('hl'); } });
     }
 
     function renderLegend(counts) {
@@ -175,9 +182,24 @@ document.addEventListener('nreg:ready', function () {
         }).catch(function (e) { grid.innerHTML = alertBox('danger', esc(e.message)); });
     }
 
+    // Podświetlenie = zaznaczenie: Ctrl + klik dokłada do tego, co jest podświetlone
+    // (także po „Sprawdź” albo „Szukaj”).
     function highlight(numbers) {
+        pick = {};
         grid.querySelectorAll('i.hl').forEach(function (i) { i.classList.remove('hl'); });
-        (numbers || []).forEach(function (v) { var c = cell(v); if (c) { c.classList.add('hl'); } });
+        (numbers || []).forEach(function (v) { pick[v] = 1; var c = cell(v); if (c) { c.classList.add('hl'); } });
+    }
+
+    // [1400,1401,1402,1500] -> "1400-1402,1500" (jak VlanRange::compress).
+    function compress(numbers) {
+        var out = [], start = null, prev = null;
+        numbers.slice().sort(function (a, b) { return a - b; }).forEach(function (n) {
+            if (start === null) { start = prev = n; return; }
+            if (n === prev + 1) { prev = n; return; }
+            out.push(start === prev ? String(start) : start + '-' + prev); start = prev = n;
+        });
+        if (start !== null) { out.push(start === prev ? String(start) : start + '-' + prev); }
+        return out.join(',');
     }
 
     function expand(list) {
@@ -436,6 +458,7 @@ document.addEventListener('nreg:ready', function () {
         var i = e.target.closest('i[data-v]');
         if (!i) { tip.style.display = 'none'; return; }
         var v = i.getAttribute('data-v');
+        if (drag && +v !== drag.last) { drag.moved = true; paint(+v); }
         if (tip.getAttribute('data-v') !== v) {
             tip.setAttribute('data-v', v);
             tip.innerHTML = 'VLAN <b>' + v + '</b> · ' + esc(i.getAttribute('data-t') || '');
@@ -446,9 +469,50 @@ document.addEventListener('nreg:ready', function () {
         tip.style.left = x + 'px'; tip.style.top = y + 'px';
     });
     grid.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
-    grid.addEventListener('click', function (e) {
+    // --- zaznaczanie myszą ---
+    var drag = null, anchor = null;
+
+    function paint(v) {
+        var lo = Math.min(drag.start, v), hi = Math.max(drag.start, v), set = Object.assign({}, drag.base);
+        for (var x = lo; x <= hi; x++) { if (drag.remove) { delete set[x]; } else { set[x] = 1; } }
+        drag.last = v;
+        highlight(Object.keys(set).map(Number));
+    }
+
+    grid.addEventListener('mousedown', function (e) {
         var i = e.target.closest('i[data-v]');
-        if (i) { showDetail(parseInt(i.getAttribute('data-v'), 10)); }
+        if (!i || e.button !== 0) { return; }
+        e.preventDefault();
+        var v = parseInt(i.getAttribute('data-v'), 10), add = e.ctrlKey || e.metaKey, shift = e.shiftKey && anchor !== null;
+        drag = {
+            start: shift ? anchor : v, last: v, moved: shift, mods: add || shift,
+            // Ctrl na zaznaczonym numerze zdejmuje, na niezaznaczonym dokłada.
+            remove: add && !!pick[v], base: add ? Object.assign({}, pick) : {}
+        };
+        if (drag.mods) { paint(v); }
+    });
+
+    document.addEventListener('mouseup', function () {
+        if (!drag) { return; }
+        var d = drag;
+        drag = null;
+        if (!d.moved && !d.mods) {
+            // Zwykłe kliknięcie: szczegóły numeru, zaznaczenie zostaje.
+            anchor = d.last;
+            showDetail(d.last);
+            return;
+        }
+        anchor = d.last;
+        var list = Object.keys(pick).map(Number);
+        var input = document.getElementById('nreg-vlan-range');
+        if (!list.length) { input.value = ''; result.innerHTML = ''; return; }
+        input.value = compress(list);
+        check(input.value);
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape' || !Object.keys(pick).length || !grid.offsetParent) { return; }
+        highlight([]); anchor = null; result.innerHTML = '';
     });
     document.getElementById('nreg-vlan-check').addEventListener('submit', function (e) {
         e.preventDefault(); check(document.getElementById('nreg-vlan-range').value);

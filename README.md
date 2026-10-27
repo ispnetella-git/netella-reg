@@ -124,7 +124,9 @@ Przejście na GitHuba: podmień wpis `repositories.netella-reg` na
 Strona `/plugin/Netella-Reg`:
 - zakładka **VLAN-y**: mapa 1–4094 (kolor = status). Kliknięcie numeru pokazuje urządzenia, porty
   tagowane i nietagowane, interfejsy L3, subinterfejsy, daty widzenia i historię zmian. Pole
-  „Zakres” sprawdza np. `1400-1450` (także `1400 to 1450` i listy po przecinku). „Znajdź N
+  „Zakres” sprawdza np. `1400-1450` (także `1400 to 1450` i listy po przecinku). Zakres można też
+  zaznaczyć na mapie: przeciągnięcie myszą, Ctrl + klik (dokłada albo zdejmuje numer), Shift + klik
+  (od ostatniego numeru), Esc czyści; zaznaczenie od razu jest sprawdzane. „Znajdź N
   kolejnych wolnych” szuka pierwszego wolnego ciągu numerów;
 - **Dodaj VLAN** (prawo edycji): wpis ręczny dla numeru lub zakresu (do 500 numerów naraz).
   Wymagany jest opis. Opcjonalnie: nazwa, właściciel, status (używany albo rezerwacja), urządzenia
@@ -158,7 +160,7 @@ Linki bezpośrednie: `/plugin/Netella-Reg?vlan=1400#vlan`, `/plugin/Netella-Reg?
 Kolejność w tabeli to priorytet: **dane LibreNMS mają pierwszeństwo** przed wpisem ręcznym.
 Wpis ręczny może powstać tylko dla numeru, którego LibreNMS nie widzi. Gdy taki numer pojawi się
 później w LibreNMS, synchronizacja oznacza wpis jako „przejęty przez LibreNMS”, z datą przejęcia.
-Kratka ma wtedy kolor LibreNMS i fioletowy pasek u dołu, a w szczegółach numeru widać, kto i kiedy
+Kratka ma wtedy kolor LibreNMS z fioletową dolną połową, a w szczegółach numeru widać, kto i kiedy
 dodał go wcześniej ręcznie. Jeśli numer potem zniknie z LibreNMS, wraca status wpisu ręcznego.
 
 Numer jest zajęty, jeśli występuje na **którymkolwiek** urządzeniu w sieci. Źródła w LibreNMS:

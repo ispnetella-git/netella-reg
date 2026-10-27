@@ -20,7 +20,7 @@
     .nreg-bar i.w { background: #f0ad4e; }
     .nreg-bar i.c { background: #d9534f; }
     .nreg-bdg { font-size: 10px; padding: 1px 5px; border-radius: 3px; color: #fff; }
-    .nreg-bdg.l { background: #337ab7; } .nreg-bdg.s { background: #999; } .nreg-bdg.m { background: #8e44ad; }
+    .nreg-bdg.l { background: #337ab7; } .nreg-bdg.s { background: #999; } .nreg-bdg.m { background: #b57edc; }
     .nreg-bdg.r { background: #5bc0de; } .nreg-bdg.g { background: #f0ad4e; } .nreg-bdg.v { background: transparent; color: inherit; border: 1px solid rgba(128,128,128,.5); }
     .nreg-bdg.d { background: #d9534f; }
     .nreg-ta { display: flex; gap: 8px; font-size: 12px; padding: 1px 4px; white-space: nowrap; cursor: pointer; }
@@ -34,7 +34,7 @@
     .nreg-tf .plus { font-style: normal; opacity: 0; }
     .nreg-tf.add:hover .plus { opacity: 1; }
     /* Zakres (pula a-b): wiersz drzewa z lewą kreską. */
-    .nreg-tn.rng { border-left: 3px solid #8e44ad; }
+    .nreg-tn.rng { border-left: 3px solid #b57edc; }
     .nreg-tn.rng .cidr { min-width: 235px; }
     .nreg-ta .who { overflow: hidden; text-overflow: ellipsis; opacity: .85; }
     .nreg-chips a { display: inline-block; font-family: monospace; font-size: 12px; margin: 0 4px 4px 0; padding: 1px 6px; border: 1px solid rgba(128,128,128,.45); border-radius: 3px; }

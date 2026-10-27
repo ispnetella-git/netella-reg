@@ -36,7 +36,7 @@
     .nreg-form .row { margin-bottom: 6px; }
     .nreg-form label { font-weight: 600; margin-bottom: 2px; font-size: 12px; }
     .nreg-form .req::after { content: ' *'; color: #d9534f; }
-    .nreg-manual { border-left: 4px solid #8e44ad; padding: 6px 10px; margin: 8px 0; }
+    .nreg-manual { border-left: 4px solid #b57edc; padding: 6px 10px; margin: 8px 0; }
     .nreg-manual dl { margin: 0; }
     .nreg-manual dt { float: left; width: 130px; font-weight: normal; opacity: .75; }
     .nreg-manual dd { margin-left: 140px; }

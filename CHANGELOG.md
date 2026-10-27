@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.3 - 2026-10-28
+
+- Jeden odcień fioletu (`#b57edc`) dla wpisów ręcznych wszędzie: mapa VLAN, plakietki i zakresy
+  w drzewie adresacji, ramka wpisu ręcznego.
+- Mapa VLAN: zaznaczanie zakresu myszą (przeciągnięcie), Ctrl + klik dokłada lub zdejmuje numery,
+  Shift + klik zaznacza od ostatniego numeru, Esc czyści. Zaznaczenie trafia do pola „Zakres” i jest
+  od razu sprawdzane (z przyciskiem dodania wolnych numerów jako wpis ręczny).
+
 ## 0.5.2 - 2026-10-28
 
 - Mapa VLAN: znacznik „LibreNMS + wpis ręczny” to dolna połowa kwadratu w jaśniejszym fiolecie
