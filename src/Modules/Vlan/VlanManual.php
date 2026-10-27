@@ -214,7 +214,9 @@ final class VlanManual
             throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
         }
 
-        $fields = self::validate($input);
+        // Przy edycji opis jest wymagany tylko wtedy, gdy przyszedł w żądaniu
+        // (nie można go wyczyścić, ale można zmienić same inne pola).
+        $fields = self::validate($input, false);
         if (array_key_exists('description', $fields) && $fields['description'] === null) {
             throw new ApiException('Opis jest wymagany.');
         }

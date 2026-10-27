@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 - 2026-10-27
+
+- API `vlan/manual_update`: edycja samych wybranych pól (np. statusu) bez przesyłania opisu. Wcześniej
+  kończyła się błędem „Opis jest wymagany”. Formularz w UI nie był dotknięty, bo wysyła wszystkie pola.
+
 ## 0.2.0 - 2026-10-27
 
 - Moduł VLAN: dodawanie VLAN-ów ręcznie (przycisk „Dodaj VLAN”, także prosto z wyniku
