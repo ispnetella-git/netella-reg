@@ -47,8 +47,33 @@ echo '*/5 * * * * librenms /usr/bin/env php /opt/librenms/lnms netella-reg:sync 
   | sudo tee /etc/cron.d/netella-reg
 ```
 
-Potem włącz wtyczkę w **Overview → Plugins → Plugin Admin**. Stan sprawdza
-`lnms netella-reg:doctor`.
+`lnms plugin:add` zwykle od razu włącza wtyczkę. Jeśli nie, włącz ją w
+**Overview → Plugins → Plugin Admin** albo przez `lnms plugin:enable Netella-Reg`.
+Stan sprawdza `lnms netella-reg:doctor`.
+
+**Cache tras.** LibreNMS trzyma cache tras w `bootstrap/cache/routes-v7.php`. Jeśli
+powstał przed instalacją wtyczki, API (`/plugin/Netella-Reg/api/...`) odpowiada 404, a strona
+pokazuje pustą mapę. Pomaga przebudowanie cache:
+
+```bash
+sudo -u librenms php artisan route:cache
+```
+
+### Instalacja bez GitHuba (repozytorium ścieżkowe)
+
+Na czas, gdy repo nie ma jeszcze zdalnej kopii, pakiet instaluje się z katalogu na serwerze.
+`vendor/ispnetella/librenms-netella-reg` jest wtedy symlinkiem, więc zmiany w katalogu działają od razu:
+
+```bash
+sudo -u librenms git clone -b main <bundle albo repo> /opt/netella-plugins/librenms-netella-reg
+cd /opt/librenms
+sudo -u librenms php scripts/composer_wrapper.php config -g repositories.netella-reg \
+  '{"type":"path","url":"/opt/netella-plugins/librenms-netella-reg","options":{"symlink":true}}'
+sudo -u librenms php lnms plugin:add ispnetella/librenms-netella-reg dev-main
+```
+
+Przejście na GitHuba: podmień wpis `repositories.netella-reg` na
+`vcs https://github.com/ispnetella-git/Netella-Reg` i uruchom ponownie `lnms plugin:add`.
 
 ## Użycie
 
