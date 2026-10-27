@@ -13,7 +13,9 @@
     .nreg-vrow i.x { visibility: hidden; cursor: default; }
     .nreg-vrow i.hl { outline: 2px solid #d9534f; outline-offset: -1px; }
     .nreg-vrow i.sel { outline: 2px solid #000; outline-offset: 0; }
-    .nreg-vrow i.mk { box-shadow: inset 0 -3px 0 #8e44ad; }
+    /* LibreNMS + wpis ręczny: dolna połowa kwadratu w jaśniejszym fiolecie. */
+    .nreg-vrow i.mk { box-shadow: inset 0 -6px 0 #b57edc; }
+    .nreg-legend i.mk { box-shadow: inset 0 -6px 0 #b57edc; }
     /* Wpis ręczny po terminie ważności: paski na kolorze statusu. */
     .nreg-vrow i.ex, .nreg-legend i.ex { background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.75) 0 2px, transparent 2px 4px); }
     .nreg-v-f { background: #dff0d8; }
@@ -156,7 +158,7 @@ document.addEventListener('nreg:ready', function () {
     function renderLegend(counts) {
         legend.innerHTML = Object.keys(labels).map(function (s) {
             return '<span><i class="' + STATE_CSS[s] + '"></i>' + esc(labels[s]) + ': <strong>' + (counts[s] || 0) + '</strong></span>';
-        }).join('') + '<span><i class="nreg-v-l" style="box-shadow: inset 0 -3px 0 #8e44ad"></i>LibreNMS + wpis ręczny</span>'
+        }).join('') + '<span><i class="nreg-v-l mk"></i>LibreNMS + wpis ręczny</span>'
             + '<span><i class="nreg-v-r ex"></i>termin minął: <strong>' + (expiredMask.match(/1/g) || []).length + '</strong></span>';
     }
 

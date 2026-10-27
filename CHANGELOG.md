@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2 - 2026-10-28
+
+- Mapa VLAN: znacznik „LibreNMS + wpis ręczny” to dolna połowa kwadratu w jaśniejszym fiolecie
+  (wcześniej cienka kreska 3 px, słabo widoczna). Legenda używa tej samej klasy.
+
 ## 0.5.1 - 2026-10-27
 
 - Drzewo adresacji zaczyna się od najszerszych prawdziwych prefiksów (sieć z LibreNMS, agregat),
