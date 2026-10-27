@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 - 2026-10-27
+
+- **Zakresy adresów (pule)** jako jeden wpis ręczny adresacji: `a-b` z rolą pula DHCP, pula PPPoE,
+  NAT, adresy statyczne albo rezerwacja, bez limitu 1024 adresów. Zakres musi leżeć w jednej sieci
+  albo prefiksie i nie może nachodzić na inny zakres. W drzewie jest wierszem między adresami
+  i wolnym miejscem, liczy się jako zajęty i rozwija się do swoich adresów. Szczegóły zakresu,
+  wyszukiwanie (adres pokazuje zakres, tekst znajduje zakresy), „Wolne /N” omija zakresy.
+- Zamiana ciągłej grupy adresów na zakres („Na zakres”), jeden wpis w dzienniku.
+- Uwagi: rezerwacje-zakresy z adresami z LibreNMS i zakresy przecięte przez sieć.
+- Prefiks ręczny nie może przeciąć zakresu (objąć w całości może).
+- Schemat `ipam` 3 (bez zmian kolumn; kopia z zakresami nie da się przywrócić w starszym kodzie).
+
 ## 0.4.0 - 2026-10-27
 
 - **Termin ważności** wpisów ręcznych (pole „Ważne do” w formularzach VLAN i adresacji). Wpis po

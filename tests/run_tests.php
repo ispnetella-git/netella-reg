@@ -23,12 +23,14 @@ require $src . '/Modules/Vlan/VlanManual.php';
 require $src . '/Modules/Ipam/IpCalc.php';
 require $src . '/Modules/Ipam/IpInput.php';
 require $src . '/Modules/Ipam/IpTree.php';
+require $src . '/Modules/Ipam/IpamIndex.php';
 
 use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\ApiException;
 use Ispnetella\NetellaReg\Core\Backup;
 use Ispnetella\NetellaReg\Core\Expiry;
 use Ispnetella\NetellaReg\Modules\Ipam\IpCalc;
+use Ispnetella\NetellaReg\Modules\Ipam\IpamIndex;
 use Ispnetella\NetellaReg\Modules\Ipam\IpInput;
 use Ispnetella\NetellaReg\Modules\Ipam\IpTree;
 use Ispnetella\NetellaReg\Core\SnapshotDiff;
@@ -315,6 +317,45 @@ check('gaps sieci /30 bez adresu sieci i rozgłoszeniowego', array_map(fn ($g) =
     [['10.0.5.1', '10.0.5.2']]);
 check('gaps wolne prefiksy agregatu', array_map(fn ($b) => IpCalc::cidr($b['start'], $b['len']), IpCalc::rangeToCidrs($ip('10.0.6.0'), $ip('10.0.255.255'))),
     ['10.0.6.0/23', '10.0.8.0/21', '10.0.16.0/20', '10.0.32.0/19', '10.0.64.0/18', '10.0.128.0/17']);
+
+// --- Zakresy (pule a-b) ---
+check('range parse pełny', IpInput::parseRange('10.0.0.10-10.0.0.200'), [$ip('10.0.0.10'), $ip('10.0.0.200')]);
+check('range parse skrót i spacje', IpInput::parseRange(' 10.0.0.200 – 10 '), [$ip('10.0.0.10'), $ip('10.0.0.200')]);
+check('range parse duży (bez limitu 1024)', IpInput::parseRange('100.64.0.0-100.64.63.255'), [$ip('100.64.0.0'), $ip('100.64.63.255')]);
+throws('range parse jeden adres', fn () => IpInput::parseRange('10.0.0.5-5'));
+throws('range parse lista', fn () => IpInput::parseRange('10.0.0.1, 10.0.0.5'));
+throws('range parse prefiks', fn () => IpInput::parseRange('10.0.0.0/24'));
+check('range etykieta', IpInput::rangeLabel($ip('10.0.0.10'), $ip('10.0.0.20')), '10.0.0.10-10.0.0.20');
+
+// Sieć /24 z pulą .100-.199; adres .150 w puli, .20 poza nią.
+$tR = new IpTree([$pfx('10.1.1.0/24')], [['ip' => $ip('10.1.1.1')], ['ip' => $ip('10.1.1.150')]], [8, 16, 24],
+    [['id' => 7, 'start' => $ip('10.1.1.100'), 'end' => $ip('10.1.1.199')]]);
+check('tree zakres w sieci', $tR->range(7)['node'], '10.1.1.0/24');
+check('tree zakres w węźle', $tR->node('10.1.1.0/24')['ranges'], [7]);
+check('tree zakres zajmuje całość (1 + 100 adresów)', $tR->node('10.1.1.0/24')['stats']['used'], 101);
+check('tree gaps omija zakres', array_map(fn ($g) => [IpCalc::int2ip($g[0]), IpCalc::int2ip($g[1])], $tR->gaps('10.1.1.0/24')),
+    [['10.1.1.2', '10.1.1.99'], ['10.1.1.200', '10.1.1.254']]);
+// Zakres w agregacie bez sieci: kotwica poziomu /24, gdy się w nim mieści.
+$tRA = new IpTree([$pfx('10.2.0.0/16', 'manual', false)], [], [8, 16, 24],
+    [['id' => 1, 'start' => $ip('10.2.5.10'), 'end' => $ip('10.2.5.20')], ['id' => 2, 'start' => $ip('10.2.6.200'), 'end' => $ip('10.2.7.10')]]);
+check('tree zakres tworzy wirtualny /24', $tRA->range(1)['node'], '10.2.5.0/24');
+check('tree zakres przez granicę /24 należy do agregatu', $tRA->range(2)['node'], '10.2.0.0/16');
+check('tree agregat liczy oba zakresy', $tRA->node('10.2.0.0/16')['stats']['used'], 11 + 67);
+check('tree zakres bez prefiksu', (new IpTree([], [], [8, 16, 24], [['id' => 3, 'start' => $ip('192.0.2.1'), 'end' => $ip('192.0.2.9')]]))->range(3)['node'], '192.0.2.0/24');
+
+// IpamIndex::rangeContainer na wpisach ręcznych (bez migawki).
+$mp = function (int $id, string $cidr, string $role) {
+    $c = IpCalc::parseV4($cidr);
+
+    return ['id' => $id, 'family' => 4, 'kind' => 'prefix', 'cidr' => $cidr, 'start' => $c['start'], 'end' => $c['end'], 'len' => $c['len'], 'role' => $role];
+};
+$idxR = new IpamIndex([], [$mp(1, '10.3.0.0/16', 'aggregate'), $mp(2, '10.3.1.0/24', 'used')], 1, [], new DateTimeImmutable('2026-10-27'), 30, 'stale');
+check('kontener: zakres w sieci', $idxR->rangeContainer($ip('10.3.1.10'), $ip('10.3.1.20')), ['10.3.1.0/24', null]);
+check('kontener: zakres w agregacie obok sieci', $idxR->rangeContainer($ip('10.3.2.10'), $ip('10.3.2.20')), ['10.3.0.0/16', null]);
+check('kontener: przecina sieć', $idxR->rangeContainer($ip('10.3.0.250'), $ip('10.3.1.5'))[0], null);
+check('kontener: adres sieci', $idxR->rangeContainer($ip('10.3.1.0'), $ip('10.3.1.5'))[0], null);
+check('kontener: rozgłoszeniowy', $idxR->rangeContainer($ip('10.3.1.250'), $ip('10.3.1.255'))[0], null);
+check('kontener: poza prefiksami', $idxR->rangeContainer($ip('10.9.0.1'), $ip('10.9.0.5'))[0], null);
 
 // --- Expiry: termin ważności wpisów ręcznych ---
 $today = '2026-10-27';

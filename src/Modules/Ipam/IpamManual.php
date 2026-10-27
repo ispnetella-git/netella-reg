@@ -11,6 +11,11 @@
  *              pool       pula - np. PPPoE, CGNAT; hosty liczone jak w sieci
  *              reserved   rezerwacja - blok trzymany wolny
  *              used       sieć używana, której LibreNMS nie widzi
+ *   range    zakres a-b jako jeden wpis (schemat 3), z rolą: pula DHCP, pula
+ *            PPPoE, NAT, adresy statyczne, rezerwacja. Granice nie muszą pasować
+ *            do maski, ale zakres musi leżeć w jednej sieci albo prefiksie
+ *            (IpamIndex::rangeContainer) i nie może nachodzić na inny zakres.
+ *            W cidr zapisujemy "a-b", len = 32 (nieużywane).
  *
  * Blokady (LibreNMS jest źródłem prawdy):
  *   - adresu, który LibreNMS widzi (urządzenie aktywne albo wyłączone), nie da
@@ -18,6 +23,9 @@
  *   - sieci "używanej" identycznej z siecią interfejsu w LibreNMS - też nie;
  *   - rezerwacji prefiksu, w którym LibreNMS ma adresy - też nie.
  *   Agregaty i pule mogą obejmować sieci z LibreNMS - po to są.
+ *   - zakresu "rezerwacja" z adresami z LibreNMS - też nie; zakresy innych
+ *     ról mogą je zawierać (np. brama w puli).
+ *   Zakresy nie są przejmowane przez LibreNMS.
  *
  * Przejęcie: adres albo sieć "używana" wpisane ręcznie, które pojawią się
  * w LibreNMS, dostają adopted_at i zdarzenie "adopted" (jedno na grupę).
@@ -56,6 +64,14 @@ final class IpamManual
 
     public const ADDRESS_ROLES = [
         'used' => 'używany',
+        'reserved' => 'rezerwacja',
+    ];
+
+    public const RANGE_ROLES = [
+        'dhcp' => 'pula DHCP',
+        'pppoe' => 'pula PPPoE',
+        'nat' => 'NAT',
+        'static' => 'adresy statyczne',
         'reserved' => 'rezerwacja',
     ];
 
@@ -115,9 +131,43 @@ final class IpamManual
         });
     }
 
+    /** Schemat 3: rodzaj "range". Kolumny bez zmian - numer chroni przed przywróceniem kopii w starszym kodzie. */
+    public static function migrateRanges(Connection $db): void
+    {
+    }
+
+    public static function rolesFor(string $kind): array
+    {
+        return match ($kind) {
+            'prefix' => self::PREFIX_ROLES,
+            'range' => self::RANGE_ROLES,
+            default => self::ADDRESS_ROLES,
+        };
+    }
+
     public static function key(array $r): string
     {
-        return $r['kind'] === 'prefix' ? "n:{$r['cidr']}:m{$r['id']}" : 'a:' . IpCalc::int2ip((int) $r['start']) . ":m{$r['id']}";
+        return match ($r['kind']) {
+            'prefix' => "n:{$r['cidr']}:m{$r['id']}",
+            'range' => "r:{$r['cidr']}:m{$r['id']}",
+            default => 'a:' . IpCalc::int2ip((int) $r['start']) . ":m{$r['id']}",
+        };
+    }
+
+    /**
+     * Pole w dzienniku, etykieta i zakres liczbowy grupy wierszy jednego wpisu.
+     *
+     * @return array{0:string,1:string,2:array{0:int,1:int}}
+     */
+    private static function describe(array $rows): array
+    {
+        $first = $rows[0];
+        if ($first['kind'] !== 'address') {
+            return [$first['kind'] === 'prefix' ? 'prefix' : 'range', $first['cidr'], [(int) $first['start'], (int) $first['end']]];
+        }
+        $ips = array_map(fn ($r) => (int) $r['start'], $rows);
+
+        return ['ips', IpInput::compress($ips), [min($ips), max($ips)]];
     }
 
     public static function batchKey(int $batch): string
@@ -135,7 +185,12 @@ final class IpamManual
         $r['end'] = $r['end'] === null ? null : (int) $r['end'];
         $r['vlan'] = $r['vlan'] === null ? null : (int) $r['vlan'];
         $r['ip'] = $r['kind'] === 'address' && $r['start'] !== null ? IpCalc::int2ip($r['start']) : null;
-        $r['role_label'] = ($r['kind'] === 'prefix' ? self::PREFIX_ROLES : self::ADDRESS_ROLES)[$r['role']] ?? $r['role'];
+        $r['role_label'] = self::rolesFor($r['kind'])[$r['role']] ?? $r['role'];
+        if ($r['kind'] === 'range') {
+            $r['first'] = IpCalc::int2ip($r['start']);
+            $r['last'] = IpCalc::int2ip($r['end']);
+            $r['size'] = $r['end'] - $r['start'] + 1;
+        }
 
         return Expiry::present($r, Expiry::today());
     }
@@ -179,7 +234,7 @@ final class IpamManual
 
         return array_values(array_map(function (array $g) {
             $g['count'] = max(1, count($g['ips_list']));
-            $g['label'] = $g['kind'] === 'prefix' ? $g['cidr'] : IpInput::compress($g['ips_list']);
+            $g['label'] = $g['kind'] === 'address' ? IpInput::compress($g['ips_list']) : $g['cidr'];
             unset($g['ips_list']);
 
             return $g;
@@ -235,8 +290,34 @@ final class IpamManual
     /** Stan grupy do dziennika. */
     private static function groupView(array $fields, string $label, int $count, string $kind): array
     {
-        return [($kind === 'prefix' ? 'prefix' : 'ips') => $label, 'count' => $count]
+        return [match ($kind) { 'prefix' => 'prefix', 'range' => 'range', default => 'ips' } => $label, 'count' => $count]
             + array_intersect_key($fields, array_flip(self::DATA_FIELDS));
+    }
+
+    /**
+     * Sprawdza zakres a-b: sieć albo prefiks, inne zakresy, rezerwacja.
+     * Zwraca prefiks, w którym leży.
+     */
+    private function checkRange(int $space, int $a, int $b, string $role, IpamIndex $index, ?int $exceptId = null): string
+    {
+        [$container, $problem] = $index->rangeContainer($a, $b);
+        if ($problem !== null) {
+            throw new ApiException($problem, 409);
+        }
+        $q = $this->db->table(self::TABLE)->where('space_id', $space)->whereNull('deleted_at')->where('kind', 'range')
+            ->where('start', '<=', $b)->where('end', '>=', $a);
+        if ($exceptId !== null) {
+            $q->where('id', '!=', $exceptId);
+        }
+        if (($other = $q->first()) !== null) {
+            throw new ApiException("Zakres nachodzi na zakres {$other->cidr}" . ($other->name ? " ({$other->name})" : '') . '.', 409);
+        }
+        if ($role === 'reserved' && ($inside = $index->knownInside($a, $b)) !== []) {
+            throw new ApiException('Nie można zarezerwować ' . IpInput::rangeLabel($a, $b) . ', bo LibreNMS ma w nim adresy: '
+                . IpInput::compress(array_slice($inside, 0, 50)) . (count($inside) > 50 ? ' …' : '') . '.', 409);
+        }
+
+        return $container;
     }
 
     /**
@@ -244,19 +325,19 @@ final class IpamManual
      *
      * @return array{label:string,count:int,kind:string,batch_id:int}
      */
-    public function create(int $space, string $text, array $input, ?string $comment, IpamIndex $index): array
+    public function create(int $space, string $text, array $input, ?string $comment, IpamIndex $index, bool $asRange = false): array
     {
         try {
-            $parsed = IpInput::parse($text);
+            $parsed = $asRange ? ['kind' => 'range', 'range' => IpInput::parseRange($text)] : IpInput::parse($text);
         } catch (\InvalidArgumentException $e) {
             throw new ApiException($e->getMessage());
         }
 
         $fields = self::validate($input);
         self::checkFuture($fields[Expiry::FIELD] ?? null);
-        $kind = $parsed['kind'] === 'prefix' ? 'prefix' : 'address';
-        $roles = $kind === 'prefix' ? self::PREFIX_ROLES : self::ADDRESS_ROLES;
-        $fields['role'] ??= $kind === 'prefix' ? 'aggregate' : 'used';
+        $kind = $parsed['kind'] === 'addresses' ? 'address' : $parsed['kind'];
+        $roles = self::rolesFor($kind);
+        $fields['role'] ??= match ($kind) { 'prefix' => 'aggregate', 'range' => 'static', default => 'used' };
         if (! isset($roles[$fields['role']])) {
             throw new ApiException('Dozwolone role: ' . implode(', ', array_keys($roles)) . '.');
         }
@@ -279,9 +360,22 @@ final class IpamManual
                 throw new ApiException("Nie można zarezerwować {$p['cidr']}, bo LibreNMS ma w nim adresy: "
                     . IpInput::compress(array_slice($inside, 0, 50)) . (count($inside) > 50 ? ' …' : '') . '.', 409);
             }
+            // Prefiks może objąć cały zakres, ale nie może go przeciąć.
+            $cut = $this->db->table(self::TABLE)->where('space_id', $space)->whereNull('deleted_at')->where('kind', 'range')
+                ->where('start', '<=', $p['end'])->where('end', '>=', $p['start'])
+                ->where(fn ($q) => $q->where('start', '<', $p['start'])->orWhere('end', '>', $p['end']))->first();
+            if ($cut !== null) {
+                throw new ApiException("Prefiks {$p['cidr']} przecina zakres {$cut->cidr}. Zakres musi leżeć w całości w jednym prefiksie.", 409);
+            }
             $rows[] = ['kind' => 'prefix', 'cidr' => $p['cidr'], 'start' => $p['start'], 'end' => $p['end'], 'len' => $p['len']];
             $label = $p['cidr'];
             $range = [$p['start'], $p['end']];
+        } elseif ($kind === 'range') {
+            [$a, $b] = $parsed['range'];
+            $this->checkRange($space, $a, $b, $fields['role'], $index);
+            $label = IpInput::rangeLabel($a, $b);
+            $rows[] = ['kind' => 'range', 'cidr' => $label, 'start' => $a, 'end' => $b, 'len' => 32];
+            $range = [$a, $b];
         } else {
             $ips = $parsed['addresses'];
             $taken = $this->db->table(self::TABLE)->where('space_id', $space)->whereNull('deleted_at')
@@ -334,9 +428,13 @@ final class IpamManual
             throw new ApiException('Opis jest wymagany.');
         }
         if (isset($fields['role'])) {
-            $roles = $before['kind'] === 'prefix' ? self::PREFIX_ROLES : self::ADDRESS_ROLES;
+            $roles = self::rolesFor($before['kind']);
             if (! isset($roles[$fields['role']])) {
                 throw new ApiException('Dozwolone role: ' . implode(', ', array_keys($roles)) . '.');
+            }
+            if ($before['kind'] === 'range' && $fields['role'] === 'reserved' && $before['role'] !== 'reserved'
+                && $index->knownInside($before['start'], $before['end']) !== []) {
+                throw new ApiException("W {$before['cidr']} są adresy z LibreNMS - nie można go zarezerwować.", 409);
             }
             // Zmiana roli prefiksu podlega tym samym blokadom co dodanie.
             if ($before['kind'] === 'prefix' && $fields['role'] !== $before['role']) {
@@ -361,11 +459,9 @@ final class IpamManual
         $detach = ! $group && $batchSize > 1;
 
         $ids = array_map(fn ($r) => $r['id'], $rows);
-        $ips = array_filter(array_map(fn ($r) => $r['kind'] === 'address' ? $r['start'] : null, $rows), fn ($v) => $v !== null);
-        $label = $before['kind'] === 'prefix' ? $before['cidr'] : IpInput::compress($ips);
-        $range = $before['kind'] === 'prefix' ? [$before['start'], $before['end']] : [min($ips), max($ips)];
+        [$k, $label, $range] = self::describe($rows);
 
-        $this->db->transaction(function () use ($changed, $ids, $detach, $before, $rows, $label, $range, $comment) {
+        $this->db->transaction(function () use ($changed, $ids, $detach, $before, $rows, $k, $label, $range, $comment) {
             $set = $changed + ['updated_at' => date('Y-m-d H:i:s'), 'updated_by' => Access::username()];
             if (array_key_exists(Expiry::FIELD, $changed)) {
                 $set['expired_at'] = null; // nowy termin: "termin minął" zapisze się ponownie po nim
@@ -382,7 +478,6 @@ final class IpamManual
             }
             $this->db->table(self::TABLE)->whereIn('id', $ids)->update($set);
 
-            $k = $before['kind'] === 'prefix' ? 'prefix' : 'ips';
             AuditLog::user(IpamModule::KEY, self::TYPE,
                 count($rows) > 1 ? self::batchKey((int) $before['batch_id']) : self::key($before),
                 AuditLog::UPDATE,
@@ -403,9 +498,7 @@ final class IpamManual
             throw new ApiException('Nie ma takiego wpisu (mógł zostać już usunięty).', 404);
         }
         $rows = $group && $before['batch_id'] ? $this->batchRows($before['batch_id']) : [$before];
-        $ips = array_filter(array_map(fn ($r) => $r['kind'] === 'address' ? $r['start'] : null, $rows), fn ($v) => $v !== null);
-        $label = $before['kind'] === 'prefix' ? $before['cidr'] : IpInput::compress($ips);
-        $range = $before['kind'] === 'prefix' ? [$before['start'], $before['end']] : [min($ips), max($ips)];
+        [, $label, $range] = self::describe($rows);
 
         $this->db->transaction(function () use ($rows, $before, $label, $range, $comment) {
             $this->db->table(self::TABLE)->whereIn('id', array_map(fn ($r) => $r['id'], $rows))->update([
@@ -420,6 +513,59 @@ final class IpamManual
     }
 
     /**
+     * Zamienia grupę adresów (ciągły zakres) na jeden wpis "zakres". Pola opisu
+     * i termin przechodzą na zakres, rola: używany -> adresy statyczne,
+     * rezerwacja -> rezerwacja. Jeden wpis w dzienniku.
+     *
+     * @return array nowy wpis
+     */
+    public function toRange(int $id, ?string $comment, IpamIndex $index): array
+    {
+        $before = $this->find($id);
+        if ($before === null) {
+            throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
+        }
+        if ($before['kind'] !== 'address' || ! $before['batch_id']) {
+            throw new ApiException('Na zakres można zamienić tylko grupę adresów.');
+        }
+        $rows = $this->batchRows($before['batch_id']);
+        if (count($rows) < 2) {
+            throw new ApiException('Grupa ma jeden adres - zakres musi mieć co najmniej dwa.');
+        }
+        if (array_filter($rows, fn ($r) => $r['adopted_at'] !== null) !== []) {
+            throw new ApiException('Część adresów grupy przejął LibreNMS - takiej grupy nie zamieniamy na zakres.');
+        }
+        [, $label, [$a, $b]] = self::describe($rows);
+        if ($b - $a + 1 !== count($rows)) {
+            throw new ApiException("Adresy grupy ({$label}) nie tworzą ciągłego zakresu.");
+        }
+        $role = $before['role'] === 'reserved' ? 'reserved' : 'static';
+        $this->checkRange((int) $before['space_id'], $a, $b, $role, $index);
+        $label = IpInput::rangeLabel($a, $b);
+
+        $newId = 0;
+        $this->db->transaction(function () use ($rows, $before, $a, $b, $role, $label, $comment, &$newId) {
+            $now = date('Y-m-d H:i:s');
+            $user = Access::username();
+            $this->db->table(self::TABLE)->whereIn('id', array_map(fn ($r) => $r['id'], $rows))
+                ->update(['deleted_at' => $now, 'deleted_by' => $user]);
+            $keep = array_intersect_key($before, array_flip(['space_id', 'family', 'name', 'description', 'owner', 'vlan', 'devices',
+                Expiry::FIELD, 'expired_at', 'created_at', 'created_by']));
+            $newId = (int) $this->db->table(self::TABLE)->insertGetId($keep + [
+                'kind' => 'range', 'cidr' => $label, 'start' => $a, 'end' => $b, 'len' => 32, 'role' => $role,
+                'updated_at' => $now, 'updated_by' => $user,
+            ]);
+            $this->db->table(self::TABLE)->where('id', $newId)->update(['batch_id' => $newId]);
+            AuditLog::user(IpamModule::KEY, self::TYPE, self::batchKey((int) $before['batch_id']), AuditLog::UPDATE,
+                ['ips' => $label, 'count' => count($rows), 'role' => $before['role']],
+                ['range' => $label, 'role' => $role],
+                'zamieniono grupę adresów na zakres' . ($comment ? '; ' . $comment : ''), [$a, $b]);
+        });
+
+        return $this->find($newId);
+    }
+
+    /**
      * Wpisy, których adres albo sieć "używana" pojawiły się właśnie w LibreNMS.
      *
      * @param  array<int,IpamIndex>  $indexes  przestrzeń => indeks
@@ -428,7 +574,8 @@ final class IpamManual
     {
         $ts = $now->format('Y-m-d H:i:s');
         $byGroup = [];
-        foreach ($this->db->table(self::TABLE)->whereNull('deleted_at')->whereNull('adopted_at')->where('family', 4)->get() as $r) {
+        foreach ($this->db->table(self::TABLE)->whereNull('deleted_at')->whereNull('adopted_at')->where('family', 4)
+            ->where('kind', '!=', 'range')->get() as $r) {
             $idx = $indexes[(int) $r->space_id] ?? null;
             if ($idx === null) {
                 continue;
@@ -447,10 +594,7 @@ final class IpamManual
             $this->db->table(self::TABLE)->whereIn('id', array_map(fn ($r) => $r['id'], $rows))->update(['adopted_at' => $ts]);
             $count += count($rows);
             $first = $rows[0];
-            $ips = array_filter(array_map(fn ($r) => $r['kind'] === 'address' ? $r['start'] : null, $rows), fn ($v) => $v !== null);
-            $k = $first['kind'] === 'prefix' ? 'prefix' : 'ips';
-            $label = $first['kind'] === 'prefix' ? $first['cidr'] : IpInput::compress($ips);
-            $range = $first['kind'] === 'prefix' ? [$first['start'], $first['end']] : [min($ips), max($ips)];
+            [$k, $label, $range] = self::describe($rows);
             $audit[] = AuditLog::row(IpamModule::KEY, self::TYPE, count($rows) > 1 ? self::batchKey($batch) : self::key($first),
                 AuditLog::ADOPTED, AuditLog::SOURCE_SYNC, [$k => $label, 'adopted_at' => null], [$k => $label, 'adopted_at' => $ts],
                 'wpisany ręcznie ' . $first['created_at'] . ($first['created_by'] ? ' przez ' . $first['created_by'] : '')
@@ -482,10 +626,7 @@ final class IpamManual
             $this->db->table(self::TABLE)->whereIn('id', array_map(fn ($r) => $r['id'], $rows))->update(['expired_at' => $ts]);
             $count += count($rows);
             $first = $rows[0];
-            $ips = array_filter(array_map(fn ($r) => $r['kind'] === 'address' ? $r['start'] : null, $rows), fn ($v) => $v !== null);
-            $k = $first['kind'] === 'prefix' ? 'prefix' : 'ips';
-            $label = $first['kind'] === 'prefix' ? $first['cidr'] : IpInput::compress($ips);
-            $range = $first['kind'] === 'prefix' ? [$first['start'], $first['end']] : [min($ips), max($ips)];
+            [$k, $label, $range] = self::describe($rows);
             $audit[] = AuditLog::row(IpamModule::KEY, self::TYPE, count($rows) > 1 ? self::batchKey($batch) : self::key($first),
                 AuditLog::EXPIRED, AuditLog::SOURCE_SYNC, null, [$k => $label, Expiry::FIELD => $first[Expiry::FIELD]],
                 'wpis nadal zajmuje adresy; przedłuż termin albo usuń wpis', null, null, null, $now, $range);

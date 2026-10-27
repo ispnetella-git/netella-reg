@@ -14,6 +14,11 @@
  *
  * Adres trafia do najgłębszego węzła, który go zawiera.
  *
+ * Zakresy ręczne (pule a-b) nie są węzłami: należą do najgłębszego węzła,
+ * który zawiera je w całości ('ranges'), a w zajętości i wolnym miejscu
+ * liczą się w całości, tak jak prefiks. Zakres jest też kotwicą poziomów
+ * grupowania, w które mieści się w całości.
+ *
  * Zajętość węzła: suma zakresów dzieci i adresów leżących bezpośrednio w nim.
  * Dla sieci (podsieć interfejsu, sieć ręczna, pula) liczymy hosty: bez adresu
  * sieci i rozgłoszeniowego dla /30 i krótszych.
@@ -36,12 +41,16 @@ final class IpTree
     /** @var list<string> węzły bez rodzica */
     private array $roots = [];
 
+    /** @var array<int,array{id:int,start:int,end:int,node:?string}> zakresy ręczne */
+    private array $ranges = [];
+
     /**
      * @param  list<array{start:int,len:int,src:string,meta?:array,subnet?:bool}>  $prefixes
      * @param  list<array{ip:int}>  $addresses
      * @param  list<int>  $levels  poziomy grupowania, np. [8, 16, 24]
+     * @param  list<array{id:int,start:int,end:int}>  $ranges  zakresy ręczne
      */
-    public function __construct(array $prefixes, array $addresses, array $levels = [8, 16, 24])
+    public function __construct(array $prefixes, array $addresses, array $levels = [8, 16, 24], array $ranges = [])
     {
         foreach ($prefixes as $p) {
             $this->addNode($p['start'], $p['len'], $p['src'], $p['meta'] ?? [], (bool) ($p['subnet'] ?? false));
@@ -51,7 +60,9 @@ final class IpTree
         sort($levels);
         $anchors = array_merge(
             array_map(fn ($n) => [$n['start'], $n['len']], array_values($this->nodes)),
-            array_map(fn ($a) => [$a['ip'], 32], $addresses)
+            array_map(fn ($a) => [$a['ip'], 32], $addresses),
+            // Zakres: poziomy, w których mieści się w całości (wspólny początek adresów).
+            array_map(fn ($r) => [$r['start'], self::commonLen($r['start'], $r['end']) + 1], $ranges)
         );
         foreach ($anchors as [$start, $len]) {
             foreach ($levels as $lvl) {
@@ -81,7 +92,64 @@ final class IpTree
         }
 
         $this->placeAddresses($addresses);
+        $this->placeRanges($ranges);
         $this->computeStats();
+    }
+
+    /** Liczba wspólnych początkowych bitów dwóch adresów. */
+    private static function commonLen(int $a, int $b): int
+    {
+        $x = $a ^ $b;
+        $n = 32;
+        while ($x > 0) {
+            $x >>= 1;
+            $n--;
+        }
+
+        return $n;
+    }
+
+    private function placeRanges(array $ranges): void
+    {
+        foreach ($ranges as $r) {
+            $node = $this->deepest($r['start']);
+            while ($node !== null && $this->nodes[$node]['end'] < $r['end']) {
+                $node = $this->nodes[$node]['parent'];
+            }
+            $this->ranges[$r['id']] = $r + ['node' => $node];
+            if ($node !== null) {
+                $this->nodes[$node]['ranges'][] = $r['id'];
+            }
+        }
+    }
+
+    /**
+     * Zakresy nachodzące na węzeł, przycięte do niego.
+     *
+     * @return list<array{0:int,1:int}>
+     */
+    private function rangesIn(array $n): array
+    {
+        $out = [];
+        foreach ($this->ranges as $r) {
+            if ($r['end'] >= $n['start'] && $r['start'] <= $n['end']) {
+                $out[] = [max($r['start'], $n['start']), min($r['end'], $n['end'])];
+            }
+        }
+
+        return $out;
+    }
+
+    /** @return array{id:int,start:int,end:int,node:?string}|null */
+    public function range(int $id): ?array
+    {
+        return $this->ranges[$id] ?? null;
+    }
+
+    /** @return list<int> zakresy bez węzła (poza wszystkimi prefiksami) */
+    public function rootRanges(): array
+    {
+        return array_keys(array_filter($this->ranges, fn ($r) => $r['node'] === null));
     }
 
     /** Czy węzeł leży wewnątrz prawdziwej sieci (podsieć interfejsu, sieć używana, pula). */
@@ -104,7 +172,7 @@ final class IpTree
         if (! isset($this->nodes[$cidr])) {
             $this->nodes[$cidr] = [
                 'cidr' => $cidr, 'start' => $start, 'end' => $start + IpCalc::size($len) - 1, 'len' => $len,
-                'sources' => [], 'meta' => [], 'subnet' => false, 'parent' => null, 'children' => [], 'addr' => [],
+                'sources' => [], 'meta' => [], 'subnet' => false, 'parent' => null, 'children' => [], 'addr' => [], 'ranges' => [],
             ];
         }
 
@@ -209,6 +277,7 @@ final class IpTree
             foreach (array_keys($ips) as $ip) {
                 $busy[] = [$ip, $ip];
             }
+            array_push($busy, ...$this->rangesIn($n));
             $busy = IpCalc::merge($busy);
             $n['occ'] = $busy;
 
@@ -325,6 +394,7 @@ final class IpTree
         foreach ($n['addr'] as $i) {
             $busy[] = [$this->addresses[$i]['ip'], $this->addresses[$i]['ip']];
         }
+        array_push($busy, ...$this->rangesIn($n));
         [$fs, $fe] = $n['subnet'] && $n['len'] <= 30 ? [$n['start'] + 1, $n['end'] - 1] : [$n['start'], $n['end']];
 
         return IpCalc::freeIntervals($fs, $fe, IpCalc::merge($busy));

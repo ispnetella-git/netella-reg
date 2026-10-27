@@ -8,6 +8,9 @@
  * grupowane według długości maski, zajętość, wolne bloki, wyszukiwanie,
  * uwagi (ten sam adres na wielu urządzeniach, podejrzane maski).
  *
+ * Zakresy ręczne (pule a-b) są w drzewie wierszami "range:<id>" między
+ * dziećmi węzła; rozwinięty zakres pokazuje swoje adresy i wolne miejsce.
+ *
  * Part of the Netella-Reg LibreNMS plugin. Licencja GPL-3.0-or-later.
  */
 
@@ -51,7 +54,7 @@ final class IpamModule extends AbstractModule
 
     public function schemaVersion(): int
     {
-        return 2;
+        return 3;
     }
 
     public function migrate(Connection $db, int $from): void
@@ -62,6 +65,9 @@ final class IpamModule extends AbstractModule
         }
         if ($from < 2) {
             IpamManual::migrateExpiry($db);
+        }
+        if ($from < 3) {
+            IpamManual::migrateRanges($db);
         }
     }
 
@@ -96,7 +102,7 @@ final class IpamModule extends AbstractModule
         return match ($action) {
             'space_create' => Access::ADMIN,
             'manual_delete' => Access::DELETE,
-            'manual_create', 'manual_update' => Access::EDIT,
+            'manual_create', 'manual_update', 'manual_to_range' => Access::EDIT,
             default => Access::VIEW,
         };
     }
@@ -115,6 +121,7 @@ final class IpamModule extends AbstractModule
             'space_create' => $this->post($request) ?? ['space' => $this->spaces()->create($request->only(['name', 'description', 'vrf']))],
             'tree' => $this->apiTree($space, trim((string) $request->query('node', ''))),
             'node' => $this->apiNode($space, trim((string) $request->query('cidr', ''))),
+            'range' => $this->apiRange($space, (int) $request->query('id', 0)),
             'search' => $this->apiSearch($space, trim((string) $request->query('q', ''))),
             'free' => $this->apiFree($space, trim((string) $request->query('within', '')), (int) $request->query('len', 29),
                 (int) $request->query('count', 5)),
@@ -123,6 +130,7 @@ final class IpamModule extends AbstractModule
             'manual_create' => $this->post($request) ?? $this->apiManualCreate($space, $request),
             'manual_update' => $this->post($request) ?? $this->apiManualUpdate($request),
             'manual_delete' => $this->post($request) ?? $this->apiManualDelete($request),
+            'manual_to_range' => $this->post($request) ?? $this->apiManualToRange($request),
             default => parent::api($action, $request),
         };
     }
@@ -268,7 +276,44 @@ final class IpamModule extends AbstractModule
             'rows' => $rows,
             'manual' => $a['manual'] ?? null,
             'dup' => isset($dups[$ip]),
+            'range' => ($r = $idx->rangeOf($ip)) ? ['id' => $r['id'], 'label' => $r['cidr'], 'role_label' => $r['role_label'],
+                'name' => $r['name'] ?: $r['description']] : null,
         ];
+    }
+
+    /** Zakres ręczny jako wiersz drzewa (ten sam kształt co węzeł). */
+    private function rangeInfo(IpamIndex $idx, array $m): array
+    {
+        $size = $m['end'] - $m['start'] + 1;
+        $used = count($idx->addressesIn($m['start'], $m['end']));
+
+        return [
+            'cidr' => 'range:' . $m['id'], 'range' => true, 'id' => $m['id'], 'n' => $m['start'], 'len' => 32,
+            'first' => $m['first'], 'last' => $m['last'], 'virtual' => false, 'sources' => ['manual'], 'subnet' => false,
+            'state' => null,
+            'stats' => ['size' => $size, 'capacity' => $size, 'addresses' => $used, 'free' => $size - $used, 'used' => $used,
+                'util' => round($used * 100 / $size, 1)],
+            'children' => 0, 'direct' => $used,
+            'label' => $m['name'] ?: $m['description'], 'lnms' => [], 'manual' => $m, 'vlans' => $m['vlan'] ? [$m['vlan']] : [],
+        ];
+    }
+
+    private function findRange(IpamIndex $idx, int $id): array
+    {
+        $m = $idx->ranges()[$id] ?? null;
+        if ($m === null) {
+            throw new ApiException('Nie ma takiego zakresu w tej przestrzeni (mógł zostać usunięty).', 404);
+        }
+
+        return $m;
+    }
+
+    /** Ścieżka w drzewie do zakresu (węzeł, który go zawiera, i sam zakres). */
+    private function rangePath(IpTree $tree, int $id): array
+    {
+        $node = $tree->range($id)['node'] ?? null;
+
+        return array_merge($node ? $tree->path($node) : [], ['range:' . $id]);
     }
 
     // ---------------------------------------------------------------- API
@@ -279,10 +324,15 @@ final class IpamModule extends AbstractModule
         $tree = $idx->tree();
         $dups = $idx->duplicates();
 
+        if (str_starts_with($node, 'range:')) {
+            return $this->apiRangeTree($idx, (int) substr($node, 6));
+        }
+
         if ($node === '') {
             $children = $tree->roots();
             $addr = [];
             $parent = null;
+            $rangeIds = $tree->rootRanges();
         } else {
             $n = $tree->node($node);
             if ($n === null) {
@@ -291,20 +341,81 @@ final class IpamModule extends AbstractModule
             $children = $n['children'];
             $addr = $n['addr'];
             $parent = $this->nodeInfo($idx, $n);
+            $rangeIds = $n['ranges'];
         }
 
+        // Adresy w zakresach są widoczne po rozwinięciu zakresu.
+        $ranges = array_map(fn ($id) => $idx->ranges()[$id], $rangeIds);
         $ips = array_unique(array_map(fn ($i) => $tree->address($i)['ip'], $addr));
+        $ips = array_filter($ips, function ($ip) use ($ranges) {
+            foreach ($ranges as $r) {
+                if ($ip >= $r['start'] && $ip <= $r['end']) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
         sort($ips);
 
         return [
             'node' => $parent,
-            'children' => array_map(fn ($c) => $this->nodeInfo($idx, $tree->node($c)), $children),
+            'children' => array_merge(array_map(fn ($c) => $this->nodeInfo($idx, $tree->node($c)), $children),
+                array_map(fn ($r) => $this->rangeInfo($idx, $r), $ranges)),
             'addresses' => array_map(fn ($ip) => $this->addrInfo($idx, $ip, $dups), array_slice($ips, 0, self::MAX_ADDR)),
             'addresses_total' => count($ips),
             'free' => $node === '' ? [] : $this->treeFree($tree, $node),
             'labels' => IpamIndex::LABELS,
             'sync' => SyncRunner::last(self::KEY),
             'v6_count' => count($idx->v6()),
+        ];
+    }
+
+    /** Rozwinięty zakres: jego adresy i wolne miejsce. */
+    private function apiRangeTree(IpamIndex $idx, int $id): array
+    {
+        $m = $this->findRange($idx, $id);
+        $dups = $idx->duplicates();
+        $ips = $idx->addressesIn($m['start'], $m['end']);
+        $free = [];
+        foreach (IpCalc::freeIntervals($m['start'], $m['end'], array_map(fn ($ip) => [$ip, $ip], $ips)) as [$a, $b]) {
+            $free[] = ['type' => 'hosts', 'n' => $a, 'first' => IpCalc::int2ip($a), 'last' => IpCalc::int2ip($b), 'count' => $b - $a + 1];
+            if (count($free) >= self::MAX_FREE) {
+                break;
+            }
+        }
+
+        return [
+            'node' => $this->rangeInfo($idx, $m),
+            'children' => [],
+            'addresses' => array_map(fn ($ip) => $this->addrInfo($idx, $ip, $dups), array_slice($ips, 0, self::MAX_ADDR)),
+            'addresses_total' => count($ips),
+            'free' => $free,
+            'labels' => IpamIndex::LABELS,
+            'sync' => SyncRunner::last(self::KEY),
+            'v6_count' => count($idx->v6()),
+        ];
+    }
+
+    /** Szczegóły zakresu do panelu po prawej. */
+    private function apiRange(int $space, int $id): array
+    {
+        $idx = $this->index($space);
+        $m = $this->findRange($idx, $id);
+        $tree = $idx->tree();
+        $dups = $idx->duplicates();
+        [$container, $problem] = $idx->rangeContainer($m['start'], $m['end']);
+        $ips = $idx->addressesIn($m['start'], $m['end']);
+
+        return [
+            'range' => $this->rangeInfo($idx, $m),
+            'path' => $this->rangePath($tree, $id),
+            'container' => $container ?? $tree->range($id)['node'],
+            'problem' => $problem,
+            'addresses' => array_map(fn ($ip) => $this->addrInfo($idx, $ip, $dups), array_slice($ips, 0, 200)),
+            'addresses_total' => count($ips),
+            'history' => $this->history(['r:' . $m['cidr'] . ':'], [$m['start'], $m['end']]),
+            'roles' => IpamManual::RANGE_ROLES,
         ];
     }
 
@@ -403,8 +514,10 @@ final class IpamModule extends AbstractModule
         $ip = IpCalc::ip2int($q);
         if ($ip !== null) {
             $node = $tree->deepest($ip);
+            $range = $idx->rangeOf($ip);
+            $path = $range ? $this->rangePath($tree, $range['id']) : ($node ? $tree->path($node) : []);
 
-            return ['kind' => 'address', 'ip' => $q, 'path' => $node ? $tree->path($node) : [],
+            return ['kind' => 'address', 'ip' => $q, 'path' => $path,
                 'address' => $idx->address($ip) ? $this->addrInfo($idx, $ip, $dups) : null,
                 'history' => $this->history(['a:' . $q . '/', 'a:' . $q . ':'], [$ip, $ip])];
         }
@@ -427,6 +540,12 @@ final class IpamModule extends AbstractModule
         foreach ($idx->manualPrefixes() as $cidr => $m) {
             if (str_contains(mb_strtolower(implode(' ', [$m['name'], $m['description'], $m['owner'], $m['devices']])), $needle)) {
                 $hits[] = ['type' => 'prefix', 'value' => $cidr, 'label' => $m['name'] ?: $m['description'], 'path' => $tree->path($cidr)];
+            }
+        }
+        foreach ($idx->ranges() as $id => $m) {
+            if (str_contains(mb_strtolower(implode(' ', [$m['cidr'], $m['role_label'], $m['name'], $m['description'], $m['owner'], $m['devices']])), $needle)) {
+                $hits[] = ['type' => 'range', 'value' => $m['cidr'], 'id' => $id, 'first' => $m['first'],
+                    'label' => $m['role_label'] . ' · ' . ($m['name'] ?: $m['description']), 'path' => $this->rangePath($tree, $id)];
             }
         }
         foreach ($idx->addresses() as $aip => $a) {
@@ -478,6 +597,11 @@ final class IpamModule extends AbstractModule
                 $busy[] = [$ip, $ip];
             }
         }
+        foreach ($idx->ranges() as $r) {
+            if ($r['end'] >= $w['start'] && $r['start'] <= $w['end']) {
+                $busy[] = [max($r['start'], $w['start']), min($r['end'], $w['end'])];
+            }
+        }
         // W sieci (podsieć interfejsu, sieć używana, pula) adres sieci i rozgłoszeniowy są zajęte.
         $isSubnet = $idx->knownNetwork($w['cidr'])
             || in_array($idx->manualPrefixes()[$w['cidr']]['role'] ?? '', ['used', 'pool'], true);
@@ -524,6 +648,17 @@ final class IpamModule extends AbstractModule
                 $conflicts[] = ['cidr' => $cidr, 'ips' => IpInput::compress(array_slice($inside, 0, 50)), 'count' => count($inside)];
             }
         }
+        // Zakresy: rezerwacje z adresami z LibreNMS i zakresy, które przecięła sieć z LibreNMS.
+        $rangeConflicts = [];
+        foreach ($idx->ranges() as $id => $m) {
+            if ($m['role'] === 'reserved' && ($inside = $idx->knownInside($m['start'], $m['end'])) !== []) {
+                $conflicts[] = ['cidr' => $m['cidr'], 'range_id' => $id, 'first' => $m['first'],
+                    'ips' => IpInput::compress(array_slice($inside, 0, 50)), 'count' => count($inside)];
+            }
+            if (($problem = $idx->rangeContainer($m['start'], $m['end'])[1]) !== null) {
+                $rangeConflicts[] = ['id' => $id, 'label' => $m['cidr'], 'first' => $m['first'], 'problem' => $problem];
+            }
+        }
 
         return [
             'duplicates' => $dups,
@@ -531,9 +666,10 @@ final class IpamModule extends AbstractModule
             'orphans' => array_slice($orphans, 0, 300),
             'orphans_total' => count($orphans),
             'reserved_conflicts' => $conflicts,
+            'range_conflicts' => $rangeConflicts,
             // Wpisy ręczne po terminie albo z terminem w ciągu Expiry::WARN_DAYS dni.
             'expiry' => array_values(array_map(fn ($g) => array_intersect_key($g,
-                array_flip(['id', 'kind', 'cidr', 'ip', 'label', 'count', 'role_label', 'name', 'description', 'owner', 'valid_until', 'expiry', 'days_left'])),
+                array_flip(['id', 'kind', 'cidr', 'ip', 'first', 'label', 'count', 'role_label', 'name', 'description', 'owner', 'valid_until', 'expiry', 'days_left'])),
                 array_filter($this->manual()->grouped($space), fn ($g) => $g['expiry'] !== null && empty($g['adopted_at'])))),
             'v6_count' => count($idx->v6()),
         ];
@@ -545,6 +681,8 @@ final class IpamModule extends AbstractModule
         $rows = array_map(function (array $g) use ($idx) {
             if ($g['kind'] === 'prefix') {
                 $g['current'] = $idx->knownNetwork($g['cidr']) ? 'sieć jest w LibreNMS' : null;
+            } elseif ($g['kind'] === 'range') {
+                $g['current'] = $idx->rangeContainer($g['start'], $g['end'])[1] !== null ? 'konflikt z siecią (zobacz Uwagi)' : null;
             } else {
                 $g['current'] = null;
             }
@@ -552,13 +690,14 @@ final class IpamModule extends AbstractModule
             return $g;
         }, $this->manual()->grouped($space));
 
-        return ['rows' => $rows, 'prefix_roles' => IpamManual::PREFIX_ROLES, 'address_roles' => IpamManual::ADDRESS_ROLES];
+        return ['rows' => $rows, 'prefix_roles' => IpamManual::PREFIX_ROLES, 'address_roles' => IpamManual::ADDRESS_ROLES,
+            'range_roles' => IpamManual::RANGE_ROLES];
     }
 
     private function apiManualCreate(int $space, Request $request): array
     {
         $res = $this->manual()->create($space, (string) $request->input('target', ''),
-            $request->only(self::FORM_FIELDS), self::comment($request), $this->index($space));
+            $request->only(self::FORM_FIELDS), self::comment($request), $this->index($space), $request->input('as') === 'range');
 
         return $res;
     }
@@ -572,6 +711,16 @@ final class IpamModule extends AbstractModule
 
         return ['entry' => $this->manual()->update($entry['id'], $request->only(self::FORM_FIELDS),
             self::comment($request), $request->boolean('group'), $this->index($entry['space_id']))];
+    }
+
+    private function apiManualToRange(Request $request): array
+    {
+        $entry = $this->manual()->find((int) $request->input('id', 0));
+        if ($entry === null) {
+            throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
+        }
+
+        return ['entry' => $this->manual()->toRange($entry['id'], self::comment($request), $this->index($entry['space_id']))];
     }
 
     private function apiManualDelete(Request $request): array

@@ -30,13 +30,21 @@ to jeden rekord (host, interfejs, opis portu, maska, VLAN z nazwy interfejsu).
 - **Dodaj adresację** (prawo edycji): `10.0.0.0/24` (prefiks z rolą agregat, pula, rezerwacja albo
   sieć używana), `10.0.0.5`, `10.0.0.10-20`, `10.0.0.10-10.0.0.40` albo lista adresów (do 1024 naraz,
   jedna grupa i jeden wpis w dzienniku). Wymagany opis, opcjonalnie nazwa, właściciel, VLAN, urządzenia.
+- **Zakresy (pule):** zakres `a-b` można zapisać jako jeden wpis zamiast grupy adresów (pole „jako”
+  w formularzu; powyżej 1024 adresów tylko tak). Role: pula DHCP, pula PPPoE, NAT, adresy statyczne,
+  rezerwacja. Granice nie muszą pasować do maski, ale zakres musi leżeć w całości w jednej sieci
+  albo prefiksie (bez adresu sieci i rozgłoszeniowego) i nie może nachodzić na inny zakres. W drzewie
+  zakres jest wierszem z fioletową kreską. Liczy się jako zajęty, a po rozwinięciu pokazuje adresy
+  w środku i wolne miejsce. Zajętość zakresu to adresy z LibreNMS i wpisów ręcznych w nim. Ciągłą
+  grupę adresów zamienia się na zakres przyciskiem „Na zakres” w liście wpisów ręcznych.
 - **Blokady:** adresu widocznego w LibreNMS nie da się dodać. Sieci z LibreNMS nie da się dodać jako
   „sieć używana” (można jako agregat, żeby ją opisać). Rezerwacji nie da się dodać, gdy LibreNMS ma
   w prefiksie adresy. Przejęcie przez LibreNMS działa jak w module VLAN.
 - **Przestrzenie adresowe:** „Global” plus przestrzenie dodawane przez administratora (przycisk „+”).
   Adres z LibreNMS trafia do przestrzeni, której pole VRF równa się jego `context_name`.
 - **Uwagi:** ten sam adres na kilku aktywnych urządzeniach, maski krótsze niż /8, adresy poza
-  sieciami (np. aliasy /32) i rezerwacje, w których pojawiły się adresy z LibreNMS.
+  sieciami (np. aliasy /32), rezerwacje (prefiksy i zakresy), w których pojawiły się adresy z LibreNMS,
+  i zakresy, które przecięła nowa sieć albo które straciły prefiks.
 - Pomijane domyślnie: 127.0.0.0/8, 169.254.0.0/16, 0.0.0.0/8, interfejsy Junipera `emN.x` i `jsrv`,
   IPv6 link-local. Ustawienia „Pomijane zakresy” i „Pomijane interfejsy”.
 

@@ -12,6 +12,9 @@
  *   r  rezerwacja    wpis ręczny "rezerwacja"
  *   g  zniknął       zniknął z LibreNMS, trwa karencja
  *
+ * Zakresy ręczne (pule) nie zmieniają statusu adresów - adres w puli jest
+ * wolny, dopóki nie ma go w LibreNMS ani we wpisie ręcznym adresu.
+ *
  * Drzewo jest tylko dla IPv4 (decyzja z 2026-10-27: IPv6 w modelu, UI później).
  * Maski krótsze niż /8 z LibreNMS traktujemy jako podejrzane: adres trafia
  * do drzewa jako pojedynczy host, a sieć nie powstaje.
@@ -56,6 +59,9 @@ final class IpamIndex
 
     /** @var array<string,array> cidr => prefiks ręczny */
     private array $manualPrefixes = [];
+
+    /** @var array<int,array> id => zakres ręczny (kind = range) */
+    private array $ranges = [];
 
     /** @var list<array> adresy LibreNMS z maską < MIN_LNMS_LEN */
     private array $suspicious = [];
@@ -118,6 +124,8 @@ final class IpamIndex
             }
             if ($m['kind'] === 'prefix') {
                 $this->manualPrefixes[$m['cidr']] = $m;
+            } elseif ($m['kind'] === 'range') {
+                $this->ranges[(int) $m['id']] = $m;
             } else {
                 $ip = (int) $m['start'];
                 $this->addr[$ip]['manual'] = $m;
@@ -223,6 +231,96 @@ final class IpamIndex
         return $this->manualPrefixes;
     }
 
+    /** @return array<int,array> id => zakres */
+    public function ranges(): array
+    {
+        return $this->ranges;
+    }
+
+    /** Zakres zawierający adres albo null. */
+    public function rangeOf(int $ip): ?array
+    {
+        foreach ($this->ranges as $r) {
+            if ($ip >= $r['start'] && $ip <= $r['end']) {
+                return $r;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Adresy (dowolny status) w zakresie [a, b].
+     *
+     * @return list<int>
+     */
+    public function addressesIn(int $start, int $end): array
+    {
+        $out = [];
+        foreach (array_keys($this->addr) as $ip) {
+            if ($ip >= $start && $ip <= $end) {
+                $out[] = $ip;
+            }
+        }
+        sort($out);
+
+        return $out;
+    }
+
+    /**
+     * Prefiks, w którym leży zakres [a, b], i ewentualny problem:
+     *   - zakres musi leżeć w całości w sieci z LibreNMS albo prefiksie ręcznym,
+     *   - nie może przecinać ani obejmować żadnej sieci czy prefiksu,
+     *   - w sieci nie może zawierać adresu sieci ani rozgłoszeniowego.
+     *
+     * @return array{0:?string,1:?string} [cidr, opis problemu]
+     */
+    public function rangeContainer(int $start, int $end): array
+    {
+        $label = IpInput::rangeLabel($start, $end);
+        $best = null;
+        foreach ($this->realPrefixes() as $cidr => $p) {
+            if ($p['end'] < $start || $p['start'] > $end) {
+                continue;
+            }
+            if ($p['start'] <= $start && $p['end'] >= $end) {
+                if ($best === null || $p['len'] > $best['len']) {
+                    $best = $p + ['cidr' => $cidr];
+                }
+            } else {
+                return [null, "Zakres {$label} przecina albo obejmuje prefiks {$cidr}. Zakres musi leżeć w całości w jednej sieci albo prefiksie."];
+            }
+        }
+        if ($best === null) {
+            return [null, "Zakres {$label} nie leży w żadnej sieci z LibreNMS ani w prefiksie ręcznym. Dodaj najpierw prefiks (np. agregat albo sieć)."];
+        }
+        if ($best['subnet'] && $best['len'] <= 30 && ($start === $best['start'] || $end === $best['end'])) {
+            return [null, "Zakres {$label} obejmuje adres sieci albo rozgłoszeniowy sieci {$best['cidr']}."];
+        }
+
+        return [$best['cidr'], null];
+    }
+
+    /** @return array<string,array{start:int,end:int,len:int,subnet:bool}> sieci z LibreNMS i prefiksy ręczne */
+    private function realPrefixes(): array
+    {
+        $out = [];
+        foreach (array_keys($this->networks) as $cidr) {
+            $c = IpCalc::parseV4($cidr);
+            $out[$cidr] = ['start' => $c['start'], 'end' => $c['end'], 'len' => $c['len'], 'subnet' => true];
+        }
+        foreach ($this->manualPrefixes as $cidr => $m) {
+            $sub = in_array($m['role'], ['used', 'pool'], true);
+            if (isset($out[$cidr])) {
+                $out[$cidr]['subnet'] = $out[$cidr]['subnet'] || $sub;
+            } else {
+                $out[$cidr] = ['start' => (int) $m['start'], 'end' => (int) $m['end'], 'len' => (int) $m['len'], 'subnet' => $sub];
+            }
+        }
+
+        return $out;
+    }
+
     /** @return array<int,array> */
     public function addresses(): array
     {
@@ -284,6 +382,8 @@ final class IpamIndex
             $addresses[] = ['ip' => $ip];
         }
 
-        return $this->tree = new IpTree($prefixes, $addresses, $this->levels);
+        $ranges = array_map(fn ($r) => ['id' => (int) $r['id'], 'start' => (int) $r['start'], 'end' => (int) $r['end']], array_values($this->ranges));
+
+        return $this->tree = new IpTree($prefixes, $addresses, $this->levels, $ranges);
     }
 }

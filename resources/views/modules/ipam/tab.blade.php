@@ -33,6 +33,9 @@
     .nreg-tf.add:hover { background: rgba(51,122,183,.12); }
     .nreg-tf .plus { font-style: normal; opacity: 0; }
     .nreg-tf.add:hover .plus { opacity: 1; }
+    /* Zakres (pula a-b): wiersz drzewa z lewą kreską. */
+    .nreg-tn.rng { border-left: 3px solid #8e44ad; }
+    .nreg-tn.rng .cidr { min-width: 235px; }
     .nreg-ta .who { overflow: hidden; text-overflow: ellipsis; opacity: .85; }
     .nreg-chips a { display: inline-block; font-family: monospace; font-size: 12px; margin: 0 4px 4px 0; padding: 1px 6px; border: 1px solid rgba(128,128,128,.45); border-radius: 3px; }
     .nreg-ip-right h4 { margin-top: 4px; }
@@ -73,6 +76,10 @@
             <div class="col-sm-4">
                 <label class="req" for="nreg-if-target">Adres, zakres albo prefiks</label>
                 <input class="form-control nreg-mono" id="nreg-if-target" name="target" placeholder="10.0.0.0/24, 10.0.0.5 albo 10.0.0.10-20">
+                <select class="form-control input-sm" id="nreg-if-as" name="as" style="display:none;margin-top:4px">
+                    <option value="addresses">osobne adresy (grupa)</option>
+                    <option value="range">jeden zakres (pula DHCP, PPPoE, NAT…)</option>
+                </select>
             </div>
             <div class="col-sm-3">
                 <label for="nreg-if-role">Rola</label>
@@ -136,10 +143,10 @@ document.addEventListener('nreg:ready', function () {
     var treeEl = document.getElementById('nreg-ip-tree'), detail = document.getElementById('nreg-ip-detail');
     var result = document.getElementById('nreg-ip-result'), form = document.getElementById('nreg-ip-form');
     var spaceSel = document.getElementById('nreg-ip-space');
-    var space = 1, labels = {}, prefixRoles = {}, addressRoles = {}, manualCache = {}, selectedEl = null, loaded = false;
+    var space = 1, labels = {}, prefixRoles = {}, addressRoles = {}, rangeRoles = {}, manualCache = {}, selectedEl = null, loaded = false;
     var STATE_BDG = { l: 'LibreNMS', s: 'nieaktualny', m: 'ręczny', r: 'rezerwacja', g: 'zniknął' };
 
-    Object.assign(N.fieldLabels, { ips: 'adresy', prefix: 'prefiks', role: 'rola', ip: 'adres', len: 'maska', 'if': 'interfejs',
+    Object.assign(N.fieldLabels, { ips: 'adresy', prefix: 'prefiks', range: 'zakres', role: 'rola', ip: 'adres', len: 'maska', 'if': 'interfejs',
         alias: 'opis portu', network: 'sieć', ctx: 'VRF', vlan: 'VLAN' });
 
     function alertBox(kind, html) { return '<div class="alert alert-' + kind + '">' + html + '</div>'; }
@@ -165,12 +172,12 @@ document.addEventListener('nreg:ready', function () {
     }
 
     function nodeRow(n, depth) {
-        // Każdy prefiks da się rozwinąć: nawet pusty pokazuje swoje wolne miejsce.
-        var expandable = n.len < 32;
+        // Każdy prefiks da się rozwinąć: nawet pusty pokazuje swoje wolne miejsce. Zakres (n.range) też.
+        var expandable = n.range || n.len < 32;
         var s = n.stats;
-        return '<div class="nreg-tn" data-cidr="' + esc(n.cidr) + '" style="padding-left:' + (depth * 16 + 4) + 'px">'
+        return '<div class="nreg-tn' + (n.range ? ' rng' : '') + '" data-cidr="' + esc(n.cidr) + '" style="padding-left:' + (depth * 16 + 4) + 'px">'
             + '<span class="tg" data-toggle-node="' + esc(n.cidr) + '">' + (expandable ? '▸' : '·') + '</span>'
-            + '<span class="cidr" data-open-node="' + esc(n.cidr) + '">' + esc(n.cidr) + '</span>' + nodeBadges(n)
+            + '<span class="cidr" data-open-node="' + esc(n.cidr) + '">' + esc(n.range ? n.first + ' – ' + n.last : n.cidr) + '</span>' + nodeBadges(n)
             + '<span class="lbl" title="' + esc(n.label || '') + '">' + esc(n.label || '') + '</span>'
             + bar(s.util) + '<span class="cnt" title="zajęte / pojemność, adresów: ' + s.addresses + '">' + s.used + '/' + s.capacity + '</span></div>'
             + '<div class="nreg-tc" data-children-of="' + esc(n.cidr) + '" style="display:none"></div>';
@@ -286,7 +293,8 @@ document.addEventListener('nreg:ready', function () {
         manualCache[m.id] = m;
         var h = '<div class="nreg-manual"><strong>Wpis ręczny</strong> <span class="nreg-bdg ' + (m.role === 'reserved' ? 'r' : 'm') + '">' + esc(m.role_label) + '</span> '
             + (m.adopted_at ? '<span class="label label-primary">przejęty przez LibreNMS ' + esc(m.adopted_at) + '</span>' : '')
-            + '<dl style="margin-top:6px">' + (m.name ? '<dt>Nazwa</dt><dd>' + esc(m.name) + '</dd>' : '')
+            + '<dl style="margin-top:6px">' + (m.kind === 'range' ? '<dt>Zakres</dt><dd class="nreg-mono">' + esc(m.first + ' – ' + m.last) + ' (' + m.size + ' adr.)</dd>' : '')
+            + (m.name ? '<dt>Nazwa</dt><dd>' + esc(m.name) + '</dd>' : '')
             + '<dt>Opis</dt><dd>' + esc(m.description) + '</dd>' + (m.owner ? '<dt>Właściciel</dt><dd>' + esc(m.owner) + '</dd>' : '')
             + (m.vlan ? '<dt>VLAN</dt><dd><a href="?vlan=' + m.vlan + '#vlan">' + m.vlan + '</a></dd>' : '')
             + (m.valid_until ? '<dt>Ważne do</dt><dd>' + N.expiryHtml(m) + '</dd>' : '')
@@ -297,7 +305,30 @@ document.addEventListener('nreg:ready', function () {
         return h + '</div></div>';
     }
 
+    function openRange(id) {
+        detail.innerHTML = '<p class="nreg-muted">Ładowanie zakresu…</p>';
+        api('range', { id: id }).then(function (j) {
+            var r = j.range, s = r.stats;
+            var h = '<h4 class="nreg-mono">' + esc(r.first + ' – ' + r.last) + ' ' + nodeBadges(r) + '</h4>'
+                + '<dl><dt>Rozmiar</dt><dd>' + s.size + ' adr.</dd>'
+                + '<dt>Zajęte</dt><dd>' + s.used + ' z ' + s.capacity + ' (' + s.util + '%) ' + bar(s.util)
+                + ' <small class="nreg-muted">adresy z LibreNMS i wpisów ręcznych</small></dd>'
+                + (j.container ? '<dt>W prefiksie</dt><dd><a href="#" class="nreg-mono" data-open-node="' + esc(j.container) + '">' + esc(j.container) + '</a></dd>' : '')
+                + '</dl>';
+            if (j.problem) { h += alertBox('warning', esc(j.problem)); }
+            h += manualBlock(r.manual);
+            if (j.addresses.length) {
+                h += '<h5>Adresy w zakresie (' + j.addresses_total + ')</h5><div class="nreg-chips">' + j.addresses.map(function (a) {
+                    return '<a href="#" data-goto-ip="' + esc(a.ip) + '" title="' + esc(STATE_BDG[a.state] || '') + '">' + esc(a.ip) + '</a>';
+                }).join('') + (j.addresses_total > j.addresses.length ? ' …' : '') + '</div>';
+            }
+            h += '<h5>Historia</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
+            detail.innerHTML = h;
+        }).catch(function (e) { detail.innerHTML = alertBox('danger', esc(e.message)); });
+    }
+
     function openNode(cidr) {
+        if (cidr.indexOf('range:') === 0) { openRange(cidr.substring(6)); return; }
         detail.innerHTML = '<p class="nreg-muted">Ładowanie ' + esc(cidr) + '…</p>';
         api('node', { cidr: cidr }).then(function (j) {
             var n = j.node, s = n.stats;
@@ -333,9 +364,11 @@ document.addEventListener('nreg:ready', function () {
         detail.innerHTML = '<p class="nreg-muted">Ładowanie ' + esc(ip) + '…</p>';
         api('search', { q: ip }).then(function (j) {
             var a = j.address;
+            var nets = j.path.filter(function (c) { return c.indexOf('range:') !== 0; }), rng = j.path.filter(function (c) { return c.indexOf('range:') === 0; })[0];
             var h = '<h4 class="nreg-mono">' + esc(ip) + (a ? ' <span class="nreg-bdg ' + a.state + '">' + esc(STATE_BDG[a.state]) + '</span>' : '')
                 + (a && a.dup ? ' <span class="nreg-bdg d">duplikat</span>' : '') + '</h4>'
-                + (j.path.length ? '<p style="font-size:12px">Sieć: <a href="#" data-open-node="' + esc(j.path[j.path.length - 1]) + '" class="nreg-mono">' + esc(j.path[j.path.length - 1]) + '</a></p>' : '');
+                + (nets.length ? '<p style="font-size:12px">Sieć: <a href="#" data-open-node="' + esc(nets[nets.length - 1]) + '" class="nreg-mono">' + esc(nets[nets.length - 1]) + '</a>'
+                    + (rng ? ' &middot; zakres: <a href="#" data-open-node="' + esc(rng) + '">' + esc(a && a.range ? a.range.label + ' (' + a.range.role_label + ')' : 'pokaż') + '</a>' : '') + '</p>' : '');
             if (!a) {
                 h += '<p>Adres jest wolny w tej przestrzeni.</p>';
                 if (can.canEdit) { h += '<p><button class="btn btn-success btn-xs" type="button" data-add="' + esc(ip) + '"><i class="fa fa-plus"></i> Dodaj jako wpis ręczny</button></p>'; }
@@ -343,6 +376,7 @@ document.addEventListener('nreg:ready', function () {
                 if (a.rows.length) { h += '<h5>LibreNMS</h5>' + lnmsTable(a.rows, false); }
                 if (a.dup) { h += '<div class="alert alert-warning" style="padding:6px 10px">Ten adres jest na kilku urządzeniach jednocześnie.</div>'; }
                 if (a.manual) { h += manualBlock(a.manual); }
+                if (a.range && !a.rows.length && !a.manual) { h += '<p>Adres jest wolny w zakresie ' + esc(a.range.label) + '.</p>'; }
             }
             h += '<h5>Historia</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
             detail.innerHTML = h;
@@ -365,8 +399,9 @@ document.addEventListener('nreg:ready', function () {
             }
             if (!j.hits.length) { result.innerHTML = alertBox('warning', 'Nic nie znaleziono dla „' + esc(q) + '”.'); return; }
             result.innerHTML = alertBox('info', 'Znaleziono ' + j.hits.length + ':<br>' + j.hits.map(function (h) {
-                return '<a href="#" class="nreg-mono" ' + (h.type === 'address' ? 'data-goto-ip="' : 'data-goto-node="') + esc(h.value) + '" data-path="'
-                    + esc(JSON.stringify(h.path)) + '">' + esc(h.value) + '</a> <span class="nreg-muted">' + esc(h.label || '') + '</span>';
+                var go = h.type === 'range' ? 'data-goto-range="' + h.id + '" data-first="' + esc(h.first) + '"'
+                    : (h.type === 'address' ? 'data-goto-ip="' : 'data-goto-node="') + esc(h.value) + '"';
+                return '<a href="#" class="nreg-mono" ' + go + '>' + esc(h.value) + '</a> <span class="nreg-muted">' + esc(h.label || '') + '</span>';
             }).join('<br>'));
         }).catch(function (e2) { result.innerHTML = alertBox('danger', esc(e2.message)); });
     });
@@ -388,21 +423,29 @@ document.addEventListener('nreg:ready', function () {
     function loadIssues() {
         var box = document.querySelector('#nreg-ip-issues > div');
         return api('issues').then(function (j) {
-            var n = j.duplicates.length + j.suspicious.length + j.reserved_conflicts.length + (j.expiry || []).length;
+            var n = j.duplicates.length + j.suspicious.length + j.reserved_conflicts.length + (j.expiry || []).length + (j.range_conflicts || []).length;
             document.querySelector('#nreg-ip-issues > summary').textContent = 'Uwagi (' + n + ')' + (j.orphans_total ? ', adresy poza sieciami: ' + j.orphans_total : '');
             var h = '';
             if ((j.expiry || []).length) {
                 h += '<h5>Wpisy ręczne po terminie albo z bliskim terminem</h5><p class="nreg-muted" style="font-size:12px">Wpis po terminie nadal zajmuje adresy.'
                     + ' Przedłuż termin albo usuń wpis.</p>' + j.expiry.map(function (x) {
-                        var go = x.kind === 'prefix' ? 'data-goto-node="' + esc(x.cidr) + '"' : 'data-goto-ip="' + esc(x.ip) + '"';
+                        var go = gotoAttr(x);
                         return '<div><a href="#" class="nreg-mono" ' + go + '>' + esc(x.label) + '</a>' + (x.count > 1 ? ' <span class="nreg-muted">(' + x.count + ')</span>' : '')
                             + ' ' + N.expiryHtml(x) + ' ' + esc(x.role_label) + ' · ' + esc(x.name || x.description) + (x.owner ? ' <span class="nreg-muted">(' + esc(x.owner) + ')</span>' : '') + '</div>';
                     }).join('');
             }
             if (j.reserved_conflicts.length) {
                 h += '<h5>Rezerwacje z adresami z LibreNMS</h5>' + j.reserved_conflicts.map(function (c) {
-                    return '<div><a href="#" data-goto-node="' + esc(c.cidr) + '" class="nreg-mono">' + esc(c.cidr) + '</a>: ' + esc(c.ips) + ' (' + c.count + ')</div>';
+                    var go = c.range_id ? 'data-goto-range="' + c.range_id + '" data-first="' + esc(c.first) + '"' : 'data-goto-node="' + esc(c.cidr) + '"';
+                    return '<div><a href="#" ' + go + ' class="nreg-mono">' + esc(c.cidr) + '</a>: ' + esc(c.ips) + ' (' + c.count + ')</div>';
                 }).join('');
+            }
+            if ((j.range_conflicts || []).length) {
+                h += '<h5>Zakresy poza siecią albo przecięte przez sieć</h5><p class="nreg-muted" style="font-size:12px">Zakres powinien leżeć w całości w jednej sieci'
+                    + ' albo prefiksie. Zwykle znaczy to, że w LibreNMS pojawiła się nowa sieć albo usunięto prefiks ręczny.</p>'
+                    + j.range_conflicts.map(function (c) {
+                        return '<div><a href="#" class="nreg-mono" data-goto-range="' + c.id + '" data-first="' + esc(c.first) + '">' + esc(c.label) + '</a>: ' + esc(c.problem) + '</div>';
+                    }).join('');
             }
             if (j.duplicates.length) {
                 h += '<h5>Ten sam adres na kilku urządzeniach (' + j.duplicates.length + ')</h5><p class="nreg-muted" style="font-size:12px">Bywa celowe (CGNAT, adresy domyślne, anycast).</p>'
@@ -427,18 +470,23 @@ document.addEventListener('nreg:ready', function () {
     function loadManual() {
         var box = document.querySelector('#nreg-ip-manual > div');
         return api('manual_list').then(function (j) {
-            prefixRoles = j.prefix_roles; addressRoles = j.address_roles;
+            prefixRoles = j.prefix_roles; addressRoles = j.address_roles; rangeRoles = j.range_roles;
             manualCache = {};
             j.rows.forEach(function (m) { manualCache[m.id] = m; });
             document.querySelector('#nreg-ip-manual > summary').textContent = 'Wpisy ręczne (' + j.rows.length + ')';
             if (!j.rows.length) { box.innerHTML = '<p class="nreg-muted">Brak wpisów ręcznych.</p>'; return; }
             box.innerHTML = '<table class="table table-condensed table-hover" style="font-size:12px"><thead><tr><th>Adres / prefiks</th><th>Rola</th><th>Ważne do</th><th>Nazwa</th>'
                 + '<th>Opis</th><th>Właściciel</th><th>VLAN</th><th>Dodał</th><th></th></tr></thead><tbody>' + j.rows.map(function (m) {
-                    var many = m.count > 1, go = m.kind === 'prefix' ? 'data-goto-node="' + esc(m.cidr) + '"' : 'data-goto-ip="' + esc(m.ip) + '"';
+                    var many = m.count > 1, go = gotoAttr(m);
                     var btn = '';
                     if (can.canEdit) { btn += '<button class="btn btn-default btn-xs" type="button" data-edit="' + m.id + '" data-group="' + (many ? 1 : 0) + '"><i class="fa fa-pencil"></i> Edytuj' + (many ? ' grupę (' + m.count + ')' : '') + '</button> '; }
+                    // Ciągła grupa adresów (etykieta bez przecinka) może stać się jednym zakresem.
+                    if (can.canEdit && many && m.kind === 'address' && m.label.indexOf(',') < 0 && !m.adopted_at) {
+                        btn += '<button class="btn btn-default btn-xs" type="button" data-torange="' + m.id + '" data-label="' + esc(m.label) + '" title="zamień grupę adresów na jeden wpis-zakres (pulę)"><i class="fa fa-compress"></i> Na zakres</button> ';
+                    }
                     if (can.canDelete) { btn += '<button class="btn btn-danger btn-xs" type="button" data-del="' + m.id + '" data-group="' + (many ? 1 : 0) + '" data-label="' + esc(m.label) + '"><i class="fa fa-trash"></i> Usuń' + (many ? ' grupę' : '') + '</button>'; }
-                    return '<tr><td><a href="#" class="nreg-mono" ' + go + '>' + esc(m.label) + '</a>' + (many ? ' <span class="nreg-muted">(' + m.count + ')</span>' : '') + '</td>'
+                    return '<tr><td><a href="#" class="nreg-mono" ' + go + '>' + esc(m.label) + '</a>' + (many ? ' <span class="nreg-muted">(' + m.count + ')</span>' : '')
+                        + (m.kind === 'range' ? ' <span class="nreg-muted">(zakres, ' + m.size + ' adr.)</span>' : '') + '</td>'
                         + '<td>' + esc(m.role_label) + (m.adopted_at ? ' <span class="label label-primary">przejęty</span>' : '') + (m.current ? ' <small class="nreg-muted">' + esc(m.current) + '</small>' : '') + '</td>'
                         + '<td>' + (m.adopted_at ? '' : N.expiryHtml(m)) + '</td><td>' + esc(m.name || '') + '</td><td>' + esc(m.description) + '</td><td>' + esc(m.owner || '') + '</td>'
                         + '<td>' + (m.vlan ? '<a href="?vlan=' + m.vlan + '#vlan">' + m.vlan + '</a>' : '') + '</td>'
@@ -451,8 +499,31 @@ document.addEventListener('nreg:ready', function () {
 
     function isPrefix(text) { var m = /\/(\d{1,2})\s*$/.exec(text.trim()); return !!m && parseInt(m[1], 10) < 32 && !/[,\s;-]/.test(text.trim().replace(/\/\d+$/, '')); }
 
-    function fillRoles(prefix, current) {
-        var sel = form.elements.role, roles = prefix ? prefixRoles : addressRoles;
+    // Liczba adresów w pojedynczym zakresie "a-b" / "a-n" albo 0, gdy to nie jest pojedynczy zakres.
+    function rangeSize(text) {
+        var m = /^\s*(\d{1,3}(?:\.\d{1,3}){3})\s*[-–]\s*(\d{1,3}(?:\.\d{1,3}){3}|\d{1,3})\s*$/.exec(text);
+        if (!m) { return 0; }
+        var n = function (ip) { return ip.split('.').reduce(function (acc, o) { return acc * 256 + parseInt(o, 10); }, 0); };
+        var a = n(m[1]), b = m[2].indexOf('.') >= 0 ? n(m[2]) : a - (a % 256) + parseInt(m[2], 10);
+        return Math.abs(b - a) + 1;
+    }
+
+    // Pole "jako": tylko przy pojedynczym zakresie; powyżej 1024 adresów zostaje sam zakres.
+    function updateAs() {
+        var sel = form.elements.as, size = rangeSize(form.elements.target.value);
+        sel.style.display = size > 1 && !form.elements.id.value ? '' : 'none';
+        sel.querySelector('option[value="addresses"]').disabled = size > 1024;
+        if (size > 1024) { sel.value = 'range'; }
+        if (size <= 1) { sel.value = 'addresses'; }
+    }
+
+    function formKind() {
+        if (isPrefix(form.elements.target.value)) { return 'prefix'; }
+        return form.elements.as.style.display !== 'none' && form.elements.as.value === 'range' ? 'range' : 'address';
+    }
+
+    function fillRoles(kind, current) {
+        var sel = form.elements.role, roles = kind === 'prefix' ? prefixRoles : (kind === 'range' ? rangeRoles : addressRoles);
         sel.innerHTML = Object.keys(roles).map(function (k) { return '<option value="' + k + '">' + esc(roles[k]) + '</option>'; }).join('');
         if (current && roles[current]) { sel.value = current; }
     }
@@ -466,8 +537,10 @@ document.addEventListener('nreg:ready', function () {
         var t = form.elements.target;
         t.value = entry ? (group ? entry.label : (entry.ip || entry.cidr)) : (target || '');
         t.disabled = !!entry;
-        fillRoles(entry ? entry.kind === 'prefix' : isPrefix(t.value), entry ? entry.role : null);
-        document.getElementById('nreg-if-title').textContent = entry ? (group ? 'Edycja grupy ' + entry.label : 'Edycja wpisu ' + (entry.ip || entry.cidr)) : 'Dodaj adresację (wpis ręczny)';
+        updateAs();
+        fillRoles(entry ? entry.kind : formKind(), entry ? entry.role : null);
+        document.getElementById('nreg-if-title').textContent = entry ? (group ? 'Edycja grupy ' + entry.label
+            : (entry.kind === 'range' ? 'Edycja zakresu ' : 'Edycja wpisu ') + (entry.ip || entry.cidr)) : 'Dodaj adresację (wpis ręczny)';
         if (entry) { ['name', 'description', 'owner', 'vlan', 'devices', 'valid_until'].forEach(function (f) { form.elements[f].value = entry[f] || ''; }); }
         form.style.display = '';
         form.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -479,7 +552,8 @@ document.addEventListener('nreg:ready', function () {
     }
 
     if (form) {
-        form.elements.target.addEventListener('input', function () { fillRoles(isPrefix(form.elements.target.value), form.elements.role.value); });
+        form.elements.target.addEventListener('input', function () { updateAs(); fillRoles(formKind(), form.elements.role.value); });
+        form.elements.as.addEventListener('change', function () { fillRoles(formKind(), form.elements.role.value); });
         document.getElementById('nreg-if-cancel').addEventListener('click', function () { form.style.display = 'none'; });
         document.getElementById('nreg-ip-add').addEventListener('click', function () { openForm(null, document.getElementById('nreg-ip-within').value); });
         form.addEventListener('submit', function (e) {
@@ -488,14 +562,30 @@ document.addEventListener('nreg:ready', function () {
             ['role', 'name', 'description', 'owner', 'vlan', 'devices', 'valid_until', 'comment'].forEach(function (f) { data[f] = form.elements[f].value; });
             var id = form.elements.id.value, path;
             if (id) { data.id = id; data.group = form.elements.group.value === '1'; path = 'manual_update'; }
-            else { data.target = form.elements.target.value; path = 'manual_create'; }
+            else { data.target = form.elements.target.value; data.as = formKind() === 'range' ? 'range' : ''; path = 'manual_create'; }
             btn.disabled = true; err.textContent = '';
             api(path, data, 'POST').then(function (j) {
                 form.style.display = 'none';
-                result.innerHTML = alertBox('success', id ? 'Zapisano zmiany.' : 'Dodano ' + (j.kind === 'prefix' ? 'prefiks ' : j.count + ' adres(ów) jako jedną pozycję: ') + '<span class="nreg-mono">' + esc(j.label) + '</span>.');
+                result.innerHTML = alertBox('success', id ? 'Zapisano zmiany.' : 'Dodano ' + (j.kind === 'prefix' ? 'prefiks ' : (j.kind === 'range' ? 'zakres ' : j.count + ' adres(ów) jako jedną pozycję: '))
+                    + '<span class="nreg-mono">' + esc(j.label) + '</span>.');
                 return refreshAll();
             }).catch(function (e2) { err.textContent = e2.message; }).then(function () { btn.disabled = false; });
         });
+    }
+
+    function toRange(id, label) {
+        if (!window.confirm('Zamienić grupę adresów ' + label + ' na jeden wpis-zakres? Opis, właściciel i termin przejdą na zakres. Zmiana trafi do dziennika.')) { return; }
+        api('manual_to_range', { id: id }, 'POST').then(function (j) {
+            result.innerHTML = alertBox('success', 'Grupa ' + esc(label) + ' jest teraz zakresem <span class="nreg-mono">' + esc(j.entry.cidr) + '</span> (' + esc(j.entry.role_label) + ').');
+            return refreshAll();
+        }).catch(function (e) { result.innerHTML = alertBox('danger', esc(e.message)); });
+    }
+
+    // Link do wpisu ręcznego: prefiks, zakres albo adres.
+    function gotoAttr(m) {
+        if (m.kind === 'prefix') { return 'data-goto-node="' + esc(m.cidr) + '"'; }
+        if (m.kind === 'range') { return 'data-goto-range="' + m.id + '" data-first="' + esc(m.first) + '"'; }
+        return 'data-goto-ip="' + esc(m.ip) + '"';
     }
 
     function deleteEntry(id, label, group) {
@@ -547,6 +637,11 @@ document.addEventListener('nreg:ready', function () {
             e.preventDefault();
             var ip = t.getAttribute('data-goto-ip');
             api('search', { q: ip }).then(function (j) { expandPath(j.path, ip); openIp(ip); });
+        } else if ((t = e.target.closest('[data-goto-range]'))) {
+            e.preventDefault();
+            var rid = t.getAttribute('data-goto-range');
+            // Wyszukanie pierwszego adresu daje ścieżkę przez zakres.
+            api('search', { q: t.getAttribute('data-first') }).then(function (j) { expandPath(j.path); openRange(rid); });
         } else if ((t = e.target.closest('[data-goto-node]'))) {
             e.preventDefault();
             var c = t.getAttribute('data-goto-node');
@@ -560,6 +655,8 @@ document.addEventListener('nreg:ready', function () {
         else if ((t = e.target.closest('button[data-edit]'))) {
             var m = manualCache[t.getAttribute('data-edit')];
             if (m) { openForm(m, null, t.getAttribute('data-group') === '1'); }
+        } else if ((t = e.target.closest('button[data-torange]'))) {
+            toRange(t.getAttribute('data-torange'), t.getAttribute('data-label'));
         } else if ((t = e.target.closest('button[data-del]'))) {
             deleteEntry(t.getAttribute('data-del'), t.getAttribute('data-label'), t.getAttribute('data-group') === '1');
         }

@@ -127,7 +127,7 @@
         valid_until: 'ważne do'
     };
     // Pola pomijane w linii dziennika (powtarzają informację z kolumny "Rekord").
-    var SKIP_FIELDS = { count: 1, vlans: 1, device_id: 1, device: 1, hostname: 1, ips: 1, prefix: 1, family: 1, port_id: 1, space: 1 };
+    var SKIP_FIELDS = { count: 1, vlans: 1, device_id: 1, device: 1, hostname: 1, ips: 1, prefix: 1, range: 1, family: 1, port_id: 1, space: 1 };
 
     // Zmiany z dziennika w jednej linii: "pole: przed → po · pole2: …".
     function diffHtml(row) {
@@ -156,12 +156,14 @@
         if (row.module === 'core') { return 'ustawienia'; }
         var more = count > 1 ? ' <span class="nreg-muted">(' + count + ')</span>' : '';
         if (list) { return 'VLAN ' + esc(list) + more; }
+        if (a.range || b.range) { return 'zakres ' + esc(a.range || b.range); }
         if (a.ips || b.ips) { return 'IP ' + esc(a.ips || b.ips) + more; }
         if (a.prefix || b.prefix) { return esc(a.prefix || b.prefix); }
         if ((m = /^v(\d+):d(\d+)$/.exec(row.entity_key))) { return 'VLAN ' + m[1] + ' · ' + esc(a.device || b.device || ('urządzenie ' + m[2])); }
         if ((m = /^v(\d+):m\d+$/.exec(row.entity_key))) { return 'VLAN ' + m[1] + ' <span class="nreg-muted">(wpis)</span>'; }
         if ((m = /^a:([^/]+)\/(\d+):p\d+$/.exec(row.entity_key))) { return 'IP ' + esc(m[1]) + '/' + m[2] + ' · ' + esc(a.device || b.device || '') + ' ' + esc(a['if'] || b['if'] || ''); }
         if ((m = /^a:([^:]+):m\d+$/.exec(row.entity_key))) { return 'IP ' + esc(m[1]) + ' <span class="nreg-muted">(wpis)</span>'; }
+        if ((m = /^r:([^:]+):m\d+$/.exec(row.entity_key))) { return 'zakres ' + esc(m[1]) + ' <span class="nreg-muted">(wpis)</span>'; }
         if ((m = /^n:([^:]+):m\d+$/.exec(row.entity_key))) { return esc(m[1]) + ' <span class="nreg-muted">(wpis)</span>'; }
         if ((m = /^s(\d+)$/.exec(row.entity_key))) { return 'przestrzeń ' + esc(a.name || b.name || m[1]); }
         return esc(row.entity_key);

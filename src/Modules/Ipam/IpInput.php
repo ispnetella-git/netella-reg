@@ -9,6 +9,8 @@
  *   10.0.0.10-20            to samo, skrót na ostatni oktet
  *   10.0.0.1, 10.0.0.7      lista adresów (grupa wpisów)
  *
+ * Zakres "a-b" można też zapisać jako jeden wpis (pula, parseRange()).
+ *
  * Prefiksu nie łączymy z adresami w jednym wpisie - to różne rodzaje rekordów.
  *
  * Czyste, bez Laravela.
@@ -81,6 +83,41 @@ final class IpInput
         sort($list);
 
         return ['kind' => 'addresses', 'addresses' => $list];
+    }
+
+    /**
+     * Jeden ciągły zakres zapisywany jako jeden wpis (pula): "a-b" albo "a-n"
+     * (skrót na ostatni oktet). Bez limitu MAX_ADDRESSES.
+     *
+     * @return array{0:int,1:int}
+     */
+    public static function parseRange(string $text): array
+    {
+        $t = preg_replace('/\s*(-|–)\s*/u', '-', trim($text));
+        if (! preg_match('#^(\d{1,3}(?:\.\d{1,3}){3})-(\d{1,3}(?:\.\d{1,3}){3}|\d{1,3})$#', $t, $m)) {
+            throw new \InvalidArgumentException('Zakres podaj jako początek-koniec, np. 10.0.0.10-10.0.0.200 albo 10.0.0.10-200.');
+        }
+        $a = IpCalc::ip2int($m[1]);
+        $b = str_contains($m[2], '.')
+            ? IpCalc::ip2int($m[2])
+            : ($a === null || (int) $m[2] > 255 ? null : (($a & 0xFFFFFF00) | (int) $m[2]));
+        if ($a === null || $b === null) {
+            throw new \InvalidArgumentException("Nie rozumiem zakresu „{$text}”.");
+        }
+        if ($a > $b) {
+            [$a, $b] = [$b, $a];
+        }
+        if ($a === $b) {
+            throw new \InvalidArgumentException('Zakres musi mieć co najmniej dwa adresy. Pojedynczy adres dodaj jako adres.');
+        }
+
+        return [$a, $b];
+    }
+
+    /** Zakres w postaci "10.0.0.10-10.0.0.200". */
+    public static function rangeLabel(int $start, int $end): string
+    {
+        return IpCalc::int2ip($start) . '-' . IpCalc::int2ip($end);
     }
 
     /**
