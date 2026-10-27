@@ -6,9 +6,15 @@
  * Węzły:
  *   - sieci z LibreNMS (adres + maska interfejsu, np. 45.10.136.0/24),
  *   - prefiksy ręczne (agregat, pula, rezerwacja, sieć),
+ *   - adresacja wewnętrzna (src 'implicit': RFC 1918, CGNAT - ustawienie
+ *     "Adresacja wewnętrzna"), traktowana jak agregat,
  *   - węzły wirtualne na poziomach grupowania (domyślnie /8, /16, /24), gdy
  *     nie ma tam prawdziwego prefiksu - dzięki nim drzewo rozwija się
- *     klasa po klasie.
+ *     klasa po klasie. Tylko wewnątrz prawdziwego prefiksu, który nie jest
+ *     siecią (agregat, adresacja wewnętrzna): korzeniami drzewa są najszersze
+ *     prawdziwe prefiksy, a nie np. 45.0.0.0/8, którego nie mamy.
+ * Adres poza wszystkimi prefiksami (np. loopback /32) leży w korzeniu
+ * (rootAddresses()); wolnego miejsca w korzeniu nie pokazujemy.
  * Prefiksy CIDR nigdy nie nachodzą na siebie częściowo, więc rodzic węzła to
  * najkrótszy... a dokładniej najbliższy (najdłuższy) prefiks, który go zawiera.
  *
@@ -74,10 +80,12 @@ final class IpTree
 
         $this->linkParents();
 
-        // Poziomy grupowania nie mają sensu wewnątrz prawdziwej sieci (np. /24 w sieci
-        // 172.19.0.0/16): adres wyglądałby wtedy na leżący poza siecią. Usuwamy je
-        // i łączymy drzewo od nowa.
-        $drop = array_filter(array_keys($this->nodes), fn ($c) => isset($this->nodes[$c]['sources']['virtual']) && $this->inSubnet($c));
+        // Poziomy grupowania zostają tylko w agregatach. Wewnątrz prawdziwej sieci (np. /24
+        // w sieci 172.19.0.0/16) adres wyglądałby na leżący poza siecią, a nad prefiksami
+        // (np. 45.0.0.0/8 nad 45.10.136.0/24) sugerowałyby, że cała klasa jest nasza.
+        // Usuwamy je i łączymy drzewo od nowa.
+        $drop = array_filter(array_keys($this->nodes), fn ($c) => isset($this->nodes[$c]['sources']['virtual'])
+            && ($this->inSubnet($c) || ! $this->inAggregate($c)));
         if ($drop !== []) {
             foreach ($drop as $c) {
                 unset($this->nodes[$c]);
@@ -146,6 +154,37 @@ final class IpTree
         return $this->ranges[$id] ?? null;
     }
 
+    /** @return list<int> indeksy adresów poza wszystkimi prefiksami */
+    public function rootAddresses(): array
+    {
+        return array_keys(array_filter($this->addresses, fn ($a) => $a['node'] === null));
+    }
+
+    /** Czy adres leży w prawdziwej sieci (podsieć interfejsu, sieć używana, pula). */
+    public function inNetwork(int $ip): bool
+    {
+        for ($c = $this->deepest($ip); $c !== null; $c = $this->nodes[$c]['parent']) {
+            if ($this->nodes[$c]['subnet'] && ! isset($this->nodes[$c]['sources']['virtual'])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Najgłębszy prawdziwy (nie wirtualny) węzeł zawierający cały przedział albo null. */
+    public function realContainer(int $start, int $end): ?string
+    {
+        for ($c = $this->deepest($start); $c !== null; $c = $this->nodes[$c]['parent']) {
+            $n = $this->nodes[$c];
+            if (! isset($n['sources']['virtual']) && $n['end'] >= $end) {
+                return $c;
+            }
+        }
+
+        return null;
+    }
+
     /** @return list<int> zakresy bez węzła (poza wszystkimi prefiksami) */
     public function rootRanges(): array
     {
@@ -157,6 +196,18 @@ final class IpTree
     {
         for ($p = $this->nodes[$cidr]['parent']; $p !== null; $p = $this->nodes[$p]['parent']) {
             if ($this->nodes[$p]['subnet'] && ! isset($this->nodes[$p]['sources']['virtual'])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Czy węzeł leży wewnątrz prawdziwego prefiksu (agregat, adresacja wewnętrzna). */
+    private function inAggregate(string $cidr): bool
+    {
+        for ($p = $this->nodes[$cidr]['parent']; $p !== null; $p = $this->nodes[$p]['parent']) {
+            if (! isset($this->nodes[$p]['sources']['virtual'])) {
                 return true;
             }
         }

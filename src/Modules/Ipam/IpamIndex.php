@@ -15,6 +15,10 @@
  * Zakresy ręczne (pule) nie zmieniają statusu adresów - adres w puli jest
  * wolny, dopóki nie ma go w LibreNMS ani we wpisie ręcznym adresu.
  *
+ * Adresacja wewnętrzna (ustawienie ipam_private, domyślnie RFC 1918 i CGNAT)
+ * jest w drzewie korzeniem jak agregat, o ile coś w niej leży. Publiczne
+ * adresy bez prefiksu nie dostają nad sobą żadnej klasy (/8, /16).
+ *
  * Drzewo jest tylko dla IPv4 (decyzja z 2026-10-27: IPv6 w modelu, UI później).
  * Maski krótsze niż /8 z LibreNMS traktujemy jako podejrzane: adres trafia
  * do drzewa jako pojedynczy host, a sieć nie powstaje.
@@ -85,6 +89,7 @@ final class IpamIndex
         int $graceDays,
         string $disabledMode,
         private readonly array $levels = [8, 16, 24],
+        private readonly array $implicit = [],
     ) {
         $graceLimit = $now->modify("-{$graceDays} days")->format('Y-m-d H:i:s');
 
@@ -301,10 +306,67 @@ final class IpamIndex
         return [$best['cidr'], null];
     }
 
-    /** @return array<string,array{start:int,end:int,len:int,subnet:bool}> sieci z LibreNMS i prefiksy ręczne */
+    /** Etykieta adresacji wewnętrznej. */
+    public static function implicitLabel(string $cidr): string
+    {
+        return match ($cidr) {
+            '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16' => 'adresacja prywatna (RFC 1918)',
+            '100.64.0.0/10' => 'CGNAT (RFC 6598)',
+            default => 'adresacja wewnętrzna',
+        };
+    }
+
+    /**
+     * Adresacja wewnętrzna z ustawienia, w której coś leży (sieć, prefiks, adres, zakres).
+     *
+     * @return array<string,array{start:int,end:int,len:int}>
+     */
+    public function usedImplicit(): array
+    {
+        $out = [];
+        foreach ($this->implicit as $cidr) {
+            $c = IpCalc::parseV4($cidr);
+            $inside = fn (int $a, int $b) => $a >= $c['start'] && $b <= $c['end'];
+            $used = false;
+            foreach (array_merge(array_keys($this->networks), array_keys($this->manualPrefixes)) as $p) {
+                $q = IpCalc::parseV4($p);
+                if ($inside($q['start'], $q['end']) && $q['len'] >= $c['len']) {
+                    $used = true;
+                    break;
+                }
+            }
+            if (! $used) {
+                foreach ($this->ranges as $r) {
+                    if ($inside((int) $r['start'], (int) $r['end'])) {
+                        $used = true;
+                        break;
+                    }
+                }
+            }
+            if (! $used) {
+                foreach (array_keys($this->addr) as $ip) {
+                    if ($inside($ip, $ip)) {
+                        $used = true;
+                        break;
+                    }
+                }
+            }
+            if ($used) {
+                $out[$c['cidr']] = ['start' => $c['start'], 'end' => $c['end'], 'len' => $c['len']];
+            }
+        }
+
+        return $out;
+    }
+
+    /** @return array<string,array{start:int,end:int,len:int,subnet:bool}> sieci z LibreNMS, prefiksy ręczne i adresacja wewnętrzna */
     private function realPrefixes(): array
     {
         $out = [];
+        foreach ($this->implicit as $cidr) {
+            $c = IpCalc::parseV4($cidr);
+            $out[$c['cidr']] = ['start' => $c['start'], 'end' => $c['end'], 'len' => $c['len'], 'subnet' => false];
+        }
         foreach (array_keys($this->networks) as $cidr) {
             $c = IpCalc::parseV4($cidr);
             $out[$cidr] = ['start' => $c['start'], 'end' => $c['end'], 'len' => $c['len'], 'subnet' => true];
@@ -376,6 +438,10 @@ final class IpamIndex
             $c = IpCalc::parseV4($cidr);
             $prefixes[] = ['start' => $c['start'], 'len' => $c['len'], 'src' => 'manual',
                 'subnet' => in_array($m['role'], ['used', 'pool'], true)];
+        }
+        foreach ($this->usedImplicit() as $cidr => $c) {
+            $prefixes[] = ['start' => $c['start'], 'len' => $c['len'], 'src' => 'implicit', 'subnet' => false,
+                'meta' => ['label' => self::implicitLabel($cidr)]];
         }
         $addresses = [];
         foreach (array_keys($this->addr) as $ip) {

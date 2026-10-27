@@ -162,6 +162,7 @@ document.addEventListener('nreg:ready', function () {
     function nodeBadges(n) {
         var h = '';
         if (n.virtual) { h += '<span class="nreg-bdg v">grupa /' + n.len + '</span>'; }
+        if (n.sources.indexOf('implicit') >= 0 && !n.manual && !n.state) { h += '<span class="nreg-bdg v" title="ustawienie „Adresacja wewnętrzna”">wewnętrzna</span>'; }
         if (n.state) { h += '<span class="nreg-bdg ' + n.state + '">' + esc(STATE_BDG[n.state]) + '</span>'; }
         if (n.manual) {
             h += '<span class="nreg-bdg ' + (n.manual.role === 'reserved' ? 'r' : 'm') + '">' + esc(n.manual.role_label) + '</span>';
@@ -458,7 +459,7 @@ document.addEventListener('nreg:ready', function () {
             }
             if (j.orphans_total) {
                 h += '<h5>Adresy bez sieci (' + j.orphans_total + ')</h5><p class="nreg-muted" style="font-size:12px">Adresy, które nie należą do żadnej sieci z LibreNMS'
-                    + ' ani do prefiksu ręcznego, zwykle z maską /32 (loopbacki, aliasy). W drzewie leżą tylko w poziomach grupowania.'
+                    + ' ani do sieci ręcznej, zwykle z maską /32 (loopbacki, aliasy). W drzewie leżą w korzeniu albo w agregacie, poza sieciami.'
                     + ' Żeby je opisać, obejmij je prefiksem ręcznym (np. agregatem).</p><div class="nreg-chips">'
                     + j.orphans.map(function (o) { return '<a href="#" data-goto-ip="' + esc(o.ip) + '" title="' + esc(o.device + ' ' + o['if']) + '">' + esc(o.ip) + '/' + o.len + '</a>'; }).join('') + '</div>';
             }

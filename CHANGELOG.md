@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.1 - 2026-10-27
+
+- Drzewo adresacji zaczyna się od najszerszych prawdziwych prefiksów (sieć z LibreNMS, agregat),
+  a nie od klas /8 i /16, których nie mamy. Poziomy grupowania tylko wewnątrz agregatów. Wolne
+  miejsce widać tylko w znanej adresacji.
+- Ustawienie „Adresacja wewnętrzna” (domyślnie 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16,
+  100.64.0.0/10): te prefiksy są korzeniami jak agregat, gdy coś w nich leży.
+- Adresy poza wszystkimi prefiksami są w korzeniu drzewa. „Wolne /N” odrzuca prefiks spoza
+  znanej adresacji. Zakres może leżeć w adresacji wewnętrznej.
+
 ## 0.5.0 - 2026-10-27
 
 - **Zakresy adresów (pule)** jako jeden wpis ręczny adresacji: `a-b` z rolą pula DHCP, pula PPPoE,

@@ -274,30 +274,38 @@ throws('input śmieci', fn () => IpInput::parse('abc'));
 
 // --- IpTree ---
 $pfx = fn (string $cidr, string $src = 'lnms', bool $subnet = true) => ['start' => IpCalc::parseV4($cidr)['start'], 'len' => IpCalc::parseV4($cidr)['len'], 'src' => $src, 'subnet' => $subnet];
+// 45.10.136.0/22 to agregat (nasz przydział), 10.0.0.0/8 to adresacja wewnętrzna,
+// 193.0.0.1 to publiczny loopback bez prefiksu.
 $tree = new IpTree(
-    [$pfx('45.10.136.0/24'), $pfx('45.10.136.0/22', 'manual', false), $pfx('10.218.8.0/30'), $pfx('10.218.8.4/30')],
-    [['ip' => $ip('45.10.136.1')], ['ip' => $ip('45.10.136.2')], ['ip' => $ip('10.218.8.1')], ['ip' => $ip('10.218.8.5')], ['ip' => $ip('10.218.0.3')]],
+    [$pfx('45.10.136.0/24'), $pfx('45.10.136.0/22', 'manual', false), $pfx('10.218.8.0/30'), $pfx('10.218.8.4/30'),
+        $pfx('10.0.0.0/8', 'implicit', false), $pfx('91.238.142.0/24')],
+    [['ip' => $ip('45.10.136.1')], ['ip' => $ip('45.10.136.2')], ['ip' => $ip('10.218.8.1')], ['ip' => $ip('10.218.8.5')], ['ip' => $ip('10.218.0.3')],
+        ['ip' => $ip('193.0.0.1')]],
     [8, 16, 24]
 );
-check('tree korzenie', $tree->roots(), ['10.0.0.0/8', '45.0.0.0/8']);
+check('tree korzenie: najszersze prawdziwe prefiksy, bez klas nad nimi', $tree->roots(), ['10.0.0.0/8', '45.10.136.0/22', '91.238.142.0/24']);
+check('tree brak 45.0.0.0/8 i 45.10.0.0/16', [$tree->node('45.0.0.0/8'), $tree->node('45.10.0.0/16')], [null, null]);
 check('tree rodzic /24', $tree->node('45.10.136.0/24')['parent'], '45.10.136.0/22');
-check('tree rodzic /22 (wirtualny /16)', $tree->node('45.10.136.0/22')['parent'], '45.10.0.0/16');
+check('tree /22 bez rodzica', $tree->node('45.10.136.0/22')['parent'], null);
 check('tree /22 nie ma wirtualnego /24 nad sobą', $tree->node('45.10.136.0/24')['sources'], ['lnms' => true]);
-check('tree wirtualny', IpTree::isVirtual($tree->node('45.10.0.0/16')), true);
 check('tree adres w /24', $tree->deepest($ip('45.10.136.2')), '45.10.136.0/24');
-check('tree adres poza siecią -> wirtualny /24', $tree->deepest($ip('10.218.0.3')), '10.218.0.0/24');
+check('tree adres poza siecią w adresacji wewnętrznej -> wirtualny /24', $tree->deepest($ip('10.218.0.3')), '10.218.0.0/24');
 check('tree /30 pod wirtualnym /24', $tree->node('10.218.8.0/30')['parent'], '10.218.8.0/24');
+check('tree wirtualny /16 w adresacji wewnętrznej', IpTree::isVirtual($tree->node('10.218.0.0/16')), true);
+check('tree publiczny loopback w korzeniu', [$tree->deepest($ip('193.0.0.1')), $tree->node('193.0.0.0/24')], [null, null]);
+check('tree adresy w korzeniu', array_map(fn ($i) => IpCalc::int2ip($tree->address($i)['ip']), $tree->rootAddresses()), ['193.0.0.1']);
+check('tree inNetwork', [$tree->inNetwork($ip('10.218.8.1')), $tree->inNetwork($ip('10.218.0.3')), $tree->inNetwork($ip('193.0.0.1'))], [true, false, false]);
+check('tree realContainer', [$tree->realContainer($ip('45.10.138.0'), $ip('45.10.139.255')), $tree->realContainer($ip('45.10.0.0'), $ip('45.10.255.255')),
+    $tree->realContainer($ip('10.5.0.0'), $ip('10.5.0.255'))], ['45.10.136.0/22', null, '10.0.0.0/8']);
 $s24 = $tree->node('45.10.136.0/24')['stats'];
 check('tree /24 sieć: hosty', [$s24['capacity'], $s24['used'], $s24['free'], $s24['addresses']], [254, 2, 252, 2]);
 $s22 = $tree->node('45.10.136.0/22')['stats'];
 check('tree /22 agregat: zajęta jedna /24', [$s22['capacity'], $s22['used'], $s22['util']], [1024, 256, 25.0]);
-$s16 = $tree->node('45.10.0.0/16')['stats'];
-check('tree wirtualny /16 liczy tylko /22', [$s16['used'], $s16['addresses']], [1024, 2]);
 $s8 = $tree->node('10.0.0.0/8')['stats'];
-check('tree wirtualny /8 przezroczysty (2x /30 + 1 adres)', $s8['used'], 9);
+check('tree adresacja wewnętrzna /8 (2x /30 + 1 adres)', $s8['used'], 9);
 check('tree wolne bloki /22', array_column($tree->freeBlocks('45.10.136.0/22', 5), 'cidr'), ['45.10.138.0/23', '45.10.137.0/24']);
 check('tree wolne /30 sieci', $tree->node('10.218.8.0/30')['stats']['free'], 1);
-check('tree ścieżka', $tree->path('45.10.136.0/24'), ['45.0.0.0/8', '45.10.0.0/16', '45.10.136.0/22', '45.10.136.0/24']);
+check('tree ścieżka', $tree->path('45.10.136.0/24'), ['45.10.136.0/22', '45.10.136.0/24']);
 $empty = new IpTree([], [], [8, 16, 24]);
 check('tree pusty', $empty->roots(), []);
 
@@ -305,7 +313,7 @@ check('tree pusty', $empty->roots(), []);
 $t16 = new IpTree([$pfx('172.19.0.0/16')], [['ip' => $ip('172.19.0.1')]], [8, 16, 24]);
 check('tree: adres w sieci /16', $t16->deepest($ip('172.19.0.1')), '172.19.0.0/16');
 check('tree: brak wirtualnego /24 w sieci', $t16->node('172.19.0.0/24'), null);
-check('tree: wirtualny /8 nad siecią zostaje', $t16->node('172.19.0.0/16')['parent'], '172.0.0.0/8');
+check('tree: brak wirtualnego /8 nad siecią', [$t16->node('172.19.0.0/16')['parent'], $t16->roots()], [null, ['172.19.0.0/16']]);
 // W agregacie (nie sieci) poziomy grupowania zostają.
 $tAgg = new IpTree([$pfx('10.0.0.0/16', 'manual', false), $pfx('10.0.5.0/30')], [], [8, 16, 24]);
 check('tree: wirtualny /24 w agregacie', IpTree::isVirtual($tAgg->node('10.0.5.0/24')), true);
@@ -341,7 +349,7 @@ $tRA = new IpTree([$pfx('10.2.0.0/16', 'manual', false)], [], [8, 16, 24],
 check('tree zakres tworzy wirtualny /24', $tRA->range(1)['node'], '10.2.5.0/24');
 check('tree zakres przez granicę /24 należy do agregatu', $tRA->range(2)['node'], '10.2.0.0/16');
 check('tree agregat liczy oba zakresy', $tRA->node('10.2.0.0/16')['stats']['used'], 11 + 67);
-check('tree zakres bez prefiksu', (new IpTree([], [], [8, 16, 24], [['id' => 3, 'start' => $ip('192.0.2.1'), 'end' => $ip('192.0.2.9')]]))->range(3)['node'], '192.0.2.0/24');
+check('tree zakres bez prefiksu w korzeniu', (new IpTree([], [], [8, 16, 24], [['id' => 3, 'start' => $ip('192.0.2.1'), 'end' => $ip('192.0.2.9')]]))->range(3)['node'], null);
 
 // IpamIndex::rangeContainer na wpisach ręcznych (bez migawki).
 $mp = function (int $id, string $cidr, string $role) {
@@ -356,6 +364,10 @@ check('kontener: przecina sieć', $idxR->rangeContainer($ip('10.3.0.250'), $ip('
 check('kontener: adres sieci', $idxR->rangeContainer($ip('10.3.1.0'), $ip('10.3.1.5'))[0], null);
 check('kontener: rozgłoszeniowy', $idxR->rangeContainer($ip('10.3.1.250'), $ip('10.3.1.255'))[0], null);
 check('kontener: poza prefiksami', $idxR->rangeContainer($ip('10.9.0.1'), $ip('10.9.0.5'))[0], null);
+$idxP = new IpamIndex([], [$mp(1, '10.3.1.0/24', 'used')], 1, [], new DateTimeImmutable('2026-10-27'), 30, 'stale', [8, 16, 24], ['10.0.0.0/8', '192.168.0.0/16']);
+check('kontener: adresacja wewnętrzna', $idxP->rangeContainer($ip('10.9.0.1'), $ip('10.9.0.5')), ['10.0.0.0/8', null]);
+check('wewnętrzna tylko używana', array_keys($idxP->usedImplicit()), ['10.0.0.0/8']);
+check('wewnętrzna w drzewie', $idxP->tree()->roots(), ['10.0.0.0/8']);
 
 // --- Expiry: termin ważności wpisów ręcznych ---
 $today = '2026-10-27';

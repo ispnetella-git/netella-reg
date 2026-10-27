@@ -185,6 +185,23 @@ final class IpamModule extends AbstractModule
         return array_values($out) ?: [8, 16, 24];
     }
 
+    /** @return list<string> adresacja wewnętrzna z ustawienia (poprawne prefiksy) */
+    private static function implicitPrefixes(): array
+    {
+        $out = [];
+        foreach (preg_split('/[\s,;]+/', (string) Settings::get('ipam_private', ''), -1, PREG_SPLIT_NO_EMPTY) as $p) {
+            try {
+                $c = IpCalc::parseV4($p, true);
+                if ($c['len'] < 32) {
+                    $out[$c['cidr']] = $c['cidr'];
+                }
+            } catch (\InvalidArgumentException) {
+            }
+        }
+
+        return array_values($out);
+    }
+
     private function index(int $space, ?\DateTimeImmutable $now = null): IpamIndex
     {
         $spaces = $this->spaces()->all();
@@ -200,7 +217,8 @@ final class IpamModule extends AbstractModule
             $now ?? new \DateTimeImmutable(),
             Settings::graceDays(),
             Settings::disabledMode(),
-            self::levels()
+            self::levels(),
+            self::implicitPrefixes()
         );
     }
 
@@ -229,11 +247,15 @@ final class IpamModule extends AbstractModule
             $vlans[$manual['vlan']] = true;
         }
 
-        // Etykieta: wpis ręczny, potem opisy interfejsów z LibreNMS.
+        // Etykieta: wpis ręczny, potem opisy interfejsów z LibreNMS, potem adresacja wewnętrzna.
         $label = $manual ? ($manual['name'] ?: $manual['description']) : null;
         if ($label === null && $lnms !== []) {
             $label = implode(', ', array_slice(array_values(array_unique(array_filter(array_map(
                 fn ($l) => $l['alias'] ?: ($l['device'] . ' ' . $l['if']), $lnms)))), 0, 3));
+        }
+        if ($label === null && isset($n['meta']['label'])) {
+            $label = (array) $n['meta']['label'];
+            $label = $label[0];
         }
 
         $active = array_filter($lnms, fn ($l) => $l['state'] === IpamIndex::LNMS);
@@ -329,8 +351,9 @@ final class IpamModule extends AbstractModule
         }
 
         if ($node === '') {
+            // Korzeń: najszersze prawdziwe prefiksy i adresy poza wszystkimi prefiksami.
             $children = $tree->roots();
-            $addr = [];
+            $addr = $tree->rootAddresses();
             $parent = null;
             $rangeIds = $tree->rootRanges();
         } else {
@@ -584,6 +607,12 @@ final class IpamModule extends AbstractModule
         }
         $idx = $this->index($space);
 
+        // Szukamy tylko w adresacji, którą znamy (sieć, prefiks ręczny, adresacja wewnętrzna).
+        if ($idx->tree()->realContainer($w['start'], $w['end']) === null) {
+            throw new ApiException("{$w['cidr']} nie leży w żadnej znanej adresacji (sieć z LibreNMS, prefiks ręczny, adresacja wewnętrzna). "
+                . 'Jeśli to Wasza pula, dodaj ją najpierw jako agregat.');
+        }
+
         // Zajęte: prefiksy leżące wewnątrz (nie sam przeszukiwany i nie te, które go zawierają) i adresy.
         $busy = [];
         foreach (array_merge(array_keys($idx->networks()), array_keys($idx->manualPrefixes())) as $cidr) {
@@ -634,8 +663,7 @@ final class IpamModule extends AbstractModule
             if ($a['rows'] === []) {
                 continue;
             }
-            $node = $tree->deepest($ip);
-            if ($node === null || IpTree::isVirtual($tree->node($node))) {
+            if (! $tree->inNetwork($ip)) {
                 $r = $a['rows'][0]['data'];
                 $orphans[] = ['ip' => IpCalc::int2ip($ip), 'len' => $r['len'], 'device' => $r['device'], 'if' => $r['if']];
             }

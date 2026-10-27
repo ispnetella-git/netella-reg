@@ -116,7 +116,14 @@
         <div class="form-group">
             <label>Poziomy grupowania drzewa (maski)</label>
             <input class="form-control nreg-mono" style="width: 200px;" name="settings[ipam_levels]" value="{{ $s['ipam_levels'] ?? '8,16,24' }}">
-            <p class="pomoc">Drzewo rozwija się klasa po klasie na tych maskach, gdy nie ma tam prawdziwego prefiksu. Np. 8,16,24 albo 8,12,16,20,24.</p>
+            <p class="pomoc">Wewnątrz agregatów (i adresacji wewnętrznej) drzewo rozwija się klasa po klasie na tych maskach, gdy nie ma tam prawdziwego prefiksu. Np. 8,16,24 albo 8,12,16,20,24.</p>
+        </div>
+        <div class="form-group">
+            <label>Adresacja wewnętrzna</label>
+            <input class="form-control nreg-mono" style="width: 420px;" name="settings[ipam_private]" value="{{ $s['ipam_private'] ?? '10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10' }}">
+            <p class="pomoc">Prefiksy, którymi dysponujecie w całości (zwykle prywatne RFC 1918 i CGNAT). W drzewie są korzeniami jak agregat,
+                z wolnym miejscem, o ile coś w nich leży. Adresacja publiczna nie dostaje nad sobą żadnej klasy: korzeniem jest najszerszy
+                prawdziwy prefiks (sieć z LibreNMS albo agregat). Swój przydział publiczny (np. od RIPE) dodaj jako agregat.</p>
         </div>
 
         <h5>Kopie zapasowe</h5>
