@@ -42,7 +42,13 @@ final class AuditLog
         self::INITIAL_IMPORT => 'pierwszy import',
     ];
 
-    /** Zmiana wprowadzona przez zalogowanego użytkownika. */
+    /**
+     * Zmiana wprowadzona przez zalogowanego użytkownika.
+     *
+     * $range = [od, do]: wpis grupowy dotyczy całego zakresu liczbowego (np. VLAN-ów
+     * dodanych naraz). Jedna akcja użytkownika to jeden wpis, a historia
+     * pojedynczego numeru znajduje go przez filtr "covers".
+     */
     public static function user(
         string $module,
         string $entityType,
@@ -51,6 +57,7 @@ final class AuditLog
         ?array $before,
         ?array $after,
         ?string $comment = null,
+        ?array $range = null,
     ): void {
         $ip = null;
         try {
@@ -61,7 +68,7 @@ final class AuditLog
 
         Db::connection()->table(Db::AUDIT)->insert(self::row(
             $module, $entityType, $entityKey, $action, self::SOURCE_USER, $before, $after, $comment,
-            Access::userId(), Access::username(), $ip
+            Access::userId(), Access::username(), $ip, null, $range
         ));
     }
 
@@ -82,12 +89,15 @@ final class AuditLog
         ?string $username = null,
         ?string $ip = null,
         ?\DateTimeInterface $ts = null,
+        ?array $range = null,
     ): array {
         return [
             'ts' => ($ts ?? new \DateTimeImmutable())->format('Y-m-d H:i:s'),
             'module' => $module,
             'entity_type' => $entityType,
             'entity_key' => mb_substr($entityKey, 0, 191),
+            'range_from' => $range === null ? null : (int) $range[0],
+            'range_to' => $range === null ? null : (int) $range[1],
             'action' => $action,
             'source' => $source,
             'user_id' => $userId,
@@ -110,7 +120,10 @@ final class AuditLog
     /**
      * Strona dziennika z filtrami.
      *
-     * @param  array{module?:string,action?:string,source?:string,q?:string,key_prefix?:string,keys?:list<string>}  $filters
+     * key_prefix i covers łączy OR: "wpisy tego rekordu albo wpisy grupowe,
+     * których zakres go obejmuje".
+     *
+     * @param  array{module?:string,action?:string,source?:string,q?:string,key_prefix?:string,covers?:int,keys?:list<string>}  $filters
      * @return array{rows:list<array>,total:int}
      */
     public static function page(array $filters, int $page = 1, int $perPage = 50): array
@@ -127,8 +140,17 @@ final class AuditLog
             $q->whereIn('entity_key', $filters['keys']);
         }
 
-        if (! empty($filters['key_prefix'])) {
-            $q->where('entity_key', 'like', addcslashes($filters['key_prefix'], '%_\\') . '%');
+        $prefix = $filters['key_prefix'] ?? '';
+        $covers = $filters['covers'] ?? null;
+        if ($prefix !== '' || $covers !== null) {
+            $q->where(function ($w) use ($prefix, $covers) {
+                if ($prefix !== '') {
+                    $w->orWhere('entity_key', 'like', addcslashes($prefix, '%_\\') . '%');
+                }
+                if ($covers !== null) {
+                    $w->orWhere(fn ($r) => $r->where('range_from', '<=', (int) $covers)->where('range_to', '>=', (int) $covers));
+                }
+            });
         }
 
         if (! empty($filters['q'])) {

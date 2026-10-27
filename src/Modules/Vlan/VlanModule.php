@@ -44,15 +44,13 @@ final class VlanModule extends AbstractModule
 
     public function schemaVersion(): int
     {
-        return 2;
+        return 3;
     }
 
     public function migrate(Connection $db, int $from): void
     {
-        // Wersja 1 korzystała tylko z tabel rdzenia (reg_snapshot, reg_audit).
-        if ($from < 2) {
-            VlanManual::migrate($db);
-        }
+        // 1: tylko tabele rdzenia, 2: reg_vlan_manual, 3: grupy (batch_id) i scalenie dziennika.
+        VlanManual::migrate($db, $from);
     }
 
     public function sync(SyncContext $ctx): array
@@ -117,13 +115,23 @@ final class VlanModule extends AbstractModule
         return $c === '' ? null : mb_substr($c, 0, 1000);
     }
 
+    /** Lista wpisów ręcznych: jedna pozycja na grupę dodaną jednym kliknięciem. */
     private function apiManualList(): array
     {
         $index = $this->index();
-        $rows = array_values(array_map(fn (array $m) => $m + [
-            'current' => $index->status($m['vlan']),
-            'current_label' => VlanIndex::LABELS[$index->status($m['vlan'])],
-        ], $this->manualRepo()->active()));
+        $rows = array_map(function (array $g) use ($index) {
+            // Stan grupy teraz: statusy numerów z ich liczbą, np. "wpis ręczny 85, LibreNMS 2".
+            $now = [];
+            $adopted = 0;
+            foreach ($g['vlans_list'] as $v) {
+                $label = VlanIndex::LABELS[$index->status($v)];
+                $now[$label] = ($now[$label] ?? 0) + 1;
+                $adopted += empty($index->manual($v)['adopted_at']) ? 0 : 1;
+            }
+            unset($g['vlans_list']);
+
+            return $g + ['current' => $now, 'adopted_count' => $adopted];
+        }, $this->manualRepo()->grouped());
 
         return ['rows' => $rows, 'status_labels' => VlanManual::STATUS_LABELS];
     }
@@ -151,7 +159,8 @@ final class VlanModule extends AbstractModule
         $row = $this->manualRepo()->update(
             (int) $request->input('id', 0),
             $request->only(['name', 'description', 'owner', 'status', 'devices']),
-            self::comment($request)
+            self::comment($request),
+            $request->boolean('group')
         );
 
         return ['entry' => $row];
@@ -160,14 +169,48 @@ final class VlanModule extends AbstractModule
     private function apiManualDelete(Request $request): array
     {
         $this->requirePost($request);
-        $this->manualRepo()->delete((int) $request->input('id', 0), self::comment($request));
+        $vlans = $this->manualRepo()->delete((int) $request->input('id', 0), self::comment($request), $request->boolean('group'));
 
-        return ['deleted' => true];
+        return ['deleted' => VlanRange::compress($vlans), 'count' => count($vlans)];
     }
 
     private function manualRepo(): VlanManual
     {
         return new VlanManual(Db::connection());
+    }
+
+    /** Grupa wpisu (numery i ich liczba) albo null, gdy wpis jest pojedynczy. */
+    private function groupOf(?array $entry): ?array
+    {
+        if ($entry === null || empty($entry['batch_id'])) {
+            return null;
+        }
+        $vlans = Db::connection()->table(VlanManual::TABLE)->where('batch_id', $entry['batch_id'])
+            ->whereNull('deleted_at')->orderBy('vlan')->pluck('vlan')->map(fn ($v) => (int) $v)->all();
+
+        return count($vlans) > 1 ? ['vlans' => VlanRange::compress($vlans), 'count' => count($vlans)] : null;
+    }
+
+    /**
+     * Historia numeru: jego własne wpisy i wpisy grupowe, których lista "vlans"
+     * go zawiera. Zakres range_from-range_to to tylko przybliżenie (lista może
+     * mieć dziury, np. "100,105"), więc dokładne sprawdzenie jest tutaj.
+     */
+    private static function historyOf(int $vlan): array
+    {
+        $rows = AuditLog::page(['module' => self::KEY, 'key_prefix' => "v{$vlan}:", 'covers' => $vlan], 1, 200)['rows'];
+
+        return array_values(array_filter($rows, function (array $r) use ($vlan) {
+            $list = $r['after']['vlans'] ?? $r['before']['vlans'] ?? null;
+            if ($list === null || $r['range_from'] === null) {
+                return true;
+            }
+            try {
+                return in_array($vlan, VlanRange::parse((string) $list), true);
+            } catch (\InvalidArgumentException) {
+                return true;
+            }
+        }));
     }
 
     public function deviceOverview(int $deviceId): ?array
@@ -252,9 +295,10 @@ final class VlanModule extends AbstractModule
             'names' => $names,
             // Wpis ręczny: przy numerze z LibreNMS to adnotacja, inaczej źródło statusu.
             'manual' => $index->manual($vlan),
+            'manual_group' => $this->groupOf($index->manual($vlan)),
             'status_labels' => VlanManual::STATUS_LABELS,
             'occurrences' => $occ,
-            'history' => AuditLog::page(['module' => self::KEY, 'key_prefix' => "v{$vlan}:"], 1, 100)['rows'],
+            'history' => self::historyOf($vlan),
         ];
     }
 

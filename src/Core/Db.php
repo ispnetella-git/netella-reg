@@ -33,7 +33,7 @@ final class Db
     public const STATE = 'reg_state';
 
     /** Wersja schematu rdzenia. */
-    public const CORE_VERSION = 1;
+    public const CORE_VERSION = 2;
 
     private static bool $ensured = false;
 
@@ -195,6 +195,19 @@ final class Db
                     $t->string('k', 191)->primary();
                     $t->longText('v')->nullable();
                     $t->dateTime('updated_at');
+                });
+            }
+        }
+
+        if ($from < 2) {
+            // Zakres liczbowy, którego dotyczy wpis (np. VLAN-y 1313-1399 dodane
+            // jednym kliknięciem = jeden wpis). Historia pojedynczego numeru
+            // znajduje wtedy wpis grupowy po range_from <= n <= range_to.
+            if (! $schema->hasColumn(self::AUDIT, 'range_from')) {
+                $schema->table(self::AUDIT, function (Blueprint $t) {
+                    $t->unsignedInteger('range_from')->nullable()->after('entity_key');
+                    $t->unsignedInteger('range_to')->nullable()->after('range_from');
+                    $t->index(['module', 'range_from', 'range_to']);
                 });
             }
         }

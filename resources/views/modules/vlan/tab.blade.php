@@ -64,6 +64,7 @@
     <form class="nreg-form" id="nreg-vlan-form" style="display:none" autocomplete="off">
         <h4 id="nreg-vf-title" style="margin-top:0">Dodaj VLAN</h4>
         <input type="hidden" name="id">
+        <input type="hidden" name="group" value="0">
         <div class="row">
             <div class="col-sm-3">
                 <label class="req" for="nreg-vf-range">Numer lub zakres</label>
@@ -238,19 +239,28 @@ document.addEventListener('nreg:ready', function () {
     }
 
     // --- wpisy ręczne ---
+    // Grupa = numery dodane jednym kliknięciem. Edycja i usunięcie grupy to jeden
+    // wpis w dzienniku. Edycja pojedynczego numeru odłącza go od grupy.
 
-    function manualButtons(m) {
-        var h = '';
-        if (can.canEdit) { h += '<button class="btn btn-default btn-xs" type="button" data-edit="' + m.id + '"><i class="fa fa-pencil"></i> Edytuj</button> '; }
-        if (can.canDelete) { h += '<button class="btn btn-danger btn-xs" type="button" data-del="' + m.id + '" data-del-vlan="' + m.vlan + '"><i class="fa fa-trash"></i> Usuń</button>'; }
+    function manualButtons(m, grp) {
+        var h = '', many = grp && grp.count > 1;
+        if (can.canEdit) {
+            if (many) { h += '<button class="btn btn-default btn-xs" type="button" data-edit="' + m.id + '" data-group="1"><i class="fa fa-pencil"></i> Edytuj grupę (' + grp.count + ')</button> '; }
+            if (!many || m.vlan) { h += '<button class="btn btn-default btn-xs" type="button" data-edit="' + m.id + '" data-group="0"><i class="fa fa-pencil"></i> Edytuj' + (many ? ' ten numer' : '') + '</button> '; }
+        }
+        if (can.canDelete) {
+            if (many) { h += '<button class="btn btn-danger btn-xs" type="button" data-del="' + m.id + '" data-group="1" data-label="' + esc(grp.vlans) + '"><i class="fa fa-trash"></i> Usuń grupę (' + grp.count + ')</button> '; }
+            if (!many || m.vlan) { h += '<button class="btn btn-danger btn-xs" type="button" data-del="' + m.id + '" data-group="0" data-label="' + esc(m.vlan || (grp && grp.vlans) || '') + '"><i class="fa fa-trash"></i> Usuń' + (many ? ' ten numer' : '') + '</button>'; }
+        }
         return h;
     }
 
-    function manualBlock(m, statusLabels) {
+    function manualBlock(m, statusLabels, grp) {
         var adopted = m.adopted_at
             ? '<span class="label label-primary">przejęty przez LibreNMS ' + esc(m.adopted_at) + '</span> dane LibreNMS mają pierwszeństwo'
             : '<span class="label label-default">tylko ręcznie</span> LibreNMS nie widzi tego numeru';
         return '<div class="nreg-manual"><strong>Wpis ręczny</strong> ' + adopted + '<dl style="margin-top:6px">'
+            + (grp ? '<dt>Grupa</dt><dd><span class="nreg-mono">' + esc(grp.vlans) + '</span> (' + grp.count + ' numerów dodanych razem)</dd>' : '')
             + '<dt>Status</dt><dd>' + esc((statusLabels || {})[m.status] || m.status) + '</dd>'
             + (m.name ? '<dt>Nazwa</dt><dd>' + esc(m.name) + '</dd>' : '')
             + '<dt>Opis</dt><dd>' + esc(m.description) + '</dd>'
@@ -258,7 +268,7 @@ document.addEventListener('nreg:ready', function () {
             + (m.devices ? '<dt>Urządzenia</dt><dd>' + esc(m.devices) + '</dd>' : '')
             + '<dt>Dodał</dt><dd>' + esc(m.created_by || '?') + ', ' + esc(m.created_at) + '</dd>'
             + (m.updated_at !== m.created_at ? '<dt>Ostatnia zmiana</dt><dd>' + esc(m.updated_by || '?') + ', ' + esc(m.updated_at) + '</dd>' : '')
-            + '</dl><div style="margin-top:6px">' + manualButtons(m) + '</div></div>';
+            + '</dl><div style="margin-top:6px">' + manualButtons(m, grp) + '</div></div>';
     }
 
     var manualCache = {};
@@ -267,34 +277,42 @@ document.addEventListener('nreg:ready', function () {
         var box = manualList.querySelector('div');
         return N.api('vlan/manual_list').then(function (j) {
             manualCache = {};
-            j.rows.forEach(function (m) { manualCache[m.id] = m; });
-            manualList.querySelector('summary').textContent = 'Wpisy ręczne (' + j.rows.length + ')';
+            var total = 0;
+            j.rows.forEach(function (m) { manualCache[m.id] = m; total += m.count; });
+            manualList.querySelector('summary').textContent = 'Wpisy ręczne (' + j.rows.length + ' pozycji, ' + total + ' numerów)';
             if (!j.rows.length) {
                 box.innerHTML = '<p class="nreg-muted">Brak wpisów ręcznych.' + (can.canEdit ? ' Dodaj je przyciskiem „Dodaj VLAN”.' : '') + '</p>';
                 return;
             }
-            var h = '<table class="table table-condensed table-hover"><thead><tr><th>VLAN</th><th>Status</th><th>Stan teraz</th>'
+            var h = '<table class="table table-condensed table-hover"><thead><tr><th>VLAN-y</th><th>Status</th><th>Stan teraz</th>'
                 + '<th>Nazwa</th><th>Opis</th><th>Właściciel</th><th>Urządzenia</th><th>Dodał</th><th></th></tr></thead><tbody>';
             j.rows.forEach(function (m) {
-                h += '<tr><td><a href="#" data-vlan="' + m.vlan + '">' + m.vlan + '</a></td><td>' + esc(m.status_label) + '</td>'
-                    + '<td>' + esc(m.current_label) + (m.adopted_at ? ' <span class="label label-primary" title="' + esc(m.adopted_at) + '">przejęty</span>' : '') + '</td>'
+                var first = parseInt(String(m.vlans).split(/[-,]/)[0], 10);
+                var now = Object.keys(m.current).map(function (k) { return esc(k) + (m.count > 1 ? ' ' + m.current[k] : ''); }).join(', ');
+                h += '<tr><td class="nreg-mono"><a href="#" data-vlan="' + first + '">' + esc(m.vlans) + '</a>'
+                    + (m.count > 1 ? ' <span class="nreg-muted">(' + m.count + ')</span>' : '') + '</td><td>' + esc(m.status_label) + '</td>'
+                    + '<td>' + now + (m.adopted_count ? ' <span class="label label-primary">przejęte: ' + m.adopted_count + '</span>' : '') + '</td>'
                     + '<td>' + esc(m.name || '') + '</td><td>' + esc(m.description) + '</td><td>' + esc(m.owner || '') + '</td>'
                     + '<td>' + esc(m.devices || '') + '</td><td style="font-size:11px">' + esc(m.created_by || '?') + '<br>' + esc(m.created_at) + '</td>'
-                    + '<td style="white-space:nowrap">' + manualButtons(m) + '</td></tr>';
+                    + '<td style="white-space:nowrap">' + manualButtons({ id: m.id }, { vlans: m.vlans, count: m.count }) + '</td></tr>';
             });
             box.innerHTML = h + '</tbody></table>';
         }).catch(function (e) { box.innerHTML = alertBox('danger', esc(e.message)); });
     }
 
-    function openForm(entry, range) {
+    // entry: wpis do edycji (null = dodawanie); group: edycja całej grupy.
+    function openForm(entry, range, group) {
         if (!form) { return; }
         form.reset();
         document.getElementById('nreg-vf-error').textContent = '';
         form.elements.id.value = entry ? entry.id : '';
+        form.elements.group.value = group ? '1' : '0';
         var r = document.getElementById('nreg-vf-range');
-        r.value = entry ? entry.vlan : (range || document.getElementById('nreg-vlan-range').value || '');
+        var label = entry ? (group ? entry.vlans : (entry.vlan || entry.vlans)) : '';
+        r.value = entry ? label : (range || document.getElementById('nreg-vlan-range').value || '');
         r.disabled = !!entry;
-        document.getElementById('nreg-vf-title').textContent = entry ? 'Edycja wpisu ręcznego VLAN ' + entry.vlan : 'Dodaj VLAN (wpis ręczny)';
+        document.getElementById('nreg-vf-title').textContent = !entry ? 'Dodaj VLAN (wpis ręczny)'
+            : (group ? 'Edycja grupy VLAN ' + label + ' (' + entry.count + ')' : 'Edycja wpisu ręcznego VLAN ' + label);
         if (entry) {
             ['status', 'name', 'description', 'owner', 'devices'].forEach(function (f) { form.elements[f].value = entry[f] || (f === 'status' ? 'used' : ''); });
         }
@@ -315,14 +333,15 @@ document.addEventListener('nreg:ready', function () {
             var data = {};
             ['status', 'name', 'description', 'owner', 'devices', 'comment'].forEach(function (f) { data[f] = form.elements[f].value; });
             var id = form.elements.id.value, path;
-            if (id) { data.id = id; path = 'vlan/manual_update'; } else { data.range = form.elements.range.value; path = 'vlan/manual_create'; }
+            if (id) { data.id = id; data.group = form.elements.group.value === '1'; path = 'vlan/manual_update'; }
+            else { data.range = form.elements.range.value; path = 'vlan/manual_create'; }
             btn.disabled = true; err.textContent = '';
             N.api(path, data, 'POST').then(function (j) {
                 form.style.display = 'none';
                 if (id) {
-                    result.innerHTML = alertBox('success', 'Zapisano zmiany wpisu VLAN ' + esc(j.entry.vlan) + '.');
+                    result.innerHTML = alertBox('success', 'Zapisano zmiany' + (data.group ? ' grupy' : ' wpisu VLAN ' + esc(j.entry.vlan)) + '.');
                 } else {
-                    result.innerHTML = alertBox('success', 'Dodano ' + j.count + ' wpis(ów): <span class="nreg-mono">' + esc(j.created) + '</span>.');
+                    result.innerHTML = alertBox('success', 'Dodano ' + j.count + ' numer(ów) jako jedną pozycję: <span class="nreg-mono">' + esc(j.created) + '</span>.');
                     highlight(expand(j.created));
                 }
                 return refreshAll();
@@ -331,12 +350,13 @@ document.addEventListener('nreg:ready', function () {
         document.getElementById('nreg-vlan-add').addEventListener('click', function () { openForm(null); });
     }
 
-    function deleteEntry(id, vlan) {
-        if (!window.confirm('Usunąć wpis ręczny VLAN ' + vlan + '? Zostanie w dzienniku zmian.')) { return; }
+    function deleteEntry(id, label, group) {
+        var what = group ? 'całą grupę VLAN ' + label : 'wpis ręczny VLAN ' + label;
+        if (!window.confirm('Usunąć ' + what + '? Zostanie w dzienniku zmian.')) { return; }
         var comment = window.prompt('Komentarz do usunięcia (opcjonalnie, trafi do dziennika):', '');
         if (comment === null) { return; }
-        N.api('vlan/manual_delete', { id: id, comment: comment }, 'POST').then(function () {
-            result.innerHTML = alertBox('success', 'Usunięto wpis ręczny VLAN ' + esc(vlan) + '.');
+        N.api('vlan/manual_delete', { id: id, comment: comment, group: group }, 'POST').then(function (j) {
+            result.innerHTML = alertBox('success', 'Usunięto wpis ręczny VLAN <span class="nreg-mono">' + esc(j.deleted) + '</span>.');
             return refreshAll();
         }).catch(function (e) { result.innerHTML = alertBox('danger', esc(e.message)); });
     }
@@ -350,9 +370,9 @@ document.addEventListener('nreg:ready', function () {
             openForm(null, t.getAttribute('data-add'));
         } else if ((t = e.target.closest('button[data-edit]'))) {
             var id = t.getAttribute('data-edit');
-            if (manualCache[id]) { openForm(manualCache[id]); }
+            if (manualCache[id]) { openForm(manualCache[id], null, t.getAttribute('data-group') === '1'); }
         } else if ((t = e.target.closest('button[data-del]'))) {
-            deleteEntry(t.getAttribute('data-del'), t.getAttribute('data-del-vlan'));
+            deleteEntry(t.getAttribute('data-del'), t.getAttribute('data-label'), t.getAttribute('data-group') === '1');
         }
     });
 
@@ -368,8 +388,9 @@ document.addEventListener('nreg:ready', function () {
                 h += '<div class="alert alert-info" style="padding:6px 10px">Ten numer ma różne nazwy na różnych urządzeniach.</div>';
             }
             if (j.manual) {
-                manualCache[j.manual.id] = j.manual;
-                h += manualBlock(j.manual, j.status_labels);
+                // W cache wpis z informacją o grupie, żeby "Edytuj grupę" znał jej zakres.
+                manualCache[j.manual.id] = Object.assign({}, j.manual, j.manual_group || {});
+                h += manualBlock(j.manual, j.status_labels, j.manual_group);
             } else if (can.canEdit && j.status !== 'l' && j.status !== 's') {
                 // Numerów widocznych w LibreNMS nie da się dodać ręcznie (blokada w API).
                 h += '<p><button class="btn btn-success btn-xs" type="button" data-add="' + j.vlan + '"><i class="fa fa-plus"></i> Dodaj wpis ręczny</button></p>';
@@ -394,13 +415,7 @@ document.addEventListener('nreg:ready', function () {
             if (!j.history.length) {
                 h += '<p class="nreg-muted">Brak zmian od pierwszego importu.</p>';
             } else {
-                h += '<table class="table table-condensed"><thead><tr><th style="width:150px">Data</th><th>Rekord</th><th>Zdarzenie</th><th>Kto</th><th>Zmiany</th></tr></thead><tbody>';
-                j.history.forEach(function (r) {
-                    h += '<tr><td class="nreg-mono">' + esc(r.ts) + '</td><td class="nreg-mono">' + esc(r.entity_key) + '</td><td>'
-                        + esc(r.action_label) + (r.comment ? '<br><small class="nreg-muted">' + esc(r.comment) + '</small>' : '')
-                        + '</td><td>' + N.who(r) + '</td><td>' + N.diffHtml(r) + '</td></tr>';
-                });
-                h += '</tbody></table>';
+                h += N.logTable(j.history, false);
             }
             detail.innerHTML = h;
         }).catch(function (e) { detail.innerHTML = alertBox('danger', esc(e.message)); });

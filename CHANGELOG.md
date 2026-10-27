@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.3 - 2026-10-27
+
+- Dziennik: jedna akcja użytkownika to jeden wpis. Dodanie zakresu (np. 1313-1399) zapisuje jeden
+  wpis z listą numerów zamiast osobnego wpisu na każdy VLAN. To samo dotyczy edycji i usunięcia
+  grupy oraz przejęcia przez LibreNMS kilku numerów naraz. Nowe kolumny `reg_audit.range_from/range_to`
+  (schemat rdzenia 2): historia pojedynczego numeru znajduje także wpisy grupowe.
+- Wpisy ręczne dodane razem tworzą grupę (`reg_vlan_manual.batch_id`, schemat `vlan` 3). Lista
+  „Wpisy ręczne” pokazuje jedną pozycję na grupę, z przyciskami „Edytuj grupę” i „Usuń grupę”.
+  Edycja pojedynczego numeru odłącza go od grupy.
+- Migracja scala istniejące wpisy: numery dodane jednym kliknięciem (ten sam czas, autor i opis)
+  dostają wspólną grupę, a ich wpisy „dodano” w dzienniku zamieniają się w jeden wpis z komentarzem
+  „scalono N wpisów”.
+- Dziennik w jednej linii: zmiany jako „pole: przed → po · …”, czytelne nazwy rekordów
+  („VLAN 1313-1399 (87)”), komentarz w tej samej linii. Kliknięcie rozwija pełną treść.
+
 ## 0.2.2 - 2026-10-27
 
 - Blokada: nie można dodać ręcznie numeru VLAN, który LibreNMS widzi teraz (na urządzeniu aktywnym albo

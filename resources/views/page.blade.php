@@ -18,10 +18,16 @@
     .nreg-num { width: 80px !important; }
     .nreg-mono { font-family: monospace; }
     .nreg-muted { opacity: .7; }
-    .nreg-diff { font-size: 12px; margin: 0; padding-left: 16px; }
-    .nreg-diff li { word-break: break-word; }
     .nreg-diff del { opacity: .65; }
     .nreg-diff ins { text-decoration: none; font-weight: 600; }
+    .nreg-diff .sep { opacity: .5; padding: 0 4px; }
+    /* Dziennik: jeden wpis = jedna linia; kliknięcie rozwija pełną treść. */
+    .nreg-log { font-size: 12px; table-layout: auto; }
+    .nreg-log > tbody > tr > td { white-space: nowrap; padding: 2px 6px; vertical-align: top; }
+    .nreg-log > tbody > tr > td.nreg-diff { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; width: 100%; }
+    .nreg-log > tbody > tr { cursor: pointer; }
+    .nreg-log > tbody > tr.open > td.nreg-diff { white-space: normal; word-break: break-word; }
+    .nreg-log > thead > tr > th { padding: 3px 6px; font-size: 12px; }
     .nreg-pager { display: flex; gap: 8px; align-items: center; }
     .nreg-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
     .nreg-filters .form-control { height: 30px; padding: 4px 8px; width: auto; }
@@ -104,29 +110,75 @@
         return s.length > max ? s.slice(0, max) + '…' : s;
     }
 
-    // Zmiany z dziennika jako lista "pole: przed → po".
+    // Czytelne nazwy pól w dzienniku. Moduły mogą dopisać własne: NReg.fieldLabels.x = '...'.
+    var FIELD_LABELS = {
+        vlans: 'VLAN-y', vlan: 'VLAN', name: 'nazwa', description: 'opis', owner: 'właściciel', status: 'status',
+        devices: 'urządzenia', adopted_at: 'przejęty', tagged: 'tagowane', untagged: 'nietagowane', l3: 'L3',
+        subif: 'subinterfejsy', defined: 'w tabeli vlans', disabled: 'wyłączone', device: 'urządzenie'
+    };
+    // Pola pomijane w linii dziennika (powtarzają informację z kolumny "Rekord").
+    var SKIP_FIELDS = { count: 1, vlans: 1, vlan: 1, device_id: 1, device: 1, hostname: 1 };
+
+    // Zmiany z dziennika w jednej linii: "pole: przed → po · pole2: …".
     function diffHtml(row) {
         var b = row.before || {}, a = row.after || {};
         if (row.action === 'initial_import') { return 'zaimportowano ' + esc(a.count) + ' rekordów'; }
-        var keys = Object.keys(b).concat(Object.keys(a)).filter(function (k, i, arr) { return arr.indexOf(k) === i; });
-        if (!keys.length) { return ''; }
-        var html = '<ul class="nreg-diff">';
-        keys.forEach(function (k) {
-            var hasB = Object.prototype.hasOwnProperty.call(b, k), hasA = Object.prototype.hasOwnProperty.call(a, k);
-            html += '<li><span class="nreg-mono">' + esc(k) + '</span>: ';
-            if (hasB && row.before !== null) { html += '<del>' + esc(short(b[k])) + '</del>'; }
-            if (hasB && hasA && row.before !== null && row.after !== null) { html += ' → '; }
-            if (hasA && row.after !== null) { html += '<ins>' + esc(short(a[k])) + '</ins>'; }
-            html += '</li>';
+        var keys = Object.keys(b).concat(Object.keys(a)).filter(function (k, i, arr) {
+            return arr.indexOf(k) === i && !SKIP_FIELDS[k];
         });
-        return html + '</ul>';
+        var parts = keys.map(function (k) {
+            var hasB = row.before !== null && Object.prototype.hasOwnProperty.call(b, k);
+            var hasA = row.after !== null && Object.prototype.hasOwnProperty.call(a, k);
+            var h = '<span class="nreg-muted">' + esc(FIELD_LABELS[k] || k) + ':</span> ';
+            if (hasB) { h += '<del>' + esc(short(b[k], 80)) + '</del>'; }
+            if (hasB && hasA) { h += ' → '; }
+            if (hasA) { h += '<ins>' + esc(short(a[k], 80)) + '</ins>'; }
+            return h;
+        });
+        return parts.join('<span class="sep">·</span>');
+    }
+
+    // Czego dotyczy wpis, po ludzku: "VLAN 1313-1399 (87)", "VLAN 100 · ASR KAMYK".
+    function recordLabel(row) {
+        var b = row.before || {}, a = row.after || {}, m;
+        var list = a.vlans || b.vlans, count = a.count || b.count;
+        if (row.entity_key === '*') { return 'wszystkie'; }
+        if (row.module === 'core') { return 'ustawienia'; }
+        if (list) { return 'VLAN ' + esc(list) + (count > 1 ? ' <span class="nreg-muted">(' + count + ')</span>' : ''); }
+        if ((m = /^v(\d+):d(\d+)$/.exec(row.entity_key))) { return 'VLAN ' + m[1] + ' · ' + esc(a.device || b.device || ('urządzenie ' + m[2])); }
+        if ((m = /^v(\d+):m\d+$/.exec(row.entity_key))) { return 'VLAN ' + m[1] + ' <span class="nreg-muted">(wpis)</span>'; }
+        return esc(row.entity_key);
     }
 
     function who(row) {
         return row.source === 'sync' ? '<span class="nreg-muted">synchronizacja</span>' : esc(row.username || '?');
     }
 
-    window.NReg = { boot: boot, api: api, esc: esc, diffHtml: diffHtml, who: who, short: short };
+    // Jeden wiersz dziennika. withModule: kolumna modułu (w zakładce Dziennik).
+    function logRow(r, withModule) {
+        return '<tr title="kliknij, aby rozwinąć"><td class="nreg-mono">' + esc(r.ts) + '</td>'
+            + (withModule ? '<td>' + esc(r.module) + '</td>' : '')
+            + '<td>' + recordLabel(r) + '</td><td>' + esc(r.action_label) + '</td><td>' + who(r) + '</td>'
+            + '<td class="nreg-diff">' + diffHtml(r)
+            + (r.comment ? '<span class="sep">·</span><span class="nreg-muted">„' + esc(r.comment) + '”</span>' : '') + '</td></tr>';
+    }
+
+    function logTable(rows, withModule) {
+        return '<table class="table table-condensed table-hover nreg-log"><thead><tr><th>Data</th>'
+            + (withModule ? '<th>Moduł</th>' : '') + '<th>Rekord</th><th>Zdarzenie</th><th>Kto</th><th>Zmiany</th></tr></thead><tbody>'
+            + rows.map(function (r) { return logRow(r, withModule); }).join('') + '</tbody></table>';
+    }
+
+    // Rozwijanie wiersza dziennika kliknięciem (pełna treść zamiast "…").
+    document.addEventListener('click', function (e) {
+        var tr = e.target.closest('table.nreg-log > tbody > tr');
+        if (tr && !e.target.closest('a,button')) { tr.classList.toggle('open'); }
+    });
+
+    window.NReg = {
+        boot: boot, api: api, esc: esc, diffHtml: diffHtml, who: who, short: short,
+        recordLabel: recordLabel, logTable: logTable, fieldLabels: FIELD_LABELS
+    };
 
     // Zakładka z adresu (#vlan, #audit) i zapamiętywanie wybranej.
     function showTab(key) {

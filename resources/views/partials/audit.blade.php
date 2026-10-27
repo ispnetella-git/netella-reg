@@ -46,15 +46,7 @@ document.addEventListener('nreg:ready', function () {
             }
             if (!j.rows.length) { body.innerHTML = '<p class="nreg-muted">Brak wpisów.</p>'; return; }
             var pages = Math.max(1, Math.ceil(j.total / perPage));
-            var h = '<table class="table table-condensed table-hover"><thead><tr>'
-                + '<th style="width:150px">Data</th><th>Moduł</th><th>Rekord</th><th>Zdarzenie</th><th>Kto</th><th>Zmiany</th></tr></thead><tbody>';
-            j.rows.forEach(function (r) {
-                h += '<tr><td class="nreg-mono">' + N.esc(r.ts) + '</td><td>' + N.esc(r.module) + '</td>'
-                    + '<td class="nreg-mono">' + N.esc(r.entity_key) + '</td><td>' + N.esc(r.action_label)
-                    + (r.comment ? '<br><small class="nreg-muted">' + N.esc(r.comment) + '</small>' : '') + '</td>'
-                    + '<td>' + N.who(r) + '</td><td>' + N.diffHtml(r) + '</td></tr>';
-            });
-            h += '</tbody></table><div class="nreg-pager">'
+            var h = N.logTable(j.rows, true) + '<div class="nreg-pager">'
                 + '<button class="btn btn-default btn-xs" data-p="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>&laquo; nowsze</button>'
                 + '<span>strona ' + page + ' z ' + pages + ' (' + j.total + ' wpisów)</span>'
                 + '<button class="btn btn-default btn-xs" data-p="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>starsze &raquo;</button></div>';
