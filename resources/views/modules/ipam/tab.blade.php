@@ -312,12 +312,23 @@ document.addEventListener('nreg:ready', function () {
     }
 
     // Rozwija drzewo wzdłuż ścieżki i zaznacza ostatni węzeł.
+
+    // Podświetlenie znalezionego wiersza: zostaje do następnego wyszukiwania albo przeładowania drzewa.
+    var foundEl = null;
+    function markFound(el) {
+        if (foundEl) { foundEl.classList.remove('nreg-found'); }
+        foundEl = el;
+        if (el) { el.classList.add('nreg-found'); }
+    }
+
+    // Rozwija drzewo wzdłuż ścieżki, zaznacza i podświetla znaleziony wiersz.
     function expandPath(path, ip) {
         var p = Promise.resolve();
         path.forEach(function (cidr) { p = p.then(function () { return toggle(cidr, true); }); });
         return p.then(function () {
             var el = ip ? treeEl.querySelector('.nreg-ta[data-open-ip="' + ip + '"]') : null;
             el = el || (path.length ? treeEl.querySelector('.nreg-tn[data-cidr="' + path[path.length - 1] + '"]') : null);
+            markFound(el);
             if (el) { select(el); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
         });
     }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.1 - 2026-10-28
+
+- Adresacja IPv4 i IPv6: wiersz znaleziony przez „Szukaj” (i przez linki do adresu, prefiksu, zakresu)
+  jest podświetlony na żółto i mignie przy przewinięciu; podświetlenie zostaje do następnego wyszukiwania.
+
 ## 0.8.0 - 2026-10-28
 
 - Adresacja IPv6, etap 2: pojedyncze adresy ręczne, zakresy `a-b` (pula DHCPv6, adresy statyczne,

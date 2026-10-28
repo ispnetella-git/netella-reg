@@ -37,6 +37,9 @@
     .nreg-form label { font-weight: 600; margin-bottom: 2px; font-size: 12px; }
     .nreg-form .req::after { content: ' *'; color: #d9534f; }
     .nreg-manual { border-left: 4px solid #b57edc; padding: 6px 10px; margin: 8px 0; }
+    /* Wiersz drzewa znaleziony przez „Szukaj” (albo link do adresu, prefiksu, zakresu). */
+    .nreg-found { background: rgba(255, 193, 7, .45) !important; box-shadow: inset 3px 0 0 #f0ad4e; animation: nreg-flash .6s ease-in-out 3; }
+    @keyframes nreg-flash { 50% { background: rgba(255, 152, 0, .85); } }
     .nreg-manual dl { margin: 0; }
     .nreg-manual dt { float: left; width: 130px; font-weight: normal; opacity: .75; }
     .nreg-manual dd { margin-left: 140px; }

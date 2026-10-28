@@ -305,12 +305,24 @@ document.addEventListener('nreg:ready', function () {
         return loadChildren('', treeEl, 0).catch(function (e) { treeEl.innerHTML = alertBox('danger', esc(e.message)); });
     }
 
-    function expandPath(path, ip) {
+
+    // Podświetlenie znalezionego wiersza: zostaje do następnego wyszukiwania albo przeładowania drzewa.
+    var foundEl = null;
+    function markFound(el) {
+        if (foundEl) { foundEl.classList.remove('nreg-found'); }
+        foundEl = el;
+        if (el) { el.classList.add('nreg-found'); }
+    }
+
+    // Rozwija drzewo wzdłuż ścieżki, zaznacza i podświetla znaleziony wiersz (adres, zakres albo prefiks).
+    function expandPath(path, ip, rangeId) {
         var p = Promise.resolve();
         path.forEach(function (c) { p = p.then(function () { return toggle(c, true); }); });
         return p.then(function () {
             var el = ip ? treeEl.querySelector('.ta[data-open-ip="' + ip + '"]') : null;
+            if (!el && rangeId) { var r = treeEl.querySelector('[data-open-range="' + rangeId + '"]'); el = r ? r.closest('.tn') : null; }
             el = el || (path.length ? treeEl.querySelector('.tn[data-cidr="' + path[path.length - 1] + '"]') : null);
+            markFound(el);
             if (el) { select(el); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
         });
     }
@@ -650,7 +662,7 @@ document.addEventListener('nreg:ready', function () {
         } else if ((t = e.target.closest('[data-goto-range]'))) {
             e.preventDefault();
             var rid = t.getAttribute('data-goto-range');
-            api('range', { id: rid }).then(function (j) { expandPath(j.path); openRange(rid); });
+            api('range', { id: rid }).then(function (j) { expandPath(j.path, null, rid); openRange(rid); });
         }
         else if ((t = e.target.closest('[data-goto-node]'))) {
             e.preventDefault();
