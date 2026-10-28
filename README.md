@@ -86,8 +86,8 @@ zbiera moduł „Adresacja IP”, więc ten moduł nie ma własnej synchronizacj
   coś leży, i prefiksy dodane ręcznie albo z RIPE. Reszta za przełącznikami „Pokaż adresację spoza
   agregatów” i „Pokaż adresy z wyłączonych hostów”. W korzeniu nie ma masek dłuższych niż /48. Wewnątrz
   agregatów poziomy /32 → /48 → /56 → /64 (ustawienie).
-- **Zajętość** w prefiksach /64 i szerszych liczy się w blokach /64 (adres albo /127 zajmuje całą swoją
-  /64); w węższych - w adresach. Wolne miejsce to bloki prefiksów, kliknięcie dodaje wpis.
+- **Zajętość** w prefiksach szerszych niż /64 liczy się w blokach /64 (adres albo /127 zajmuje całą swoją
+  /64); w samej /64 i węższych - w adresach (np. pula DHCPv6 i wolne podzakresy obok niej). Wolne miejsce to bloki prefiksów, kliknięcie dodaje wpis.
 - **Wpisy ręczne** (nazwa wymagana, te same blokady co w IPv4): prefiks (agregat, pula np. na prefiksy
   dla klientów, sieć używana, rezerwacja), pojedynczy adres (używany, rezerwacja) i zakres `a-b` (pula
   DHCPv6, adresy statyczne, rezerwacja). Rodzaj wynika z treści pola. Zakres musi leżeć w całości w jednym

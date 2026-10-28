@@ -574,6 +574,9 @@ if (! Ip6Calc::available()) {
         [['id' => 7, 'start' => $ra, 'end' => $rb]]);
     check('ip6 drzewo: zakres w sieci /64', $tr->range(7)['node'], '2001:db8:0:1::/64');
     check('ip6 drzewo: zakres zajmuje swoją /64', $tr->node('2001:db8::/48')['stats']['used'], '1');
+    $n64 = $tr->node('2001:db8:0:1::/64');
+    check('ip6 drzewo: /64 liczona w adresach, wolne obok zakresu', [$n64['stats']['unit'], $n64['stats']['used'],
+        array_map(fn ($iv) => Ip6Calc::gmp2ip($iv[0]), $tr->gaps('2001:db8:0:1::/64'))], ['adr.', '256', ['2001:db8:0:1::', '2001:db8:0:1::200']]);
     $tr2 = new Ip6Tree([$pf6('2001:db8::/48', 'manual', false)], [], [32, 48, 56, 64], [['id' => 8, 'start' => $g6('2001:db8:0:5::10'), 'end' => $g6('2001:db8:0:5::20')]]);
     check('ip6 drzewo: zakres w agregacie -> wirtualna /64', $tr2->range(8)['node'], '2001:db8:0:5::/64');
     $real6 = ['2001:db8::/48' => Ip6Calc::parse('2001:db8::/48'), '2001:db8:0:1::/64' => Ip6Calc::parse('2001:db8:0:1::/64')];

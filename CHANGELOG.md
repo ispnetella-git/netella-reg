@@ -5,6 +5,8 @@
 - Adresacja IPv6, etap 2: pojedyncze adresy ręczne, zakresy `a-b` (pula DHCPv6, adresy statyczne,
   rezerwacja) z wierszem w drzewie i szczegółami, rola prefiksu „pula”, „Wolne /N” w prefiksie,
   wyszukiwanie po tekście. Schemat ipam6 2 (dłuższe pole na zakres).
+- IPv6: sieć /64 liczy zajętość w adresach (bloki /64 tylko w prefiksach szerszych), więc obok puli
+  DHCPv6 widać wolne podzakresy.
 
 ## 0.7.0 - 2026-10-28
 

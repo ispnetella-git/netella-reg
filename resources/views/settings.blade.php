@@ -130,7 +130,7 @@
         <div class="form-group">
             <label>Poziomy grupowania drzewa IPv6 (maski)</label>
             <input class="form-control nreg-mono" style="width: 200px;" name="settings[ipam6_levels]" value="{{ $s['ipam6_levels'] ?? '32,48,56,64' }}">
-            <p class="pomoc">Jak w IPv4, tylko wewnątrz agregatów. W prefiksach /64 i szerszych zajętość liczy się w blokach /64.</p>
+            <p class="pomoc">Jak w IPv4, tylko wewnątrz agregatów. W prefiksach szerszych niż /64 zajętość liczy się w blokach /64, w samej /64 - w adresach.</p>
         </div>
         <div class="form-group">
             <label>Adresacja wewnętrzna IPv6</label>

@@ -10,9 +10,10 @@
  *   - w korzeniu nie ma masek dłuższych niż /48 (ROOT_LEN): drobniejsze sieci
  *     i adresy spoza prefiksów trafiają do wirtualnej grupy /48 z meta 'outside'.
  *
- * Inaczej niż w IPv4: w prefiksie /64 i szerszym zajętość i wolne miejsce liczymy
+ * Inaczej niż w IPv4: w prefiksie szerszym niż /64 zajętość i wolne miejsce liczymy
  * w blokach /64 (adres albo /127 zajmuje całą swoją /64), bo liczba adresów nic
- * nie mówi. W prefiksie węższym niż /64 liczymy adresy. Nie ma adresu
+ * nie mówi. W samej /64 i węższych liczymy adresy (np. pula DHCPv6 w sieci /64
+ * i wolne podzakresy obok niej). Nie ma adresu
  * rozgłoszeniowego. Liczby są \GMP, do JSON-a idą jako tekst.
  *
  * Zakresy ręczne (np. pula DHCPv6 a-b) nie są węzłami: należą do najgłębszego
@@ -219,10 +220,10 @@ final class Ip6Tree
         return $cidr;
     }
 
-    /** Czy liczymy w blokach /64 (prefiks /64 i szerszy). */
+    /** Czy liczymy w blokach /64 (prefiks szerszy niż /64). */
     public static function inUnits(array $n): bool
     {
-        return $n['len'] <= Ip6Calc::UNIT_LEN;
+        return $n['len'] < Ip6Calc::UNIT_LEN;
     }
 
     private function computeStats(): void
@@ -312,7 +313,7 @@ final class Ip6Tree
 
     /**
      * Wolne miejsce między dziećmi węzła (dziecko liczy się w całości), w /64 dla
-     * prefiksów /64 i szerszych.
+     * prefiksów szerszych niż /64.
      *
      * @return list<array{0:\GMP,1:\GMP}>
      */

@@ -370,7 +370,7 @@ document.addEventListener('nreg:ready', function () {
                 + '<dt>Zajęte</dt><dd>' + big(s.used) + ' (' + s.util + '%) ' + bar(s.util) + '</dd>'
                 + '<dt>Adresów</dt><dd>' + s.addresses + '</dd>'
                 + (n.label ? '<dt>Opis</dt><dd>' + esc(n.label) + '</dd>' : '') + '</dl>';
-            if (s.unit === '/64') { h += '<p class="nreg-muted" style="font-size:12px">W prefiksach /64 i szerszych zajętość liczy się w blokach /64: adres albo mała sieć zajmuje całą swoją /64.</p>'; }
+            if (s.unit === '/64') { h += '<p class="nreg-muted" style="font-size:12px">W prefiksach szerszych niż /64 zajętość liczy się w blokach /64: adres albo mała sieć zajmuje całą swoją /64. W samej /64 liczą się adresy.</p>'; }
             if (n.outside) { h += '<p class="nreg-muted" style="font-size:12px">Grupa /48 porządkuje drzewo: to, co tu leży, jest poza agregatami i adresacją wewnętrzną.</p>'; }
             else if (n.virtual) { h += '<p class="nreg-muted" style="font-size:12px">To poziom grupowania /' + n.len + ' - nie ma tu prawdziwego prefiksu.</p>'; }
             if (n.lnms.length) { h += '<h5>Na interfejsach (LibreNMS)</h5>' + lnmsTable(n.lnms); }
