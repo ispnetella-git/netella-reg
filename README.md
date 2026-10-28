@@ -88,9 +88,14 @@ zbiera moduł „Adresacja IP”, więc ten moduł nie ma własnej synchronizacj
   agregatów poziomy /32 → /48 → /56 → /64 (ustawienie).
 - **Zajętość** w prefiksach /64 i szerszych liczy się w blokach /64 (adres albo /127 zajmuje całą swoją
   /64); w węższych - w adresach. Wolne miejsce to bloki prefiksów, kliknięcie dodaje wpis.
-- **Prefiksy ręczne:** agregat, sieć używana, rezerwacja (te same blokady co w IPv4), nazwa wymagana.
+- **Wpisy ręczne** (nazwa wymagana, te same blokady co w IPv4): prefiks (agregat, pula np. na prefiksy
+  dla klientów, sieć używana, rezerwacja), pojedynczy adres (używany, rezerwacja) i zakres `a-b` (pula
+  DHCPv6, adresy statyczne, rezerwacja). Rodzaj wynika z treści pola. Zakres musi leżeć w całości w jednym
+  prefiksie i nie może nachodzić na inny; w drzewie jest wierszem z fioletową kreską.
+- **Wolne /N w prefiksie:** pierwsze wolne, wyrównane bloki danej maski (np. /56 dla klienta w agregacie).
+  Zajęte liczone z pełnych danych, także z adresacji ukrytej przełącznikami.
+- **Wyszukiwanie:** adres, prefiks albo tekst (wpisy ręczne, urządzenia, interfejsy, opisy portów).
 - **Pobierz z RIPE:** jak w IPv4, dodaje prefiksy IPv6 jako agregaty.
-- Na razie bez pojedynczych adresów ręcznych, zakresów i „Wolne /N” (kolejny etap).
 
 ## Instalacja
 

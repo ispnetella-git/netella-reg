@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0 - 2026-10-28
+
+- Adresacja IPv6, etap 2: pojedyncze adresy ręczne, zakresy `a-b` (pula DHCPv6, adresy statyczne,
+  rezerwacja) z wierszem w drzewie i szczegółami, rola prefiksu „pula”, „Wolne /N” w prefiksie,
+  wyszukiwanie po tekście. Schemat ipam6 2 (dłuższe pole na zakres).
+
 ## 0.7.0 - 2026-10-28
 
 - Nowy moduł „Adresacja IPv6” (osobna zakładka, klucz `ipam6`, obliczenia na GMP): drzewo z LibreNMS

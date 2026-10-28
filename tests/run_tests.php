@@ -29,6 +29,8 @@ require $src . '/Modules/Ipam/IpamManual.php';
 require $src . '/Modules/Ipam/RipeLookup.php';
 require $src . '/Modules/Ipam6/Ip6Calc.php';
 require $src . '/Modules/Ipam6/Ip6Tree.php';
+require $src . '/Modules/Ipam6/Ip6Context.php';
+require $src . '/Modules/Ipam6/Ip6Manual.php';
 
 use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\ApiException;
@@ -42,6 +44,8 @@ use Ispnetella\NetellaReg\Modules\Ipam\IpamManual;
 use Ispnetella\NetellaReg\Modules\Ipam\RipeLookup;
 use Ispnetella\NetellaReg\Modules\Ipam6\Ip6Calc;
 use Ispnetella\NetellaReg\Modules\Ipam6\Ip6Tree;
+use Ispnetella\NetellaReg\Modules\Ipam6\Ip6Context;
+use Ispnetella\NetellaReg\Modules\Ipam6\Ip6Manual;
 use Ispnetella\NetellaReg\Core\SnapshotDiff;
 use Ispnetella\NetellaReg\Modules\Vlan\VlanIndex;
 use Ispnetella\NetellaReg\Modules\Vlan\VlanManual;
@@ -554,6 +558,35 @@ if (! Ip6Calc::available()) {
     $t128 = new Ip6Tree([$pf6('2001:db8::/126')], [$g6('2001:db8::1')]);
     check('ip6 drzewo: sieć /126 liczona w adresach', [$t128->node('2001:db8::/126')['stats']['unit'], $t128->node('2001:db8::/126')['stats']['capacity'],
         $t128->node('2001:db8::/126')['stats']['used']], ['adr.', '4', '1']);
+
+    // Etap 2: zakresy, wolne /N, kontekst blokad.
+    [$ra, $rb] = Ip6Calc::parseRange('2001:db8:0:1::100 – 2001:db8:0:1::1ff');
+    check('ip6: parseRange z półpauzą', Ip6Calc::rangeLabel($ra, $rb), '2001:db8:0:1::100-2001:db8:0:1::1ff');
+    $er = 'ok';
+    try { Ip6Calc::parseRange('2001:db8::1-2001:db8::1'); } catch (\InvalidArgumentException) { $er = 'błąd'; }
+    check('ip6: zakres z jednego adresu odrzucony', $er, 'błąd');
+    check('ip6: commonLen', [Ip6Calc::commonLen($g6('2001:db8::'), $g6('2001:db8::ff')), Ip6Calc::commonLen($g6('::1'), $g6('::1'))], [120, 128]);
+    check('ip6: wolne /56 w /48 omijają zajęte', array_map(fn ($b) => Ip6Calc::cidr($b, 56), Ip6Calc::findFreeBlocks(
+        Ip6Calc::parse('2001:db8::/48')['start'], Ip6Calc::parse('2001:db8::/48')['end'],
+        [[$g6('2001:db8::1'), $g6('2001:db8::1')], [Ip6Calc::parse('2001:db8:0:100::/56')['start'], Ip6Calc::parse('2001:db8:0:100::/56')['end']]], 56, 3)),
+        ['2001:db8:0:200::/56', '2001:db8:0:300::/56', '2001:db8:0:400::/56']);
+    $tr = new Ip6Tree([$pf6('2001:db8::/48', 'manual', false), $pf6('2001:db8:0:1::/64')], [], [32, 48, 56, 64],
+        [['id' => 7, 'start' => $ra, 'end' => $rb]]);
+    check('ip6 drzewo: zakres w sieci /64', $tr->range(7)['node'], '2001:db8:0:1::/64');
+    check('ip6 drzewo: zakres zajmuje swoją /64', $tr->node('2001:db8::/48')['stats']['used'], '1');
+    $tr2 = new Ip6Tree([$pf6('2001:db8::/48', 'manual', false)], [], [32, 48, 56, 64], [['id' => 8, 'start' => $g6('2001:db8:0:5::10'), 'end' => $g6('2001:db8:0:5::20')]]);
+    check('ip6 drzewo: zakres w agregacie -> wirtualna /64', $tr2->range(8)['node'], '2001:db8:0:5::/64');
+    $real6 = ['2001:db8::/48' => Ip6Calc::parse('2001:db8::/48'), '2001:db8:0:1::/64' => Ip6Calc::parse('2001:db8:0:1::/64')];
+    $ctx6 = new Ip6Context([Ip6Calc::hex($g6('2001:db8:0:1::5')) => ['ip' => $g6('2001:db8:0:1::5'), 'state' => 's']], ['2001:db8:0:1::/64'], $real6);
+    check('ip6 kontekst: zakres w sieci', $ctx6->rangeContainer($ra, $rb), ['2001:db8:0:1::/64', null]);
+    check('ip6 kontekst: zakres przecina sieć', $ctx6->rangeContainer($g6('2001:db8::ff'), $g6('2001:db8:0:1::5'))[0], null);
+    check('ip6 kontekst: zakres poza prefiksami', $ctx6->rangeContainer($g6('2001:db9::1'), $g6('2001:db9::5'))[0], null);
+    check('ip6 kontekst: znane adresy i sieci', [$ctx6->knownAddress(Ip6Calc::hex($g6('2001:db8:0:1::5'))), $ctx6->staleAddress(Ip6Calc::hex($g6('2001:db8:0:1::5'))),
+        $ctx6->knownNetwork('2001:db8:0:1::/64'), $ctx6->knownInside(Ip6Calc::parse('2001:db8::/48')['start'], Ip6Calc::parse('2001:db8::/48')['end'])], [true, true, true, 1]);
+    check('ip6 wpis: rodzaj z treści', [Ip6Manual::parseTarget('2001:db8::/48')['kind'], Ip6Manual::parseTarget('2001:DB8::1')['kind'],
+        Ip6Manual::parseTarget('2001:db8::1-2001:db8::9')['kind'], Ip6Manual::parseTarget('2001:DB8::1')['cidr']], ['prefix', 'address', 'range', '2001:db8::1']);
+    check('ip6 wpis: klucze dziennika', [Ip6Manual::key(['kind' => 'address', 'cidr' => '2001:db8::1', 'id' => 3]), Ip6Manual::key(['kind' => 'range', 'cidr' => 'a-b', 'id' => 4])],
+        ['a:2001:db8::1:m3', 'r:a-b:m4']);
 }
 
 // --- Access ---

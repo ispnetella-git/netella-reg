@@ -230,4 +230,73 @@ final class Ip6Calc
     {
         return strrev(implode(' ', str_split(strrev(gmp_strval($n)), 3)));
     }
+
+    /** Liczba wspólnych początkowych bitów dwóch adresów. */
+    public static function commonLen(\GMP $a, \GMP $b): int
+    {
+        $x = gmp_xor($a, $b);
+
+        return gmp_cmp($x, 0) === 0 ? 128 : 128 - strlen(gmp_strval($x, 2));
+    }
+
+    /**
+     * Zakres "a-b" (pełne adresy, także z półpauzą) -> [początek, koniec].
+     *
+     * @return array{0:\GMP,1:\GMP}
+     *
+     * @throws \InvalidArgumentException
+     */
+    public static function parseRange(string $text): array
+    {
+        $parts = preg_split('/\s*[-–]\s*/u', trim($text));
+        if (count($parts) !== 2) {
+            throw new \InvalidArgumentException('Zakres IPv6 zapisz jako pierwszy-ostatni, np. 2001:db8::100-2001:db8::1ff.');
+        }
+        $a = self::ip2gmp($parts[0]);
+        $b = self::ip2gmp($parts[1]);
+        if ($a === null || $b === null) {
+            throw new \InvalidArgumentException("Nie rozumiem zakresu „{$text}”: oba końce muszą być pełnymi adresami IPv6.");
+        }
+        if (gmp_cmp($a, $b) > 0) {
+            [$a, $b] = [$b, $a];
+        }
+        if (gmp_cmp($a, $b) === 0) {
+            throw new \InvalidArgumentException('Zakres musi mieć co najmniej dwa adresy - pojedynczy adres dodaj bez myślnika.');
+        }
+
+        return [$a, $b];
+    }
+
+    public static function rangeLabel(\GMP $a, \GMP $b): string
+    {
+        return self::gmp2ip($a) . '-' . self::gmp2ip($b);
+    }
+
+    /**
+     * Pierwsze wolne, wyrównane bloki /$len w [$start, $end] poza zajętymi.
+     *
+     * @param  list<array{0:\GMP,1:\GMP}>  $busy
+     * @return list<\GMP> początki bloków
+     */
+    public static function findFreeBlocks(\GMP $start, \GMP $end, array $busy, int $len, int $limit = 5): array
+    {
+        $size = self::size($len);
+        $out = [];
+        foreach (self::freeIntervals($start, $end, $busy) as [$a, $b]) {
+            // Pierwszy początek bloku wyrównany do /len, nie wcześniej niż $a.
+            $s = self::network($a, $len);
+            if (gmp_cmp($s, $a) < 0) {
+                $s = gmp_add($s, $size);
+            }
+            while (count($out) < $limit && gmp_cmp(gmp_add($s, gmp_sub($size, 1)), $b) <= 0) {
+                $out[] = $s;
+                $s = gmp_add($s, $size);
+            }
+            if (count($out) >= $limit) {
+                break;
+            }
+        }
+
+        return $out;
+    }
 }

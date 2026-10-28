@@ -1,15 +1,23 @@
 <?php
 
 /*
- * Ip6Manual.php - wpisy ręczne IPv6 (na razie prefiksy: agregat, sieć używana,
- * rezerwacja) w przestrzeniach adresowych wspólnych z IPv4 (IpamSpaces).
+ * Ip6Manual.php - wpisy ręczne IPv6 w przestrzeniach adresowych wspólnych z IPv4
+ * (IpamSpaces). Rodzaje:
+ *   prefix   agregat, pula (np. delegowane prefiksy dla klientów), sieć używana, rezerwacja
+ *   address  pojedynczy adres: używany albo rezerwacja
+ *   range    zakres a-b (np. pula DHCPv6): pula DHCPv6, adresy statyczne, rezerwacja
  *
- * Początek i koniec prefiksu są zapisane jako 32 znaki szesnastkowe (Ip6Calc::hex):
- * porównanie tekstów daje kolejność adresów, a kopia zapasowa (JSON) zostaje czytelna.
+ * Początek i koniec są zapisane jako 32 znaki szesnastkowe (Ip6Calc::hex): porównanie
+ * tekstów daje kolejność adresów, a kopia zapasowa (JSON) zostaje czytelna.
  *
- * Blokady jak w IPv4: sieci z LibreNMS nie da się dodać jako "używanej" (można
- * jako agregat), a rezerwacji - gdy LibreNMS ma w prefiksie adresy.
- * Każda zmiana to jeden wpis w dzienniku (moduł ipam6, klucz "n:<cidr>:m<id>").
+ * Blokady jak w IPv4:
+ *   - adresu, który LibreNMS widzi, nie da się dodać; sieci z LibreNMS nie da się
+ *     dodać jako "używanej" (można jako agregat); rezerwacji (prefiksu, zakresu)
+ *     nie da się dodać, gdy LibreNMS ma w niej adresy;
+ *   - zakres musi leżeć w całości w jednym prawdziwym prefiksie (sieć z LibreNMS,
+ *     prefiks ręczny, adresacja wewnętrzna), nie może przecinać innego prefiksu
+ *     ani nachodzić na inny zakres; prefiks nie może przeciąć zakresu.
+ * Każda zmiana to jeden wpis w dzienniku (moduł ipam6).
  *
  * Part of the Netella-Reg LibreNMS plugin. Licencja GPL-3.0-or-later.
  */
@@ -33,7 +41,19 @@ final class Ip6Manual
 
     public const PREFIX_ROLES = [
         'aggregate' => 'agregat',
+        'pool' => 'pula (np. prefiksy dla klientów)',
         'used' => 'sieć używana',
+        'reserved' => 'rezerwacja',
+    ];
+
+    public const ADDRESS_ROLES = [
+        'used' => 'używany',
+        'reserved' => 'rezerwacja',
+    ];
+
+    public const RANGE_ROLES = [
+        'dhcp' => 'pula DHCPv6',
+        'static' => 'adresy statyczne',
         'reserved' => 'rezerwacja',
     ];
 
@@ -53,7 +73,7 @@ final class Ip6Manual
             $t->bigIncrements('id');
             $t->unsignedInteger('space_id')->default(IpamSpaces::GLOBAL_ID);
             $t->string('kind', 8)->default('prefix');
-            $t->string('cidr', 64)->comment('postać kanoniczna (inet_ntop)');
+            $t->string('cidr', 100)->comment('prefiks, adres albo zakres a-b w postaci kanonicznej');
             $t->char('start_hex', 32);
             $t->char('end_hex', 32);
             $t->unsignedTinyInteger('len');
@@ -75,9 +95,28 @@ final class Ip6Manual
         });
     }
 
+    /** Schemat 2: dłuższe pole cidr na zakresy "a-b" (dwa pełne adresy IPv6). */
+    public static function migrateWiderCidr(Connection $db): void
+    {
+        $db->statement('ALTER TABLE `' . self::TABLE . '` MODIFY `cidr` VARCHAR(100) NOT NULL');
+    }
+
+    public static function rolesFor(string $kind): array
+    {
+        return match ($kind) {
+            'prefix' => self::PREFIX_ROLES,
+            'range' => self::RANGE_ROLES,
+            default => self::ADDRESS_ROLES,
+        };
+    }
+
     public static function key(array $r): string
     {
-        return "n:{$r['cidr']}:m{$r['id']}";
+        return match ($r['kind']) {
+            'address' => "a:{$r['cidr']}:m{$r['id']}",
+            'range' => "r:{$r['cidr']}:m{$r['id']}",
+            default => "n:{$r['cidr']}:m{$r['id']}",
+        };
     }
 
     private static function present(array $r): array
@@ -86,7 +125,11 @@ final class Ip6Manual
             $r[$f] = (int) $r[$f];
         }
         $r['vlan'] = $r['vlan'] === null ? null : (int) $r['vlan'];
-        $r['role_label'] = self::PREFIX_ROLES[$r['role']] ?? $r['role'];
+        $r['role_label'] = self::rolesFor($r['kind'])[$r['role']] ?? $r['role'];
+        if ($r['kind'] === 'range') {
+            [$r['first'], $r['last']] = explode('-', $r['cidr'], 2);
+            $r['size'] = gmp_strval(gmp_add(gmp_sub(Ip6Calc::fromHex($r['end_hex']), Ip6Calc::fromHex($r['start_hex'])), 1));
+        }
 
         return Expiry::present($r, Expiry::today());
     }
@@ -107,7 +150,7 @@ final class Ip6Manual
 
     private static function view(array $r): array
     {
-        $out = ['prefix' => $r['cidr']];
+        $out = [match ($r['kind']) { 'address' => 'ip', 'range' => 'range', default => 'prefix' } => $r['cidr']];
         foreach (self::DATA_FIELDS as $f) {
             if (($r[$f] ?? null) !== null && $r[$f] !== '') {
                 $out[$f] = $r[$f];
@@ -118,36 +161,56 @@ final class Ip6Manual
     }
 
     /**
-     * @param  callable(string):bool  $knownNetwork  czy sieć jest w LibreNMS
-     * @param  callable(\GMP,\GMP):int  $knownInside  ile adresów LibreNMS leży w przedziale
+     * Co wpisał użytkownik: zakres (z myślnikiem), prefiks (maska < 128) albo adres.
+     *
+     * @return array{kind:string,cidr:string,start:\GMP,end:\GMP,len:int,start_hex:string,end_hex:string}
      */
-    public function create(int $space, string $text, array $input, ?string $comment, callable $knownNetwork, callable $knownInside): array
+    public static function parseTarget(string $text): array
     {
+        $text = trim($text);
         try {
+            if (preg_match('/[-–]/u', $text)) {
+                [$a, $b] = Ip6Calc::parseRange($text);
+
+                return ['kind' => 'range', 'cidr' => Ip6Calc::rangeLabel($a, $b), 'start' => $a, 'end' => $b, 'len' => 128,
+                    'start_hex' => Ip6Calc::hex($a), 'end_hex' => Ip6Calc::hex($b)];
+            }
             $p = Ip6Calc::parse($text, true);
         } catch (\InvalidArgumentException $e) {
             throw new ApiException($e->getMessage());
         }
         if ($p['len'] === 128) {
-            throw new ApiException('Na razie dodaje się tylko prefiksy IPv6 (krótsze niż /128).');
+            return ['kind' => 'address', 'cidr' => Ip6Calc::gmp2ip($p['start'])] + $p;
         }
+
+        return ['kind' => 'prefix'] + $p;
+    }
+
+    /**
+     * @param  Ip6Context  $ctx  stan LibreNMS i prefiksów (do blokad)
+     */
+    public function create(int $space, string $text, array $input, ?string $comment, Ip6Context $ctx): array
+    {
+        $p = self::parseTarget($text);
         $fields = IpamManual::validate($input);
         $fields['description'] ??= '';
-        $fields['role'] ??= 'aggregate';
-        if (! isset(self::PREFIX_ROLES[$fields['role']])) {
-            throw new ApiException('Dozwolone role: ' . implode(', ', array_keys(self::PREFIX_ROLES)) . '.');
+        $roles = self::rolesFor($p['kind']);
+        $fields['role'] ??= array_key_first($roles);
+        if (! isset($roles[$fields['role']])) {
+            throw new ApiException('Dozwolone role: ' . implode(', ', array_keys($roles)) . '.');
         }
         if (($fields[Expiry::FIELD] ?? null) !== null && $fields[Expiry::FIELD] < Expiry::today()) {
             throw new ApiException('Termin ważności nie może być w przeszłości.');
         }
-        if ($this->db->table(self::TABLE)->where('space_id', $space)->whereNull('deleted_at')->where('cidr', $p['cidr'])->exists()) {
-            throw new ApiException("Prefiks {$p['cidr']} ma już wpis ręczny w tej przestrzeni (edytuj go).");
+        if ($this->db->table(self::TABLE)->where('space_id', $space)->whereNull('deleted_at')->where('kind', $p['kind'])
+            ->where('cidr', $p['cidr'])->exists()) {
+            throw new ApiException("{$p['cidr']} ma już wpis ręczny w tej przestrzeni (edytuj go).");
         }
-        $this->checkRole($fields['role'], $p, $knownNetwork, $knownInside);
+        $this->checkEntry($space, $p, $fields['role'], $ctx, null);
 
         $now = date('Y-m-d H:i:s');
         $user = Access::username();
-        $row = ['space_id' => $space, 'kind' => 'prefix', 'cidr' => $p['cidr'], 'start_hex' => $p['start_hex'], 'end_hex' => $p['end_hex'],
+        $row = ['space_id' => $space, 'kind' => $p['kind'], 'cidr' => $p['cidr'], 'start_hex' => $p['start_hex'], 'end_hex' => $p['end_hex'],
             'len' => $p['len'], 'created_at' => $now, 'created_by' => $user, 'updated_at' => $now, 'updated_by' => $user]
             + array_intersect_key($fields, array_flip(self::DATA_FIELDS));
         $id = 0;
@@ -157,25 +220,23 @@ final class Ip6Manual
                 self::view($row) + ['space' => $space], $comment);
         });
 
-        return ['entry' => $this->find($id), 'label' => $p['cidr']];
+        return ['entry' => $this->find($id), 'label' => $p['cidr'], 'kind' => $p['kind']];
     }
 
-    public function update(int $id, array $input, ?string $comment, callable $knownNetwork, callable $knownInside): array
+    public function update(int $id, array $input, ?string $comment, Ip6Context $ctx): array
     {
-        $before = $this->find($id);
-        if ($before === null) {
-            throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
-        }
+        $before = $this->find($id) ?? throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
         $fields = IpamManual::validate($input, false);
         if (array_key_exists('name', $fields) && $fields['name'] === null) {
             throw new ApiException('Nazwa jest wymagana.');
         }
         if (isset($fields['role'])) {
-            if (! isset(self::PREFIX_ROLES[$fields['role']])) {
-                throw new ApiException('Dozwolone role: ' . implode(', ', array_keys(self::PREFIX_ROLES)) . '.');
+            $roles = self::rolesFor($before['kind']);
+            if (! isset($roles[$fields['role']])) {
+                throw new ApiException('Dozwolone role: ' . implode(', ', array_keys($roles)) . '.');
             }
             if ($fields['role'] !== $before['role']) {
-                $this->checkRole($fields['role'], Ip6Calc::parse($before['cidr']), $knownNetwork, $knownInside);
+                $this->checkRole(self::parseTarget($before['cidr']), $fields['role'], $ctx);
             }
         }
         $vu = $fields[Expiry::FIELD] ?? null;
@@ -191,10 +252,12 @@ final class Ip6Manual
         if ($changed === []) {
             return $before;
         }
-        $this->db->transaction(function () use ($id, $changed, $before, $comment) {
+        $label = self::view($before);
+        $label = array_slice($label, 0, 1, true);
+        $this->db->transaction(function () use ($id, $changed, $before, $comment, $label) {
             $this->db->table(self::TABLE)->where('id', $id)->update($changed + ['updated_at' => date('Y-m-d H:i:s'), 'updated_by' => Access::username()]);
             AuditLog::user(Ipam6Module::KEY, self::TYPE, self::key($before), AuditLog::UPDATE,
-                array_intersect_key(self::view($before), $changed) + ['prefix' => $before['cidr']], ['prefix' => $before['cidr']] + $changed, $comment);
+                array_intersect_key(self::view($before), $changed) + $label, $label + $changed, $comment);
         });
 
         return $this->find($id);
@@ -202,10 +265,7 @@ final class Ip6Manual
 
     public function delete(int $id, ?string $comment): string
     {
-        $before = $this->find($id);
-        if ($before === null) {
-            throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
-        }
+        $before = $this->find($id) ?? throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
         $this->db->transaction(function () use ($id, $before, $comment) {
             $this->db->table(self::TABLE)->where('id', $id)->update(['deleted_at' => date('Y-m-d H:i:s'), 'deleted_by' => Access::username()]);
             AuditLog::user(Ipam6Module::KEY, self::TYPE, self::key($before), AuditLog::DELETE, self::view($before), null, $comment);
@@ -214,13 +274,44 @@ final class Ip6Manual
         return $before['cidr'];
     }
 
-    private function checkRole(string $role, array $p, callable $knownNetwork, callable $knownInside): void
+    /** Blokady przy dodawaniu (rola + położenie). */
+    private function checkEntry(int $space, array $p, string $role, Ip6Context $ctx, ?int $exceptId): void
     {
-        if ($role === 'used' && $knownNetwork($p['cidr'])) {
+        $this->checkRole($p, $role, $ctx);
+        $ranges = $this->db->table(self::TABLE)->where('space_id', $space)->whereNull('deleted_at')->where('kind', 'range')
+            ->when($exceptId !== null, fn ($q) => $q->where('id', '!=', $exceptId))
+            ->where('start_hex', '<=', $p['end_hex'])->where('end_hex', '>=', $p['start_hex'])->get();
+
+        if ($p['kind'] === 'address') {
+            if ($ctx->knownAddress($p['start_hex'])) {
+                throw new ApiException("Adresu {$p['cidr']} nie można dodać ręcznie, bo jest już w LibreNMS"
+                    . ($ctx->staleAddress($p['start_hex']) ? ' (na wyłączonym hoście - włącz „Pokaż adresy z wyłączonych hostów”, żeby go zobaczyć).' : '.'), 409);
+            }
+        } elseif ($p['kind'] === 'prefix') {
+            // Prefiks może objąć cały zakres, ale nie może go przeciąć.
+            foreach ($ranges as $r) {
+                if (strcmp($r->start_hex, $p['start_hex']) < 0 || strcmp($r->end_hex, $p['end_hex']) > 0) {
+                    throw new ApiException("Prefiks {$p['cidr']} przecina zakres {$r->cidr}. Zakres musi leżeć w całości w jednym prefiksie.", 409);
+                }
+            }
+        } else {
+            if ($ranges->isNotEmpty()) {
+                throw new ApiException("Zakres {$p['cidr']} nachodzi na zakres {$ranges->first()->cidr}.", 409);
+            }
+            $problem = $ctx->rangeContainer($p['start'], $p['end'])[1];
+            if ($problem !== null) {
+                throw new ApiException($problem, 409);
+            }
+        }
+    }
+
+    private function checkRole(array $p, string $role, Ip6Context $ctx): void
+    {
+        if ($p['kind'] === 'prefix' && $role === 'used' && $ctx->knownNetwork($p['cidr'])) {
             throw new ApiException("Sieci {$p['cidr']} nie można dodać ręcznie jako używanej, bo jest już w LibreNMS. "
                 . 'Jeśli chcesz ją opisać albo zgrupować, dodaj ją jako agregat.', 409);
         }
-        if ($role === 'reserved' && ($n = $knownInside($p['start'], $p['end'])) > 0) {
+        if ($p['kind'] !== 'address' && $role === 'reserved' && ($n = $ctx->knownInside($p['start'], $p['end'])) > 0) {
             throw new ApiException("Nie można zarezerwować {$p['cidr']}, bo LibreNMS ma w nim adresy ({$n}).", 409);
         }
     }

@@ -1,6 +1,6 @@
 {{-- Zakładka modułu adresacji IPv6: drzewo prefiksów z zajętością w blokach /64,
-     szczegóły sieci i adresu, prefiksy ręczne (agregat, sieć używana, rezerwacja)
-     i agregaty z RIPE. Te same zasady widoku co w IPv4 (przełączniki adresacji spoza
+     szczegóły sieci, adresu i zakresu, wpisy ręczne (prefiksy, adresy, zakresy a-b),
+     „Wolne /N”, wyszukiwanie (adres, prefiks, tekst) i agregaty z RIPE. Te same zasady widoku co w IPv4 (przełączniki adresacji spoza
      agregatów i wyłączonych hostów). Linki między zakładkami muszą mieć pełny adres
      strony (can.page), bo LibreNMS ustawia <base href>. --}}
 
@@ -38,6 +38,8 @@
     #nreg-tab-ipam6 .chips a { display: inline-block; font-family: monospace; font-size: 12px; margin: 0 4px 4px 0; padding: 1px 6px; border: 1px solid rgba(128,128,128,.45); border-radius: 3px; }
     #nreg-tab-ipam6 .copy { margin-left: 4px; font-size: 13px; opacity: .55; cursor: pointer; }
     #nreg-tab-ipam6 .copy:hover { opacity: 1; text-decoration: none; }
+    #nreg-tab-ipam6 .tn.rng { border-left: 3px solid #b57edc; }
+    #nreg-tab-ipam6 .bdg.d { background: #d9534f; }
     #nreg6-manual summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
     #nreg6-ripe { max-width: 1200px; }
     #nreg6-rout table { font-size: 12px; margin-bottom: 6px; }
@@ -56,11 +58,18 @@
     <label style="margin:0">Przestrzeń:</label>
     <select class="form-control" id="nreg6-space" style="width:auto;height:30px;padding:4px 8px"></select>
     <form id="nreg6-search">
-        <input class="form-control nreg-mono" id="nreg6-q" placeholder="adres albo prefiks IPv6" style="width: 260px;">
+        <input class="form-control nreg-mono" id="nreg6-q" placeholder="adres, prefiks albo tekst" style="width: 240px;">
         <button class="btn btn-primary btn-sm" type="submit"><i class="fa fa-search"></i> Szukaj</button>
     </form>
+    <form id="nreg6-free">
+        <span>Wolne /</span>
+        <input class="form-control nreg-num" type="number" min="8" max="128" value="56" id="nreg6-len" style="width:64px !important">
+        <span>w</span>
+        <input class="form-control nreg-mono" id="nreg6-within" placeholder="np. 2a0e:39c0::/29" style="width: 200px;">
+        <button class="btn btn-default btn-sm" type="submit"><i class="fa fa-search"></i> Znajdź</button>
+    </form>
     @if($nregBoot['canEdit'])
-        <button class="btn btn-success btn-sm" id="nreg6-add" type="button"><i class="fa fa-plus"></i> Dodaj prefiks</button>
+        <button class="btn btn-success btn-sm" id="nreg6-add" type="button"><i class="fa fa-plus"></i> Dodaj adresację</button>
         <button class="btn btn-default btn-sm" id="nreg6-ripebtn" type="button" title="Pobierz prefiksy IPv6 numeru AS z RIPE i dodaj wybrane jako agregaty">
             <i class="fa fa-globe"></i> Pobierz z RIPE</button>
     @endif
@@ -75,20 +84,16 @@
 
 @if($nregBoot['canEdit'])
     <form class="nreg-form" id="nreg6-form" style="display:none" autocomplete="off">
-        <h4 id="nreg6-ftitle" style="margin-top:0">Dodaj prefiks IPv6</h4>
+        <h4 id="nreg6-ftitle" style="margin-top:0">Dodaj adresację IPv6</h4>
         <input type="hidden" name="id">
         <div class="row">
             <div class="col-sm-4">
-                <label class="req" for="nreg6-target">Prefiks</label>
-                <input class="form-control nreg-mono" id="nreg6-target" name="target" placeholder="2a0e:39c0::/29">
+                <label class="req" for="nreg6-target">Prefiks, adres albo zakres</label>
+                <input class="form-control nreg-mono" id="nreg6-target" name="target" placeholder="2a0e:39c0::/48, 2a0e:39c0::1 albo a-b">
             </div>
             <div class="col-sm-3">
                 <label for="nreg6-role">Rola</label>
-                <select class="form-control" id="nreg6-role" name="role">
-                    <option value="aggregate">agregat</option>
-                    <option value="used">sieć używana</option>
-                    <option value="reserved">rezerwacja</option>
-                </select>
+                <select class="form-control" id="nreg6-role" name="role"></select>
             </div>
             <div class="col-sm-5">
                 <label class="req" for="nreg6-name">Nazwa</label>
@@ -159,7 +164,24 @@ document.addEventListener('nreg:ready', function () {
     var result = document.getElementById('nreg6-result'), form = document.getElementById('nreg6-form');
     var spaceSel = document.getElementById('nreg6-space');
     var space = 1, manualCache = {}, selectedEl = null, loaded = false, detailSeq = 0, DETAIL_HINT = detail.innerHTML;
-    var STATE_BDG = { l: 'LibreNMS', s: 'host wyłączony' };
+    var STATE_BDG = { l: 'LibreNMS', s: 'host wyłączony', m: 'ręczny', r: 'rezerwacja' };
+    // Role wpisów ręcznych (z manual_list) i rodzaj wpisu po treści pola.
+    var ROLES = {
+        prefix: { aggregate: 'agregat', pool: 'pula (np. prefiksy dla klientów)', used: 'sieć używana', reserved: 'rezerwacja' },
+        address: { used: 'używany', reserved: 'rezerwacja' },
+        range: { dhcp: 'pula DHCPv6', 'static': 'adresy statyczne', reserved: 'rezerwacja' }
+    };
+    function kindOf(text) {
+        text = String(text || '').trim();
+        if (/[-–]/.test(text)) { return 'range'; }
+        var m = /\/(\d{1,3})$/.exec(text);
+        return m && parseInt(m[1], 10) < 128 ? 'prefix' : (text ? 'address' : 'prefix');
+    }
+    function fillRoles(kind, current) {
+        var sel = form.elements.role, roles = ROLES[kind];
+        sel.innerHTML = Object.keys(roles).map(function (k) { return '<option value="' + k + '">' + esc(roles[k]) + '</option>'; }).join('');
+        if (current && roles[current]) { sel.value = current; }
+    }
     var outsideBox = document.getElementById('nreg6-outside'), staleBox = document.getElementById('nreg6-stale');
     var showOutside = localStorage.getItem('nreg6-outside') === '1', showStale = !!staleBox && localStorage.getItem('nreg6-stale') === '1';
     outsideBox.checked = showOutside;
@@ -195,11 +217,25 @@ document.addEventListener('nreg:ready', function () {
         if (n.virtual) { h += '<span class="bdg v"' + (n.outside ? ' title="grupa porządkowa: poza agregatami i adresacją wewnętrzną"' : '') + '>grupa /' + n.len + '</span>'; }
         if (n.sources.indexOf('implicit') >= 0 && !n.manual && !n.state) { h += '<span class="bdg v">wewnętrzna</span>'; }
         if (n.state) { h += '<span class="bdg ' + n.state + '">' + esc(STATE_BDG[n.state]) + '</span>'; }
-        if (n.manual) { h += '<span class="bdg ' + (n.manual.role === 'reserved' ? 'r' : 'm') + '">' + esc(n.manual.role_label) + '</span>'; }
+        if (n.manual) {
+            h += '<span class="bdg ' + (n.manual.role === 'reserved' ? 'r' : 'm') + '">' + esc(n.manual.role_label) + '</span>';
+            if (n.manual.expiry === 'expired') { h += '<span class="bdg d">termin minął</span>'; }
+        }
         return h;
     }
 
+    function rangeRow(r, depth) {
+        var m = r.manual;
+        return '<div class="tn rng" style="padding-left:' + (depth * 16 + 4) + 'px">'
+            + '<span class="tg">·</span><span class="cidr" data-open-range="' + r.id + '">' + esc(r.first + ' – ' + r.last) + '</span>'
+            + '<span class="bdg ' + (m.role === 'reserved' ? 'r' : 'm') + '">' + esc(m.role_label) + '</span>'
+            + (m.expiry === 'expired' ? '<span class="bdg d">termin minął</span>' : '')
+            + '<span class="lbl" title="' + esc(r.label || '') + '">' + esc(r.label || '') + '</span>'
+            + '<span class="cnt" title="adresów w zakresie / rozmiar">' + r.addresses + '/' + big(r.size) + ' adr.</span></div>';
+    }
+
     function nodeRow(n, depth) {
+        if (n.range) { return rangeRow(n, depth); }
         var s = n.stats;
         return '<div class="tn" data-cidr="' + esc(n.cidr) + '" style="padding-left:' + (depth * 16 + 4) + 'px">'
             + '<span class="tg" data-toggle-node="' + esc(n.cidr) + '">' + (n.len < 128 ? '▸' : '·') + '</span>'
@@ -212,6 +248,7 @@ document.addEventListener('nreg:ready', function () {
 
     function addrRow(a, depth) {
         var who = a.rows.map(function (r) { return r.device + ' ' + r['if'] + (r.alias ? ' (' + r.alias + ')' : ''); });
+        if (a.manual) { who.push((a.manual.name || a.manual.description) + ' [ręczny' + (a.manual.expiry === 'expired' ? ', termin minął' : '') + ']'); }
         return '<div class="ta" data-open-ip="' + esc(a.ip) + '" style="padding-left:' + (depth * 16 + 22) + 'px">'
             + '<span class="ip">' + esc(a.ip) + '</span><span class="bdg ' + a.state + '">' + esc(STATE_BDG[a.state]) + '</span>'
             + '<span class="who">' + esc(who.join(' · ')) + '</span></div>';
@@ -233,7 +270,7 @@ document.addEventListener('nreg:ready', function () {
                     + (j.suspicious ? ' · pominiętych z maską krótszą niż /16: ' + j.suspicious : '');
             }
             // Kolejność po adresie: n to adres szesnastkowo (stała długość).
-            var items = j.children.map(function (n) { return { n: n.n, l: n.len, html: nodeRow(n, depth) }; })
+            var items = j.children.map(function (n) { return { n: n.n, l: n.range ? 129 : n.len, html: nodeRow(n, depth) }; })
                 .concat(j.addresses.map(function (a) { return { n: a.n, l: 128, html: addrRow(a, depth) }; }))
                 .concat((j.free || []).map(function (f) { return { n: f.n, l: f.len, html: freeRow(f, depth) }; }));
             items.sort(function (x, y) { return x.n < y.n ? -1 : (x.n > y.n ? 1 : x.l - y.l); });
@@ -310,7 +347,9 @@ document.addEventListener('nreg:ready', function () {
     function manualBlock(m) {
         manualCache[m.id] = m;
         var h = '<div class="nreg-manual"><strong>Wpis ręczny</strong> <span class="bdg ' + (m.role === 'reserved' ? 'r' : 'm') + '">' + esc(m.role_label) + '</span>'
-            + '<dl style="margin-top:6px">' + (m.name ? '<dt>Nazwa</dt><dd>' + esc(m.name) + '</dd>' : '')
+            + '<dl style="margin-top:6px">' + (m.kind === 'range' ? '<dt>Zakres</dt><dd class="nreg-mono" style="word-break:break-all">' + esc(m.first + ' – ' + m.last)
+                + copyBtn(m.first + '-' + m.last) + ' (' + big(m.size) + ' adr.)</dd>' : '')
+            + (m.name ? '<dt>Nazwa</dt><dd>' + esc(m.name) + '</dd>' : '')
             + (m.description ? '<dt>Opis</dt><dd>' + esc(m.description) + '</dd>' : '') + (m.owner ? '<dt>Właściciel</dt><dd>' + esc(m.owner) + '</dd>' : '')
             + (m.vlan ? '<dt>VLAN</dt><dd><a href="' + esc(can.page) + '?vlan=' + m.vlan + '#vlan">' + m.vlan + '</a></dd>' : '')
             + (m.valid_until ? '<dt>Ważne do</dt><dd>' + N.expiryHtml(m) + '</dd>' : '')
@@ -345,6 +384,25 @@ document.addEventListener('nreg:ready', function () {
             }
             h += '<h5>Historia</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
             put(h);
+            if (!n.virtual) { document.getElementById('nreg6-within').value = n.cidr; }
+        }).catch(function (e) { put(alertBox('danger', esc(e.message))); });
+    }
+
+    function openRange(id) {
+        var put = detailLoader('Ładowanie zakresu…');
+        api('range', { id: id }).then(function (j) {
+            var r = j.range;
+            var h = '<h4 class="nreg-mono">' + esc(r.first + ' – ' + r.last) + copyBtn(r.first + '-' + r.last) + '</h4>'
+                + '<dl><dt>Rozmiar</dt><dd>' + big(r.size) + ' adr.</dd><dt>Adresów w środku</dt><dd>' + j.addresses_total + '</dd>'
+                + (j.container ? '<dt>W prefiksie</dt><dd><a href="#" class="nreg-mono" data-open-node="' + esc(j.container) + '">' + esc(j.container) + '</a></dd>' : '')
+                + '</dl>' + manualBlock(r.manual);
+            if (j.addresses.length) {
+                h += '<h5>Adresy w zakresie (' + j.addresses_total + ')</h5><div class="chips">' + j.addresses.map(function (a) {
+                    return '<a href="#" data-goto-ip="' + esc(a.ip) + '" title="' + esc(STATE_BDG[a.state] || '') + '">' + esc(a.ip) + '</a>';
+                }).join('') + (j.addresses_total > j.addresses.length ? ' …' : '') + '</div>';
+            }
+            h += '<h5>Historia</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
+            put(h);
         }).catch(function (e) { put(alertBox('danger', esc(e.message))); });
     }
 
@@ -354,7 +412,14 @@ document.addEventListener('nreg:ready', function () {
             var a = j.address, net = j.path.length ? j.path[j.path.length - 1] : null;
             var h = '<h4 class="nreg-mono">' + esc(j.ip) + copyBtn(j.ip) + (a ? ' <span class="bdg ' + a.state + '">' + esc(STATE_BDG[a.state]) + '</span>' : '') + '</h4>'
                 + (net ? '<p style="font-size:12px">W prefiksie: <a href="#" data-open-node="' + esc(net) + '" class="nreg-mono">' + esc(net) + '</a></p>' : '');
-            h += a ? '<h5>LibreNMS</h5>' + lnmsTable(a.rows) : '<p>LibreNMS nie zna tego adresu.</p>';
+            if (!a) {
+                h += '<p>Adres jest wolny w tej przestrzeni.</p>';
+                if (can.canEdit) { h += '<p><button class="btn btn-success btn-xs" type="button" data-add="' + esc(j.ip) + '"><i class="fa fa-plus"></i> Dodaj jako wpis ręczny</button></p>'; }
+            } else {
+                if (a.rows.length) { h += '<h5>LibreNMS</h5>' + lnmsTable(a.rows); }
+                if (a.manual) { h += manualBlock(a.manual); }
+            }
+            h += '<h5>Historia</h5>' + (j.history && j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
             put(h);
         }).catch(function (e) { put(alertBox('danger', esc(e.message))); });
     }
@@ -365,12 +430,14 @@ document.addEventListener('nreg:ready', function () {
         var box = document.querySelector('#nreg6-manual > div');
         return api('manual_list').then(function (j) {
             j.rows.forEach(function (m) { manualCache[m.id] = m; });
-            document.querySelector('#nreg6-manual summary').textContent = 'Prefiksy ręczne (' + j.rows.length + ')';
-            if (!j.rows.length) { box.innerHTML = '<p class="nreg-muted">Brak prefiksów ręcznych.</p>'; return; }
-            box.innerHTML = '<table class="table table-condensed table-hover" style="font-size:12px"><thead><tr><th>Prefiks</th><th>Rola</th><th>Ważne do</th>'
+            ROLES = { prefix: j.prefix_roles, address: j.address_roles, range: j.range_roles };
+            document.querySelector('#nreg6-manual summary').textContent = 'Wpisy ręczne (' + j.rows.length + ')';
+            if (!j.rows.length) { box.innerHTML = '<p class="nreg-muted">Brak wpisów ręcznych.</p>'; return; }
+            box.innerHTML = '<table class="table table-condensed table-hover" style="font-size:12px"><thead><tr><th>Prefiks / adres / zakres</th><th>Rola</th><th>Ważne do</th>'
                 + '<th>Nazwa</th><th>Opis</th><th>Właściciel</th><th>Dodał</th></tr></thead><tbody>'
                 + j.rows.map(function (m) {
-                    return '<tr><td class="nreg-mono"><a href="#" data-goto-node="' + esc(m.cidr) + '">' + esc(m.cidr) + '</a></td><td>' + esc(m.role_label) + '</td>'
+                    var go = m.kind === 'range' ? 'data-goto-range="' + m.id + '"' : (m.kind === 'address' ? 'data-goto-ip="' : 'data-goto-node="') + (m.kind === 'range' ? '' : esc(m.cidr) + '"');
+                    return '<tr><td class="nreg-mono" style="word-break:break-all"><a href="#" ' + go + '>' + esc(m.kind === 'range' ? m.first + ' – ' + m.last : m.cidr) + '</a></td><td>' + esc(m.role_label) + '</td>'
                         + '<td>' + N.expiryHtml(m) + '</td><td>' + esc(m.name || '') + '</td><td>' + esc(m.description || '') + '</td><td>' + esc(m.owner || '') + '</td>'
                         + '<td style="font-size:11px">' + esc(m.created_by || '?') + '<br>' + esc(m.created_at) + '</td></tr>';
                 }).join('') + '</tbody></table>';
@@ -385,8 +452,9 @@ document.addEventListener('nreg:ready', function () {
         form.elements.id.value = entry ? entry.id : '';
         form.elements.target.value = entry ? entry.cidr : (target || '');
         form.elements.target.disabled = !!entry;
-        document.getElementById('nreg6-ftitle').textContent = entry ? 'Edycja prefiksu ' + entry.cidr : 'Dodaj prefiks IPv6 (wpis ręczny)';
-        if (entry) { ['role', 'name', 'description', 'owner', 'vlan', 'devices', 'valid_until'].forEach(function (f) { form.elements[f].value = entry[f] || (f === 'role' ? 'aggregate' : ''); }); }
+        fillRoles(entry ? entry.kind : kindOf(form.elements.target.value), entry ? entry.role : null);
+        document.getElementById('nreg6-ftitle').textContent = entry ? 'Edycja wpisu ' + entry.cidr : 'Dodaj adresację IPv6 (wpis ręczny)';
+        if (entry) { ['name', 'description', 'owner', 'vlan', 'devices', 'valid_until'].forEach(function (f) { form.elements[f].value = entry[f] || ''; }); }
         form.style.display = '';
         form.scrollIntoView({ behavior: 'smooth', block: 'center' });
         (entry ? form.elements.name : form.elements.target).focus();
@@ -396,7 +464,8 @@ document.addEventListener('nreg:ready', function () {
 
     if (form) {
         document.getElementById('nreg6-cancel').addEventListener('click', function () { form.style.display = 'none'; });
-        document.getElementById('nreg6-add').addEventListener('click', function () { openForm(null); });
+        document.getElementById('nreg6-add').addEventListener('click', function () { openForm(null, document.getElementById('nreg6-within').value); });
+        form.elements.target.addEventListener('input', function () { fillRoles(kindOf(form.elements.target.value), form.elements.role.value); });
         form.addEventListener('submit', function (e) {
             e.preventDefault();
             var err = document.getElementById('nreg6-error'), btn = form.querySelector('button[type="submit"]'), data = {};
@@ -406,7 +475,8 @@ document.addEventListener('nreg:ready', function () {
             btn.disabled = true; err.textContent = '';
             api(id ? 'manual_update' : 'manual_create', data, 'POST').then(function (j) {
                 form.style.display = 'none';
-                result.innerHTML = alertBox('success', id ? 'Zapisano zmiany.' : 'Dodano prefiks <span class="nreg-mono">' + esc(j.label) + '</span>.');
+                result.innerHTML = alertBox('success', id ? 'Zapisano zmiany.' : 'Dodano ' + ({ prefix: 'prefiks', address: 'adres', range: 'zakres' }[j.kind] || 'wpis')
+                    + ' <span class="nreg-mono">' + esc(j.label) + '</span>.');
                 clearDetail();
                 return refreshAll();
             }).catch(function (e2) { err.textContent = e2.message; }).then(function () { btn.disabled = false; });
@@ -524,9 +594,31 @@ document.addEventListener('nreg:ready', function () {
                 if (j.hidden) { result.innerHTML = alertBox('info', 'Ten adres jest ukryty (poza agregatami albo na wyłączonym hoście). Zaznacz odpowiedni przełącznik, żeby zobaczyć go w drzewie.'); }
                 expandPath(j.path, j.ip); openIp(j.ip); return;
             }
-            if (!j.exact) { result.innerHTML = alertBox('info', 'Nie ma prefiksu ' + esc(j.cidr) + ' w drzewie' + (j.path.length ? '. Pokazuję najbliższy, który go zawiera.' : '.')); }
-            expandPath(j.path); if (j.path.length) { openNode(j.path[j.path.length - 1]); } else { clearDetail(); }
+            if (j.kind === 'prefix') {
+                if (!j.exact) { result.innerHTML = alertBox('info', 'Nie ma prefiksu ' + esc(j.cidr) + ' w drzewie' + (j.path.length ? '. Pokazuję najbliższy, który go zawiera.' : '.')); }
+                expandPath(j.path); if (j.path.length) { openNode(j.path[j.path.length - 1]); } else { clearDetail(); }
+                return;
+            }
+            clearDetail();
+            if (!j.hits.length) { result.innerHTML = alertBox('warning', 'Nic nie znaleziono dla „' + esc(q) + '”.'); return; }
+            result.innerHTML = alertBox('info', 'Znaleziono ' + j.hits.length + ':<br>' + j.hits.map(function (h) {
+                var go = h.type === 'range' ? 'data-goto-range="' + h.id + '"' : (h.type === 'address' ? 'data-goto-ip="' : 'data-goto-node="') + (h.type === 'range' ? '' : esc(h.value) + '"');
+                return '<a href="#" class="nreg-mono" ' + go + '>' + esc(h.value) + '</a> <span class="nreg-muted">' + esc(h.label || '')
+                    + (h.hidden ? ' (ukryty w drzewie)' : '') + '</span>';
+            }).join('<br>'));
         }).catch(function (e2) { result.innerHTML = alertBox('danger', esc(e2.message)); });
+    });
+
+    document.getElementById('nreg6-free').addEventListener('submit', function (e) {
+        e.preventDefault();
+        clearDetail();
+        api('free', { within: document.getElementById('nreg6-within').value.trim(), len: document.getElementById('nreg6-len').value, count: 10 })
+            .then(function (j) {
+                result.innerHTML = j.blocks.length
+                    ? alertBox('success', 'Pierwsze wolne /' + j.len + ' w <span class="nreg-mono">' + esc(j.within) + '</span>:<div class="chips" style="margin-top:4px">'
+                        + j.blocks.map(function (b) { return can.canEdit ? '<a href="#" data-add="' + esc(b) + '" title="dodaj jako wpis ręczny">' + esc(b) + '</a>' : '<span class="nreg-mono">' + esc(b) + '</span> '; }).join('') + '</div>')
+                    : alertBox('warning', 'Brak wolnych /' + j.len + ' w ' + esc(j.within) + '.');
+            }).catch(function (e2) { result.innerHTML = alertBox('danger', esc(e2.message)); });
     });
 
     tab.addEventListener('click', function (e) {
@@ -542,7 +634,24 @@ document.addEventListener('nreg:ready', function () {
             var row = treeEl.querySelector('.tn[data-cidr="' + t.getAttribute('data-open-node') + '"]');
             if (row) { select(row); }
             openNode(t.getAttribute('data-open-node'));
+        } else if ((t = e.target.closest('[data-open-range]'))) {
+            e.preventDefault();
+            var rrow = t.closest('.tn');
+            if (rrow) { select(rrow); }
+            openRange(t.getAttribute('data-open-range'));
         } else if ((t = e.target.closest('[data-open-ip]'))) { select(t); openIp(t.getAttribute('data-open-ip')); }
+        else if ((t = e.target.closest('[data-goto-ip]'))) {
+            e.preventDefault();
+            var gip = t.getAttribute('data-goto-ip');
+            api('search', { q: gip }).then(function (j) {
+                if (j.hidden) { result.innerHTML = alertBox('info', 'Ten adres jest ukryty w drzewie (poza agregatami albo na wyłączonym hoście).'); }
+                expandPath(j.path, j.ip); openIp(j.ip);
+            });
+        } else if ((t = e.target.closest('[data-goto-range]'))) {
+            e.preventDefault();
+            var rid = t.getAttribute('data-goto-range');
+            api('range', { id: rid }).then(function (j) { expandPath(j.path); openRange(rid); });
+        }
         else if ((t = e.target.closest('[data-goto-node]'))) {
             e.preventDefault();
             var c = t.getAttribute('data-goto-node');
@@ -550,7 +659,7 @@ document.addEventListener('nreg:ready', function () {
         } else if ((t = e.target.closest('[data-add]'))) {
             e.preventDefault();
             openForm(null, t.getAttribute('data-add'));
-            if (form && t.classList.contains('tf')) { form.elements.role.value = 'used'; }
+            if (form && t.classList.contains('tf') && form.elements.role.querySelector('option[value="used"]')) { form.elements.role.value = 'used'; }
         } else if ((t = e.target.closest('button[data-edit]'))) {
             var m = manualCache[t.getAttribute('data-edit')];
             if (m) { openForm(m); }

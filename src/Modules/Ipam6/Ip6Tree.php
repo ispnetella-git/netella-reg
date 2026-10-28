@@ -15,6 +15,9 @@
  * nie mówi. W prefiksie węższym niż /64 liczymy adresy. Nie ma adresu
  * rozgłoszeniowego. Liczby są \GMP, do JSON-a idą jako tekst.
  *
+ * Zakresy ręczne (np. pula DHCPv6 a-b) nie są węzłami: należą do najgłębszego
+ * węzła, który mieści je w całości, i liczą się w nim jako zajęte.
+ *
  * Czyste, bez Laravela.
  *
  * Part of the Netella-Reg LibreNMS plugin. Licencja GPL-3.0-or-later.
@@ -39,12 +42,16 @@ final class Ip6Tree
     /** @var list<string> węzły posortowane (start, len) */
     private array $sorted = [];
 
+    /** @var array<int,array{id:int,start:\GMP,end:\GMP,node:?string}> */
+    private array $ranges = [];
+
     /**
      * @param  list<array{start:\GMP,len:int,src:string,meta?:array,subnet?:bool}>  $prefixes
      * @param  list<\GMP>  $addresses
      * @param  list<int>  $levels
+     * @param  list<array{id:int,start:\GMP,end:\GMP}>  $ranges  zakresy ręczne
      */
-    public function __construct(array $prefixes, array $addresses, array $levels = [32, 48, 56, 64])
+    public function __construct(array $prefixes, array $addresses, array $levels = [32, 48, 56, 64], array $ranges = [])
     {
         foreach ($prefixes as $p) {
             $this->addNode($p['start'], $p['len'], $p['src'], $p['meta'] ?? [], (bool) ($p['subnet'] ?? false));
@@ -53,7 +60,9 @@ final class Ip6Tree
         sort($levels);
         $anchors = array_merge(
             array_map(fn ($n) => [$n['start'], $n['len']], array_values($this->nodes)),
-            array_map(fn ($ip) => [$ip, 128], $addresses)
+            array_map(fn ($ip) => [$ip, 128], $addresses),
+            // Zakres jest kotwicą poziomów, w które mieści się w całości.
+            array_map(fn ($r) => [$r['start'], Ip6Calc::commonLen($r['start'], $r['end']) + 1], $ranges)
         );
         foreach ($anchors as [$start, $len]) {
             foreach ($levels as $lvl) {
@@ -83,6 +92,17 @@ final class Ip6Tree
                 $this->nodes[$node]['addr'][] = count($this->addresses) - 1;
             }
         }
+        foreach ($ranges as $r) {
+            $node = $this->deepest($r['start']);
+            $endHex = Ip6Calc::hex($r['end']);
+            while ($node !== null && strcmp($this->nodes[$node]['end_hex'], $endHex) < 0) {
+                $node = $this->nodes[$node]['parent'];
+            }
+            $this->ranges[$r['id']] = $r + ['node' => $node];
+            if ($node !== null) {
+                $this->nodes[$node]['ranges'][] = $r['id'];
+            }
+        }
         $this->computeStats();
     }
 
@@ -90,7 +110,7 @@ final class Ip6Tree
     {
         $b = Ip6Calc::block(Ip6Calc::network($start, $len), $len);
         $cidr = $b['cidr'];
-        $this->nodes[$cidr] ??= $b + ['sources' => [], 'meta' => [], 'subnet' => false, 'parent' => null, 'children' => [], 'addr' => []];
+        $this->nodes[$cidr] ??= $b + ['sources' => [], 'meta' => [], 'subnet' => false, 'parent' => null, 'children' => [], 'addr' => [], 'ranges' => []];
         $n = &$this->nodes[$cidr];
         if ($src !== 'virtual' || $n['sources'] === []) {
             $n['sources'][$src] = true;
@@ -227,6 +247,7 @@ final class Ip6Tree
             foreach ($n['addr'] as $i) {
                 $busy[] = [$this->addresses[$i]['ip'], $this->addresses[$i]['ip']];
             }
+            array_push($busy, ...$this->rangesIn($n));
             $n['occ'] = Ip6Calc::merge($busy);
 
             $units = self::inUnits($n);
@@ -308,6 +329,7 @@ final class Ip6Tree
         foreach ($n['addr'] as $i) {
             $busy[] = [$this->addresses[$i]['ip'], $this->addresses[$i]['ip']];
         }
+        array_push($busy, ...$this->rangesIn($n));
         if (self::inUnits($n)) {
             $busy = Ip6Calc::roundOut($busy, Ip6Calc::UNIT_LEN);
         }
@@ -335,6 +357,29 @@ final class Ip6Tree
         usort($blocks, fn ($x, $y) => [$x['len'], $x['hex']] <=> [$y['len'], $y['hex']]);
 
         return array_map(fn ($b) => ['cidr' => $b['cidr'], 'len' => $b['len']], array_slice($blocks, 0, $limit));
+    }
+
+    /**
+     * Zakresy nachodzące na węzeł, przycięte do niego.
+     *
+     * @return list<array{0:\GMP,1:\GMP}>
+     */
+    private function rangesIn(array $n): array
+    {
+        $out = [];
+        foreach ($this->ranges as $r) {
+            if (gmp_cmp($r['end'], $n['start']) >= 0 && gmp_cmp($r['start'], $n['end']) <= 0) {
+                $out[] = [gmp_cmp($r['start'], $n['start']) > 0 ? $r['start'] : $n['start'], gmp_cmp($r['end'], $n['end']) < 0 ? $r['end'] : $n['end']];
+            }
+        }
+
+        return $out;
+    }
+
+    /** @return array{id:int,start:\GMP,end:\GMP,node:?string}|null */
+    public function range(int $id): ?array
+    {
+        return $this->ranges[$id] ?? null;
     }
 
     public static function isVirtual(array $n): bool

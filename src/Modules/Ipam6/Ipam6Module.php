@@ -5,13 +5,14 @@
  *
  * Adresy IPv6 z LibreNMS zbiera moduł adresacji IPv4 (IpamCollector, migawka
  * "ipam/address", family 6), więc ten moduł nie ma własnej synchronizacji -
- * czyta tę migawkę. Wpisy ręczne (prefiksy) są w osobnej tabeli (Ip6Manual),
- * przestrzenie adresowe są wspólne z IPv4 (IpamSpaces).
+ * czyta tę migawkę. Wpisy ręczne (prefiksy, adresy, zakresy) są w osobnej tabeli
+ * (Ip6Manual), przestrzenie adresowe są wspólne z IPv4 (IpamSpaces).
  *
  * Zasady widoku jak w IPv4: domyślnie w drzewie jest adresacja wewnętrzna
  * (ustawienie "ipam6_private", domyślnie ULA fc00::/7), w której coś leży, oraz
- * prefiksy ręczne/RIPE; reszta LibreNMS (np. połączenia z peerami) za
- * przełącznikiem outside=1. Adresy wyłączonych hostów za przełącznikiem stale=1.
+ * wpisy ręczne/RIPE; reszta LibreNMS (np. połączenia z peerami) za przełącznikiem
+ * outside=1. Adresy wyłączonych hostów za przełącznikiem stale=1. Blokady przy
+ * zapisie i "Wolne /N" zawsze liczą z pełnych danych (Ip6Context).
  *
  * Wymaga rozszerzenia PHP gmp - bez niego API zwraca czytelny błąd, a reszta
  * wtyczki działa.
@@ -45,9 +46,12 @@ class Ipam6Module extends AbstractModule
 
     private const MAX_ROWS = 300;
 
-    private const VIEW_ACTIONS = ['tree', 'node', 'search', 'manual_list'];
+    private const VIEW_ACTIONS = ['tree', 'node', 'range', 'search', 'manual_list'];
 
     private const FORM_FIELDS = ['role', 'name', 'description', 'owner', 'vlan', 'devices', 'valid_until'];
+
+    /** Stany adresu: LibreNMS, wyłączony host, wpis ręczny, rezerwacja. */
+    private const RANK = ['r' => 1, 'm' => 2, 's' => 3, 'l' => 4];
 
     private bool $showStale = true;
 
@@ -65,7 +69,7 @@ class Ipam6Module extends AbstractModule
 
     public function schemaVersion(): int
     {
-        return 1;
+        return 2;
     }
 
     public function migrate(Connection $db, int $from): void
@@ -74,13 +78,16 @@ class Ipam6Module extends AbstractModule
             IpamSpaces::migrate($db);
             Ip6Manual::migrate($db);
         }
+        if ($from < 2) {
+            Ip6Manual::migrateWiderCidr($db);
+        }
     }
 
     /** Dane z LibreNMS zbiera moduł IPv4 - tu tylko liczba wpisów do logu. */
     public function sync(SyncContext $ctx): array
     {
         $n = $ctx->db->table(Ip6Manual::TABLE)->whereNull('deleted_at')->count();
-        $ctx->log("{$n} prefiksów ręcznych IPv6" . (Settings::moduleEnabled(IpamModule::KEY) ? '' : '; moduł Adresacja IP wyłączony - adresy IPv6 z LibreNMS się nie odświeżają'));
+        $ctx->log("{$n} wpisów ręcznych IPv6" . (Settings::moduleEnabled(IpamModule::KEY) ? '' : '; moduł Adresacja IP wyłączony - adresy IPv6 z LibreNMS się nie odświeżają'));
 
         return ['manual' => $n];
     }
@@ -118,9 +125,13 @@ class Ipam6Module extends AbstractModule
             'spaces' => ['spaces' => array_values((new IpamSpaces(Db::connection()))->all())],
             'tree' => $this->apiTree($space, trim((string) $request->query('node', ''))),
             'node' => $this->apiNode($space, trim((string) $request->query('cidr', ''))),
+            'range' => $this->apiRange($space, (int) $request->query('id', 0)),
             'search' => $this->apiSearch($space, trim((string) $request->query('q', ''))),
+            'free' => $this->apiFree($space, trim((string) $request->query('within', '')), (int) $request->query('len', 64),
+                (int) $request->query('count', 10)),
             'manual_list' => $this->apiManualList($space),
-            'manual_create' => $this->post($request) ?? $this->apiManualCreate($space, $request),
+            'manual_create' => $this->post($request) ?? $this->manual()->create($space, (string) $request->input('target', ''),
+                $request->only(self::FORM_FIELDS), self::comment($request), $this->context($space)),
             'manual_update' => $this->post($request) ?? $this->apiManualUpdate($request),
             'manual_delete' => $this->post($request) ?? ['deleted' => $this->manual()->delete((int) $request->input('id', 0), self::comment($request))],
             'ripe_lookup' => $this->apiRipeLookup($space, trim((string) $request->query('asn', ''))),
@@ -179,20 +190,11 @@ class Ipam6Module extends AbstractModule
         return array_values(array_unique($out)) ?: [32, 48, 56, 64];
     }
 
-    /**
-     * Wszystko o przestrzeni: adresy i sieci z LibreNMS, wpisy ręczne, drzewo.
-     *
-     * @return array{tree:Ip6Tree,addr:array<string,array>,networks:array<string,list<array>>,manual:array<string,array>,hidden:int,suspicious:int,all_addr:array<string,array>}
-     */
-    private function data(int $space): array
+    /** @return array{0:array,1:array} adresy (hex => wpis) i sieci (cidr => wiersze) z LibreNMS */
+    private function lnms(int $space, array $spaces): array
     {
-        $spaces = (new IpamSpaces(Db::connection()))->all();
-        if (! isset($spaces[$space])) {
-            throw new ApiException('Nie ma takiej przestrzeni adresowej.', 404);
-        }
         $mode = Settings::disabledMode();
         $rows = (new Snapshot(Db::connection()))->rows(IpamModule::KEY, IpamModule::TYPE, fn ($q) => $q->whereNull('gone_at'));
-
         $addr = $networks = [];
         $suspicious = 0;
         foreach ($rows as $row) {
@@ -215,7 +217,7 @@ class Ipam6Module extends AbstractModule
             }
             $state = $disabled ? 's' : 'l';
             $hex = Ip6Calc::hex($ip);
-            $addr[$hex] ??= ['ip' => $ip, 'rows' => [], 'state' => 's'];
+            $addr[$hex] ??= ['ip' => $ip, 'rows' => [], 'state' => 's', 'manual' => null];
             $addr[$hex]['rows'][] = $d + ['state' => $state];
             if ($state === 'l') {
                 $addr[$hex]['state'] = 'l';
@@ -225,11 +227,52 @@ class Ipam6Module extends AbstractModule
             }
         }
 
-        $manual = [];
+        return [$addr, $networks, $suspicious];
+    }
+
+    /**
+     * Wszystko o przestrzeni: adresy i sieci z LibreNMS, wpisy ręczne, drzewo widoku.
+     */
+    private function data(int $space): array
+    {
+        $spaces = (new IpamSpaces(Db::connection()))->all();
+        if (! isset($spaces[$space])) {
+            throw new ApiException('Nie ma takiej przestrzeni adresowej.', 404);
+        }
+        [$lnmsAddr, $networks, $suspicious] = $this->lnms($space, $spaces);
+
+        $manual = $mAddr = $ranges = [];
         foreach ($this->manual()->active($space) as $m) {
-            $manual[$m['cidr']] = $m + Ip6Calc::parse($m['cidr']);
+            $m['start'] = Ip6Calc::fromHex($m['start_hex']);
+            $m['end'] = Ip6Calc::fromHex($m['end_hex']);
+            match ($m['kind']) {
+                'address' => $mAddr[$m['start_hex']] = $m,
+                'range' => $ranges[$m['id']] = $m,
+                default => $manual[$m['cidr']] = $m,
+            };
         }
         $implicit = array_map(fn ($c) => Ip6Calc::parse($c), self::implicitPrefixes());
+
+        // Wszystkie adresy: LibreNMS + wpisy ręczne (stan o najwyższej randze).
+        $allAddr = $lnmsAddr;
+        foreach ($mAddr as $hex => $m) {
+            $st = $m['role'] === 'reserved' ? 'r' : 'm';
+            $allAddr[$hex] ??= ['ip' => $m['start'], 'rows' => [], 'state' => $st, 'manual' => null];
+            $allAddr[$hex]['manual'] = $m;
+            if (self::RANK[$st] > self::RANK[$allAddr[$hex]['state']]) {
+                $allAddr[$hex]['state'] = $st;
+            }
+        }
+
+        $real = $manual;
+        foreach (array_keys($networks) as $c) {
+            $real[$c] ??= Ip6Calc::parse($c);
+        }
+        foreach ($implicit as $p) {
+            $real[$p['cidr']] ??= $p;
+        }
+        $ctx = new Ip6Context($lnmsAddr, array_keys($networks), $real);
+
         $covered = function (\GMP $s, \GMP $e) use ($manual, $implicit): bool {
             foreach (array_merge(array_values($manual), $implicit) as $p) {
                 if (Ip6Calc::within($p['start'], $p['end'], $s, $e)) {
@@ -241,23 +284,25 @@ class Ipam6Module extends AbstractModule
         };
 
         // Widok: bez wyłączonych hostów (stale=0) i bez adresacji spoza agregatów (outside=0).
-        $allAddr = $addr;
+        // Wpisy ręczne są zawsze widoczne.
         $hidden = 0;
         $view = [];
-        foreach ($addr as $hex => $a) {
-            if (! $this->showStale && $a['state'] === 's') {
-                continue;
-            }
-            if (! $this->showOutside && ! $covered($a['ip'], $a['ip'])) {
-                $hidden++;
-                continue;
+        foreach ($allAddr as $hex => $a) {
+            if ($a['manual'] === null) {
+                if (! $this->showStale && $a['state'] === 's') {
+                    continue;
+                }
+                if (! $this->showOutside && ! $covered($a['ip'], $a['ip'])) {
+                    $hidden++;
+                    continue;
+                }
             }
             $view[$hex] = $a;
         }
         $viewNets = [];
         foreach ($networks as $cidr => $nrows) {
             $active = $this->showStale ? $nrows : array_filter($nrows, fn ($r) => $r['state'] === 'l');
-            $c = Ip6Calc::parse($cidr);
+            $c = $real[$cidr];
             if ($active === [] || (! $this->showOutside && ! $covered($c['start'], $c['end']))) {
                 continue;
             }
@@ -266,17 +311,18 @@ class Ipam6Module extends AbstractModule
 
         $prefixes = [];
         foreach ($viewNets as $cidr => $nrows) {
-            $c = Ip6Calc::parse($cidr);
+            $c = $real[$cidr];
             // Rola wpisu ręcznego na tym samym prefiksie wygrywa (agregat = blok, nie sieć).
             $sub = isset($manual[$cidr]) ? $manual[$cidr]['role'] === 'used' : true;
             $prefixes[] = ['start' => $c['start'], 'len' => $c['len'], 'src' => 'lnms', 'subnet' => $sub];
         }
-        foreach ($manual as $cidr => $m) {
+        foreach ($manual as $m) {
             $prefixes[] = ['start' => $m['start'], 'len' => $m['len'], 'src' => 'manual', 'subnet' => $m['role'] === 'used'];
         }
         foreach ($implicit as $p) {
             $used = false;
-            foreach (array_merge(array_map(fn ($a) => [$a['ip'], $a['ip']], $view), array_map(fn ($m) => [$m['start'], $m['end']], $manual)) as [$s, $e]) {
+            $things = array_merge(array_map(fn ($a) => [$a['ip'], $a['ip']], $view), array_map(fn ($m) => [$m['start'], $m['end']], array_merge($manual, $ranges)));
+            foreach ($things as [$s, $e]) {
                 if (Ip6Calc::within($p['start'], $p['end'], $s, $e)) {
                     $used = true;
                     break;
@@ -286,10 +332,23 @@ class Ipam6Module extends AbstractModule
                 $prefixes[] = ['start' => $p['start'], 'len' => $p['len'], 'src' => 'implicit', 'meta' => ['label' => 'adresacja wewnętrzna (ULA)']];
             }
         }
+        $tree = new Ip6Tree($prefixes, array_map(fn ($a) => $a['ip'], array_values($view)), self::levels(),
+            array_map(fn ($r) => ['id' => $r['id'], 'start' => $r['start'], 'end' => $r['end']], array_values($ranges)));
 
-        return ['tree' => new Ip6Tree($prefixes, array_map(fn ($a) => $a['ip'], array_values($view)), self::levels()),
-            'addr' => $view, 'all_addr' => $allAddr, 'networks' => $viewNets, 'all_networks' => $networks,
-            'manual' => $manual, 'hidden' => $hidden, 'suspicious' => $suspicious, 'covered' => $covered];
+        return ['tree' => $tree, 'addr' => $view, 'all_addr' => $allAddr, 'networks' => $viewNets, 'all_networks' => $networks,
+            'manual' => $manual, 'ranges' => $ranges, 'real' => $real, 'ctx' => $ctx, 'hidden' => $hidden, 'suspicious' => $suspicious];
+    }
+
+    /** Kontekst blokad z pełnych danych (bez filtrów widoku). */
+    private function context(int $space): Ip6Context
+    {
+        $saved = [$this->showStale, $this->showOutside];
+        [$this->showStale, $this->showOutside] = [true, true];
+        try {
+            return $this->data($space)['ctx'];
+        } finally {
+            [$this->showStale, $this->showOutside] = $saved;
+        }
     }
 
     private static function lnmsRow(array $r): array
@@ -333,7 +392,26 @@ class Ipam6Module extends AbstractModule
     {
         $a = $data['all_addr'][$hex];
 
-        return ['ip' => Ip6Calc::gmp2ip($a['ip']), 'n' => $hex, 'state' => $a['state'], 'rows' => array_map([self::class, 'lnmsRow'], $a['rows'])];
+        return ['ip' => Ip6Calc::gmp2ip($a['ip']), 'n' => $hex, 'state' => $a['state'], 'rows' => array_map([self::class, 'lnmsRow'], $a['rows']),
+            'manual' => self::publicManual($a['manual'])];
+    }
+
+    /** Adresy (LibreNMS i ręczne) w przedziale - hex, posortowane. */
+    private static function addressesIn(array $data, \GMP $s, \GMP $e): array
+    {
+        $out = array_keys(array_filter($data['all_addr'], fn ($a) => gmp_cmp($a['ip'], $s) >= 0 && gmp_cmp($a['ip'], $e) <= 0));
+        sort($out);
+
+        return $out;
+    }
+
+    private function rangeInfo(array $data, array $r): array
+    {
+        $inside = count(self::addressesIn($data, $r['start'], $r['end']));
+
+        return ['range' => true, 'id' => $r['id'], 'cidr' => $r['cidr'], 'n' => $r['start_hex'], 'len' => 128,
+            'first' => $r['first'], 'last' => $r['last'], 'size' => $r['size'], 'addresses' => $inside,
+            'label' => $r['name'] ?: $r['description'], 'manual' => self::publicManual($r)];
     }
 
     // ---------------------------------------------------------------- API
@@ -342,15 +420,17 @@ class Ipam6Module extends AbstractModule
     {
         $data = $this->data($space);
         $tree = $data['tree'];
+        $free = $rangeRows = [];
         if ($node === '') {
             $children = $tree->roots();
             $addrIdx = $tree->rootAddresses();
-            $free = [];
         } else {
             $n = $tree->node($node) ?? throw new ApiException("Nie ma węzła {$node}.", 404);
             $children = $n['children'];
             $addrIdx = $n['addr'];
-            $free = [];
+            foreach ($n['ranges'] as $id) {
+                $rangeRows[] = $this->rangeInfo($data, $data['ranges'][$id]);
+            }
             foreach ($tree->gaps($node) as [$a, $b]) {
                 foreach (Ip6Calc::rangeToCidrs($a, $b, 64) as $blk) {
                     $free[] = ['n' => Ip6Calc::hex($blk['start']), 'cidr' => Ip6Calc::cidr($blk['start'], $blk['len']), 'len' => $blk['len']];
@@ -367,7 +447,7 @@ class Ipam6Module extends AbstractModule
         }
 
         return [
-            'children' => array_map(fn ($c) => $this->nodeInfo($data, $tree->node($c)), $children),
+            'children' => array_merge(array_map(fn ($c) => $this->nodeInfo($data, $tree->node($c)), $children), $rangeRows),
             'addresses' => $addresses,
             'addresses_total' => count($addrIdx),
             'free' => $free,
@@ -387,65 +467,140 @@ class Ipam6Module extends AbstractModule
             'path' => $data['tree']->path($cidr),
             'free_blocks' => $data['tree']->freeBlocks($cidr, 30),
             'history' => AuditLog::page(['module' => self::KEY, 'key_prefix' => ["n:{$cidr}:"]], 1, 100)['rows'],
-            'roles' => Ip6Manual::PREFIX_ROLES,
+        ];
+    }
+
+    private function apiRange(int $space, int $id): array
+    {
+        $data = $this->data($space);
+        $r = $data['ranges'][$id] ?? throw new ApiException('Nie ma takiego zakresu (mógł zostać usunięty).', 404);
+        $node = $data['tree']->range($id)['node'] ?? null;
+        $inside = self::addressesIn($data, $r['start'], $r['end']);
+
+        return [
+            'range' => $this->rangeInfo($data, $r),
+            'path' => $node ? $data['tree']->path($node) : [],
+            'container' => $data['ctx']->rangeContainer($r['start'], $r['end'])[0],
+            'addresses' => array_map(fn ($hex) => $this->addrInfo($data, $hex), array_slice($inside, 0, 200)),
+            'addresses_total' => count($inside),
+            'history' => AuditLog::page(['module' => self::KEY, 'key_prefix' => ["r:{$r['cidr']}:"]], 1, 100)['rows'],
         ];
     }
 
     private function apiSearch(int $space, string $q): array
     {
-        try {
-            $p = Ip6Calc::parse($q);
-        } catch (\InvalidArgumentException) {
-            throw new ApiException('Wpisz adres albo prefiks IPv6, np. 2a0e:39c0::1 albo 2a0e:39c0::/32.');
+        if ($q === '') {
+            throw new ApiException('Wpisz adres, prefiks albo tekst.');
         }
         $data = $this->data($space);
         $tree = $data['tree'];
-        if ($p['len'] === 128) {
+        $p = null;
+        try {
+            $p = Ip6Calc::parse($q);
+        } catch (\InvalidArgumentException) {
+        }
+
+        if ($p !== null && $p['len'] === 128) {
             $hex = $p['start_hex'];
             $node = $tree->deepest($p['start']);
             $known = isset($data['all_addr'][$hex]);
 
             return ['kind' => 'address', 'ip' => Ip6Calc::gmp2ip($p['start']), 'path' => $node ? $tree->path($node) : [],
-                'address' => $known ? $this->addrInfo($data, $hex) : null, 'hidden' => $known && ! isset($data['addr'][$hex])];
+                'address' => $known ? $this->addrInfo($data, $hex) : null, 'hidden' => $known && ! isset($data['addr'][$hex]),
+                'history' => AuditLog::page(['module' => self::KEY, 'key_prefix' => ['a:' . Ip6Calc::gmp2ip($p['start']) . ':']], 1, 50)['rows']];
         }
-        $node = $tree->node($p['cidr']) ? $p['cidr'] : $tree->deepest($p['start']);
+        if ($p !== null) {
+            $node = $tree->node($p['cidr']) ? $p['cidr'] : $tree->deepest($p['start']);
 
-        return ['kind' => 'prefix', 'cidr' => $p['cidr'], 'exact' => $node === $p['cidr'], 'path' => $node ? $tree->path($node) : []];
+            return ['kind' => 'prefix', 'cidr' => $p['cidr'], 'exact' => $node === $p['cidr'], 'path' => $node ? $tree->path($node) : []];
+        }
+
+        // Tekst: wpisy ręczne i nazwy urządzeń, interfejsów, opisy portów.
+        $needle = mb_strtolower($q);
+        $text = fn (array $m) => mb_strtolower(implode(' ', [$m['cidr'], $m['role_label'], $m['name'], $m['description'], $m['owner'], $m['devices']]));
+        $hits = [];
+        foreach ($data['manual'] as $cidr => $m) {
+            if (str_contains($text($m), $needle)) {
+                $hits[] = ['type' => 'prefix', 'value' => $cidr, 'label' => $m['name'] ?: $m['description'], 'path' => $tree->node($cidr) ? $tree->path($cidr) : []];
+            }
+        }
+        foreach ($data['ranges'] as $id => $m) {
+            if (str_contains($text($m), $needle)) {
+                $node = $tree->range($id)['node'] ?? null;
+                $hits[] = ['type' => 'range', 'id' => $id, 'value' => $m['cidr'], 'label' => $m['role_label'] . ' · ' . ($m['name'] ?: $m['description']),
+                    'path' => $node ? $tree->path($node) : []];
+            }
+        }
+        foreach ($data['all_addr'] as $hex => $a) {
+            $parts = array_map(fn ($r) => $r['device'] . ' ' . $r['if'] . ' ' . ($r['alias'] ?? ''), $a['rows']);
+            if ($a['manual']) {
+                $parts[] = $text($a['manual']);
+            }
+            if (str_contains(mb_strtolower(implode(' ', $parts)), $needle)) {
+                $node = $tree->deepest($a['ip']);
+                $hits[] = ['type' => 'address', 'value' => Ip6Calc::gmp2ip($a['ip']), 'label' => mb_substr(trim(implode(' · ', $parts)), 0, 140),
+                    'path' => $node ? $tree->path($node) : [], 'hidden' => ! isset($data['addr'][$hex])];
+            }
+            if (count($hits) >= 100) {
+                break;
+            }
+        }
+
+        return ['kind' => 'text', 'hits' => $hits];
+    }
+
+    /** Pierwsze wolne bloki /len w prefiksie; zajęte liczone z pełnych danych. */
+    private function apiFree(int $space, string $within, int $len, int $count): array
+    {
+        try {
+            $w = Ip6Calc::parse($within, true);
+        } catch (\InvalidArgumentException $e) {
+            throw new ApiException($e->getMessage());
+        }
+        if ($len < $w['len'] || $len > 128) {
+            throw new ApiException("Maska musi być z zakresu /{$w['len']}-/128.");
+        }
+        $saved = [$this->showStale, $this->showOutside];
+        [$this->showStale, $this->showOutside] = [true, true];
+        try {
+            $data = $this->data($space);
+        } finally {
+            [$this->showStale, $this->showOutside] = $saved;
+        }
+        $busy = [];
+        foreach ($data['real'] as $p) {
+            // Prefiksy leżące wewnątrz (nie sam przeszukiwany i nie te, które go zawierają).
+            if ($p['len'] > $w['len'] && Ip6Calc::within($w['start'], $w['end'], $p['start'], $p['end'])) {
+                $busy[] = [$p['start'], $p['end']];
+            }
+        }
+        foreach ($data['ranges'] as $r) {
+            $busy[] = [$r['start'], $r['end']];
+        }
+        foreach ($data['all_addr'] as $a) {
+            $busy[] = [$a['ip'], $a['ip']];
+        }
+        $blocks = Ip6Calc::findFreeBlocks($w['start'], $w['end'], $busy, $len, max(1, min(50, $count)));
+
+        return ['within' => $w['cidr'], 'len' => $len, 'blocks' => array_map(fn ($s) => Ip6Calc::cidr($s, $len), $blocks)];
     }
 
     private function apiManualList(int $space): array
     {
-        return ['rows' => array_map([self::class, 'publicManual'], array_values($this->data($space)['manual'])), 'roles' => Ip6Manual::PREFIX_ROLES];
-    }
-
-    /** @return array{0:callable,1:callable} sprawdzenia blokad z pełnych danych LibreNMS */
-    private function checks(int $space): array
-    {
-        $saved = [$this->showStale, $this->showOutside];
-        [$this->showStale, $this->showOutside] = [true, true];
         $data = $this->data($space);
-        [$this->showStale, $this->showOutside] = $saved;
+        $rows = array_merge(array_values($data['manual']), array_values($data['ranges']),
+            array_values(array_filter(array_map(fn ($a) => $a['manual'], $data['all_addr']))));
+        usort($rows, fn ($a, $b) => [$a['start_hex'], $a['len']] <=> [$b['start_hex'], $b['len']]);
 
-        return [
-            fn (string $cidr) => isset($data['all_networks'][$cidr]),
-            fn (\GMP $s, \GMP $e) => count(array_filter($data['all_addr'], fn ($a) => gmp_cmp($a['ip'], $s) >= 0 && gmp_cmp($a['ip'], $e) <= 0)),
-        ];
-    }
-
-    private function apiManualCreate(int $space, Request $request): array
-    {
-        [$net, $inside] = $this->checks($space);
-
-        return $this->manual()->create($space, (string) $request->input('target', ''), $request->only(self::FORM_FIELDS),
-            self::comment($request), $net, $inside);
+        return ['rows' => array_map([self::class, 'publicManual'], $rows), 'prefix_roles' => Ip6Manual::PREFIX_ROLES,
+            'address_roles' => Ip6Manual::ADDRESS_ROLES, 'range_roles' => Ip6Manual::RANGE_ROLES];
     }
 
     private function apiManualUpdate(Request $request): array
     {
         $entry = $this->manual()->find((int) $request->input('id', 0)) ?? throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
-        [$net, $inside] = $this->checks($entry['space_id']);
 
-        return ['entry' => $this->manual()->update($entry['id'], $request->only(self::FORM_FIELDS), self::comment($request), $net, $inside)];
+        return ['entry' => $this->manual()->update($entry['id'], $request->only(self::FORM_FIELDS), self::comment($request), $this->context($entry['space_id']))];
     }
 
     /** Prefiksy IPv6 numeru AS z RIPE z oceną względem rejestru IPv6 (jak w IPv4). */
@@ -460,8 +615,11 @@ class Ipam6Module extends AbstractModule
         }
         $saved = [$this->showStale, $this->showOutside];
         [$this->showStale, $this->showOutside] = [true, true];
-        $data = $this->data($space);
-        [$this->showStale, $this->showOutside] = $saved;
+        try {
+            $data = $this->data($space);
+        } finally {
+            [$this->showStale, $this->showOutside] = $saved;
+        }
 
         $v6 = [];
         foreach ($res['prefixes'] as $p) {
@@ -478,7 +636,7 @@ class Ipam6Module extends AbstractModule
             }
             $r = $v6[$p['cidr']];
             $p['unsupported'] = false;
-            $p['exists'] = isset($data['manual'][$p['cidr']]) ? (Ip6Manual::PREFIX_ROLES[$data['manual'][$p['cidr']]['role']] ?? 'wpis') : null;
+            $p['exists'] = isset($data['manual'][$p['cidr']]) ? $data['manual'][$p['cidr']]['role_label'] : null;
             $p['in_aggregate'] = null;
             foreach ($data['manual'] as $c => $m) {
                 if ($c !== $p['cidr'] && $m['role'] === 'aggregate' && Ip6Calc::within($m['start'], $m['end'], $r['start'], $r['end'])) {
@@ -493,16 +651,11 @@ class Ipam6Module extends AbstractModule
                     break;
                 }
             }
-            $p['lnms'] = count(array_filter(array_keys($data['all_networks']), function ($c) use ($r) {
-                $n = Ip6Calc::parse($c);
-
-                return Ip6Calc::within($r['start'], $r['end'], $n['start'], $n['end']);
-            }));
+            $p['lnms'] = count(array_filter(array_keys($data['all_networks']), fn ($c) => Ip6Calc::within($r['start'], $r['end'], $data['real'][$c]['start'], $data['real'][$c]['end'])));
             $p['name'] = $p['route_descr'];
             $p['checked'] = $p['exists'] === null && $p['in_aggregate'] === null && $p['parent'] === null;
         }
         unset($p);
-        // IPv6 na górze listy.
         usort($res['prefixes'], fn ($a, $b) => ($b['family'] <=> $a['family']));
 
         return $res;
@@ -524,18 +677,17 @@ class Ipam6Module extends AbstractModule
         }
         $desc = trim((string) $request->input('description', '')) ?: "Przydział AS{$asn} (z RIPE)";
         $comment = self::comment($request) ?? "dodano z RIPE dla AS{$asn}";
-        [$net, $inside] = $this->checks($space);
 
         $out = [];
         foreach ($items as $it) {
             $cidr = trim((string) (is_array($it) ? ($it['cidr'] ?? '') : $it));
             $name = is_array($it) ? mb_substr(trim((string) ($it['name'] ?? '')), 0, 64) : '';
             try {
-                if (! str_contains($cidr, ':')) {
-                    throw new ApiException('IPv4 dodaje się w zakładce „Adresacja IP”.');
+                if (! str_contains($cidr, ':') || ! str_contains($cidr, '/')) {
+                    throw new ApiException('Tu dodaje się tylko prefiksy IPv6 (IPv4 w zakładce „Adresacja IP”).');
                 }
                 $this->manual()->create($space, $cidr, ['role' => 'aggregate', 'name' => $name !== '' ? $name : "AS{$asn}", 'description' => $desc],
-                    $comment, $net, $inside);
+                    $comment, $this->context($space));
                 $out[] = ['cidr' => $cidr, 'ok' => true];
             } catch (ApiException $e) {
                 $out[] = ['cidr' => $cidr, 'ok' => false, 'error' => $e->getMessage()];
