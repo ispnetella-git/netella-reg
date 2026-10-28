@@ -335,6 +335,7 @@ final class IpamManual
         }
 
         $fields = self::validate($input);
+        $fields['description'] ??= ''; // opis opcjonalny, kolumna NOT NULL
         self::checkFuture($fields[Expiry::FIELD] ?? null);
         $kind = $parsed['kind'] === 'addresses' ? 'address' : $parsed['kind'];
         $roles = self::rolesFor($kind);
