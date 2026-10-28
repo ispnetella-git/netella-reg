@@ -29,7 +29,7 @@ final class Settings
         // Ile dni rekord, który zniknął z LibreNMS, liczy się jeszcze jako zajęty.
         'grace_days' => 30,
         // Rekordy z urządzeń wyłączonych w LibreNMS: 'stale' = zajęte, ale
-        // oznaczone jako nieaktualne; 'ignore' = traktowane jak wolne.
+        // oznaczone jako z wyłączonych hostów; 'ignore' = traktowane jak wolne.
         'disabled_devices' => 'stale',
         // Adresacja: zakresy IPv4 pomijane przy synchronizacji (loopback, link-local, "this network").
         'ipam_ignore' => '127.0.0.0/8, 169.254.0.0/16, 0.0.0.0/8',

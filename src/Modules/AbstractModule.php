@@ -36,8 +36,4 @@ abstract class AbstractModule implements RegModule
         return strtoupper($method) === 'GET' ? Access::VIEW : Access::EDIT;
     }
 
-    public function deviceOverview(int $deviceId): ?array
-    {
-        return null;
-    }
 }

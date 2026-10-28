@@ -2,7 +2,7 @@
      szukanie wolnych numerów, wpisy ręczne, szczegóły i historia numeru.
 
      Adres ?vlan=1400#vlan otwiera szczegóły numeru, ?range=1400-1450#vlan
-     sprawdza zakres - z takich linków korzysta panel na stronie urządzenia.
+     sprawdza zakres - z takich linków korzysta zakładka adresacji.
 
      Zaznaczanie na mapie: przeciągnięcie = zakres, Ctrl (Cmd) + klik lub przeciągnięcie
      dokłada albo zdejmuje numery, Shift + klik = zakres od ostatniego numeru. Zaznaczenie

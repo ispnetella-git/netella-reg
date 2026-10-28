@@ -147,21 +147,6 @@ final class IpamModule extends AbstractModule
         };
     }
 
-    public function deviceOverview(int $deviceId): ?array
-    {
-        $rows = (new Snapshot(Db::connection()))->rows(self::KEY, self::TYPE, function ($q) {
-            $q->whereNull('gone_at');
-        });
-        $rows = array_values(array_filter($rows, fn ($r) => (int) ($r['data']['device_id'] ?? 0) === $deviceId));
-        if ($rows === []) {
-            return null;
-        }
-        usort($rows, fn ($a, $b) => [$a['data']['family'], IpCalc::ip2int((string) $a['data']['ip']) ?? 0]
-            <=> [$b['data']['family'], IpCalc::ip2int((string) $b['data']['ip']) ?? 0]);
-
-        return ['view' => 'modules.ipam.device-overview', 'data' => ['ipRows' => $rows]];
-    }
-
     // ---------------------------------------------------------------- pomocnicze
 
     /** null przy POST, wyjątek przy innej metodzie - do użycia z ?? w match. */

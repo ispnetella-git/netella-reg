@@ -8,7 +8,7 @@
  * albo ma wpis ręczny. Priorytet statusów (dane LibreNMS mają pierwszeństwo):
  *
  *   l  LibreNMS      jest na aktywnym urządzeniu
- *   s  nieaktualny   jest tylko na urządzeniach wyłączonych w LibreNMS
+ *   s  wyłączone     jest tylko na hostach wyłączonych w LibreNMS
  *                    (gdy ustawienie disabled_devices = ignore - pomijany)
  *   m  ręczny        wpis ręczny ze statusem "używany"
  *   r  rezerwacja    wpis ręczny ze statusem "rezerwacja"
@@ -38,7 +38,7 @@ final class VlanIndex
     public const LABELS = [
         self::FREE => 'wolny',
         self::LNMS => 'LibreNMS',
-        self::STALE => 'nieaktualny (urządzenie wyłączone)',
+        self::STALE => 'tylko na wyłączonych hostach',
         self::MANUAL => 'wpis ręczny',
         self::RESERVED => 'rezerwacja',
         self::GONE => 'zniknął z LibreNMS (karencja)',
@@ -110,7 +110,7 @@ final class VlanIndex
 
     /**
      * Czy LibreNMS widzi numer teraz: na aktywnym urządzeniu albo tylko na
-     * wyłączonych (gdy są liczone jako nieaktualne). Takiego numeru nie da
+     * wyłączonych (gdy są liczone, ustawienie disabled_devices = stale). Takiego numeru nie da
      * się dodać ręcznie. Zniknięcie w karencji się nie liczy.
      */
     public function knownToLibreNms(int $vlan): bool

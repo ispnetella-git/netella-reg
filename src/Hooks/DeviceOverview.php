@@ -1,9 +1,8 @@
 <?php
 
 /*
- * DeviceOverview.php - panel na stronie Overview urządzenia.
- *
- * Każdy włączony moduł może dołożyć sekcję (RegModule::deviceOverview).
+ * DeviceOverview.php - panel na stronie Overview urządzenia: tylko link do wtyczki
+ * (od 0.6.3 bez list VLAN-ów i adresów).
  *
  * Od rdzenia 05de175 (2026-08) Overview renderuje hooki przez {{ }}, więc
  * handle() musi zwracać HtmlString - zwykły string pokazałby surowy HTML.
@@ -15,10 +14,8 @@
 
 namespace Ispnetella\NetellaReg\Hooks;
 
-use App\Models\Device;
 use Illuminate\Support\HtmlString;
 use Ispnetella\NetellaReg\Core\Access;
-use Ispnetella\NetellaReg\Core\ModuleRegistry;
 use Ispnetella\NetellaReg\Plugin;
 use LibreNMS\Interfaces\Plugins\Hooks\DeviceOverviewHook;
 
@@ -36,35 +33,7 @@ class DeviceOverview implements DeviceOverviewHook
                 return new HtmlString('');
             }
 
-            $device = null;
-            foreach ($args as $arg) {
-                if ($arg instanceof Device) {
-                    $device = $arg;
-                }
-            }
-            if ($device === null) {
-                return new HtmlString('');
-            }
-
-            $sections = [];
-            foreach (app(ModuleRegistry::class)->enabled() as $key => $module) {
-                try {
-                    $part = $module->deviceOverview((int) $device->device_id);
-                } catch (\Throwable) {
-                    $part = null;
-                }
-                if ($part !== null) {
-                    $view = str_contains($part['view'], '::') ? $part['view'] : Plugin::NAME . '::' . $part['view'];
-                    $sections[] = view($view, $part['data'] + ['moduleName' => $module->name()])->render();
-                }
-            }
-
-            if ($sections === []) {
-                return new HtmlString('');
-            }
-
             return new HtmlString(view(Plugin::NAME . '::device-overview', [
-                'sections' => $sections,
                 'pageUrl' => url('plugin/' . Plugin::NAME),
             ])->render());
         } catch (\Throwable) {

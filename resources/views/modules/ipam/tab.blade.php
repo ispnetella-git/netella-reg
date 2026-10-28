@@ -2,7 +2,8 @@
      wyszukiwanie, wolne bloki, wpisy ręczne, uwagi.
 
      Adres ?ip=10.0.0.1#ipam albo ?prefix=10.0.0.0/24#ipam rozwija drzewo do
-     wskazanego miejsca - z takich linków korzysta panel na stronie urządzenia.
+     wskazanego miejsca. Linki między zakładkami muszą mieć pełny adres strony (can.page),
+     bo LibreNMS ustawia <base href> na swój adres główny.
 
      Panel szczegółów po prawej pokazuje ostatnio otwarty element. Czyści się przy
      innych czynnościach (rozwijanie drzewa, dodawanie, wyszukiwanie, import z RIPE),
@@ -43,6 +44,8 @@
     .nreg-ta .who { overflow: hidden; text-overflow: ellipsis; opacity: .85; }
     .nreg-chips a { display: inline-block; font-family: monospace; font-size: 12px; margin: 0 4px 4px 0; padding: 1px 6px; border: 1px solid rgba(128,128,128,.45); border-radius: 3px; }
     .nreg-ip-right h4 { margin-top: 4px; }
+    .nreg-copy { margin-left: 4px; font-size: 13px; opacity: .55; cursor: pointer; }
+    .nreg-copy:hover { opacity: 1; text-decoration: none; }
     .nreg-ip-right dl dt { float: left; width: 110px; font-weight: normal; opacity: .75; }
     .nreg-ip-right dl dd { margin-left: 120px; }
     #nreg-ip-issues summary, #nreg-ip-manual summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
@@ -185,6 +188,20 @@ document.addEventListener('nreg:ready', function () {
         alias: 'opis portu', network: 'sieć', ctx: 'VRF', vlan: 'VLAN' });
 
     function alertBox(kind, html) { return '<div class="alert alert-' + kind + '">' + html + '</div>'; }
+    // Ikona kopiowania adresacji do schowka (obsługa w handlerze kliknięć zakładki).
+    function copyBtn(text) { return '<a href="#" class="nreg-copy" data-copy="' + esc(text) + '" title="kopiuj ' + esc(text) + '"><i class="fa fa-clipboard"></i></a>'; }
+
+    function copyText(text) {
+        if (navigator.clipboard && window.isSecureContext) { return navigator.clipboard.writeText(text); }
+        // http bez TLS: schowek tylko przez zaznaczenie pola.
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        document.body.removeChild(ta);
+        return ok ? Promise.resolve() : Promise.reject(new Error('copy'));
+    }
     function api(path, params, method) { params = Object.assign({ space: space, stale: showStale ? 1 : 0 }, params || {}); return N.api('ipam/' + path, params, method); }
 
     // ---------------------------------------------------------------- drzewo
@@ -203,7 +220,7 @@ document.addEventListener('nreg:ready', function () {
             h += '<span class="nreg-bdg ' + (n.manual.role === 'reserved' ? 'r' : 'm') + '">' + esc(n.manual.role_label) + '</span>';
             if (n.manual.expiry === 'expired') { h += '<span class="nreg-bdg d" title="termin ważności ' + esc(n.manual.valid_until) + '">termin minął</span>'; }
         }
-        n.vlans.forEach(function (v) { h += '<a class="nreg-bdg v" href="?vlan=' + v + '#vlan" title="VLAN ' + v + '">VLAN ' + v + '</a>'; });
+        n.vlans.forEach(function (v) { h += '<a class="nreg-bdg v" href="' + esc(can.page) + '?vlan=' + v + '#vlan" title="VLAN ' + v + '">VLAN ' + v + '</a>'; });
         return h;
     }
 
@@ -334,7 +351,7 @@ document.addEventListener('nreg:ready', function () {
             + (withIp ? '<th>Adres</th>' : '<th>Maska</th>') + '<th>Stan</th></tr></thead><tbody>'
             + rows.map(function (r) {
                 return '<tr><td><a href="' + esc(can.deviceUrl + '/' + r.device_id) + '">' + esc(r.device) + '</a></td><td>' + esc(r['if'])
-                    + (r.vlan ? ' <a href="?vlan=' + r.vlan + '#vlan">VLAN ' + r.vlan + '</a>' : '') + '</td><td>' + esc(r.alias || '') + '</td>'
+                    + (r.vlan ? ' <a href="' + esc(can.page) + '?vlan=' + r.vlan + '#vlan">VLAN ' + r.vlan + '</a>' : '') + '</td><td>' + esc(r.alias || '') + '</td>'
                     + '<td class="nreg-mono">' + esc(withIp ? r.ip : '/' + r.len) + '</td><td><span class="nreg-bdg ' + r.state + '">' + esc(STATE_BDG[r.state]) + '</span>'
                     + (r.gone_at ? ' <small>' + esc(r.gone_at) + '</small>' : '') + '</td></tr>';
             }).join('') + '</tbody></table>';
@@ -344,10 +361,10 @@ document.addEventListener('nreg:ready', function () {
         manualCache[m.id] = m;
         var h = '<div class="nreg-manual"><strong>Wpis ręczny</strong> <span class="nreg-bdg ' + (m.role === 'reserved' ? 'r' : 'm') + '">' + esc(m.role_label) + '</span> '
             + (m.adopted_at ? '<span class="label label-primary">przejęty przez LibreNMS ' + esc(m.adopted_at) + '</span>' : '')
-            + '<dl style="margin-top:6px">' + (m.kind === 'range' ? '<dt>Zakres</dt><dd class="nreg-mono">' + esc(m.first + ' – ' + m.last) + ' (' + m.size + ' adr.)</dd>' : '')
+            + '<dl style="margin-top:6px">' + (m.kind === 'range' ? '<dt>Zakres</dt><dd class="nreg-mono">' + esc(m.first + ' – ' + m.last) + copyBtn(m.first + '-' + m.last) + ' (' + m.size + ' adr.)</dd>' : '')
             + (m.name ? '<dt>Nazwa</dt><dd>' + esc(m.name) + '</dd>' : '')
             + (m.description ? '<dt>Opis</dt><dd>' + esc(m.description) + '</dd>' : '') + (m.owner ? '<dt>Właściciel</dt><dd>' + esc(m.owner) + '</dd>' : '')
-            + (m.vlan ? '<dt>VLAN</dt><dd><a href="?vlan=' + m.vlan + '#vlan">' + m.vlan + '</a></dd>' : '')
+            + (m.vlan ? '<dt>VLAN</dt><dd><a href="' + esc(can.page) + '?vlan=' + m.vlan + '#vlan">' + m.vlan + '</a></dd>' : '')
             + (m.valid_until ? '<dt>Ważne do</dt><dd>' + N.expiryHtml(m) + '</dd>' : '')
             + (m.devices ? '<dt>Urządzenia</dt><dd>' + esc(m.devices) + '</dd>' : '')
             + '<dt>Dodał</dt><dd>' + esc(m.created_by || '?') + ', ' + esc(m.created_at) + '</dd></dl><div style="margin-top:6px">';
@@ -360,7 +377,7 @@ document.addEventListener('nreg:ready', function () {
         var put = detailLoader('Ładowanie zakresu…');
         api('range', { id: id }).then(function (j) {
             var r = j.range, s = r.stats;
-            var h = '<h4 class="nreg-mono">' + esc(r.first + ' – ' + r.last) + ' ' + nodeBadges(r) + '</h4>'
+            var h = '<h4 class="nreg-mono">' + esc(r.first + ' – ' + r.last) + copyBtn(r.first + '-' + r.last) + ' ' + nodeBadges(r) + '</h4>'
                 + '<dl><dt>Rozmiar</dt><dd>' + s.size + ' adr.</dd>'
                 + '<dt>Zajęte</dt><dd>' + s.used + ' z ' + s.capacity + ' (' + s.util + '%) ' + bar(s.util)
                 + ' <small class="nreg-muted">adresy z LibreNMS i wpisów ręcznych</small></dd>'
@@ -383,8 +400,8 @@ document.addEventListener('nreg:ready', function () {
         var put = detailLoader('Ładowanie ' + cidr + '…');
         api('node', { cidr: cidr }).then(function (j) {
             var n = j.node, s = n.stats;
-            var h = '<h4 class="nreg-mono">' + esc(n.cidr) + ' ' + nodeBadges(n) + '</h4>'
-                + '<dl><dt>Zakres</dt><dd class="nreg-mono">' + esc(n.first) + ' – ' + esc(n.last) + '</dd>'
+            var h = '<h4 class="nreg-mono">' + esc(n.cidr) + copyBtn(n.cidr) + ' ' + nodeBadges(n) + '</h4>'
+                + '<dl><dt>Zakres</dt><dd class="nreg-mono">' + esc(n.first) + ' – ' + esc(n.last) + copyBtn(n.first + '-' + n.last) + '</dd>'
                 + '<dt>Rozmiar</dt><dd>' + s.size + (n.subnet && n.len <= 30 ? ' (hostów: ' + s.capacity + ')' : '') + '</dd>'
                 + '<dt>Zajęte</dt><dd>' + s.used + ' z ' + s.capacity + ' (' + s.util + '%) ' + bar(s.util) + '</dd>'
                 + '<dt>Adresów</dt><dd>' + s.addresses + '</dd>'
@@ -415,7 +432,7 @@ document.addEventListener('nreg:ready', function () {
         api('search', { q: ip }).then(function (j) {
             var a = j.address;
             var nets = j.path.filter(function (c) { return c.indexOf('range:') !== 0; }), rng = j.path.filter(function (c) { return c.indexOf('range:') === 0; })[0];
-            var h = '<h4 class="nreg-mono">' + esc(ip) + (a ? ' <span class="nreg-bdg ' + a.state + '">' + esc(STATE_BDG[a.state]) + '</span>' : '')
+            var h = '<h4 class="nreg-mono">' + esc(ip) + copyBtn(ip) + (a ? ' <span class="nreg-bdg ' + a.state + '">' + esc(STATE_BDG[a.state]) + '</span>' : '')
                 + (a && a.dup ? ' <span class="nreg-bdg d">duplikat</span>' : '') + '</h4>'
                 + (nets.length ? '<p style="font-size:12px">Sieć: <a href="#" data-open-node="' + esc(nets[nets.length - 1]) + '" class="nreg-mono">' + esc(nets[nets.length - 1]) + '</a>'
                     + (rng ? ' &middot; zakres: <a href="#" data-open-node="' + esc(rng) + '">' + esc(a && a.range ? a.range.label + ' (' + a.range.role_label + ')' : 'pokaż') + '</a>' : '') + '</p>' : '');
@@ -541,7 +558,7 @@ document.addEventListener('nreg:ready', function () {
                         + (m.kind === 'range' ? ' <span class="nreg-muted">(zakres, ' + m.size + ' adr.)</span>' : '') + '</td>'
                         + '<td>' + esc(m.role_label) + (m.adopted_at ? ' <span class="label label-primary">przejęty</span>' : '') + (m.current ? ' <small class="nreg-muted">' + esc(m.current) + '</small>' : '') + '</td>'
                         + '<td>' + (m.adopted_at ? '' : N.expiryHtml(m)) + '</td><td>' + esc(m.name || '') + '</td><td>' + esc(m.description) + '</td><td>' + esc(m.owner || '') + '</td>'
-                        + '<td>' + (m.vlan ? '<a href="?vlan=' + m.vlan + '#vlan">' + m.vlan + '</a>' : '') + '</td>'
+                        + '<td>' + (m.vlan ? '<a href="' + esc(can.page) + '?vlan=' + m.vlan + '#vlan">' + m.vlan + '</a>' : '') + '</td>'
                         + '<td style="font-size:11px">' + esc(m.created_by || '?') + '<br>' + esc(m.created_at) + '</td><td style="white-space:nowrap">' + btn + '</td></tr>';
                 }).join('') + '</tbody></table>';
         }).catch(function (e) { box.innerHTML = alertBox('danger', esc(e.message)); });
@@ -802,6 +819,16 @@ document.addEventListener('nreg:ready', function () {
 
     tab.addEventListener('click', function (e) {
         var t;
+        if ((t = e.target.closest('[data-copy]'))) {
+            e.preventDefault();
+            var icon = t.querySelector('i'), text = t.getAttribute('data-copy');
+            copyText(text).then(function () {
+                icon.className = 'fa fa-check'; t.title = 'skopiowano';
+            }, function () {
+                window.prompt('Skopiuj ręcznie (Ctrl+C):', text);
+            }).then(function () { setTimeout(function () { icon.className = 'fa fa-clipboard'; t.title = 'kopiuj ' + text; }, 1500); });
+            return;
+        }
         if ((t = e.target.closest('[data-toggle-node]'))) { clearDetail(); toggle(t.getAttribute('data-toggle-node')); }
         else if ((t = e.target.closest('[data-open-node]'))) {
             e.preventDefault();

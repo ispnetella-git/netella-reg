@@ -9,10 +9,10 @@ Stan na 0.3.0:
 - **rdzeń**: własna baza, schemat wersjonowany per moduł, uprawnienia per rola, dziennik zmian
   (jedna akcja = jedna linia), migawki stanu LibreNMS, synchronizacja z crona, komendy `lnms`;
 - **moduł VLAN**: mapa numerów 1–4094 w całej sieci, sprawdzanie zakresu, wpisy ręczne i rezerwacje
-  (grupy), szukanie wolnych numerów, szczegóły i historia numeru, panel na stronie urządzenia;
+  (grupy), szukanie wolnych numerów, szczegóły i historia numeru;
 - **moduł Adresacja IP**: drzewo IPv4 grupowane według masek, zajętość i wolne bloki, wyszukiwanie,
   szukanie wolnej podsieci, wpisy ręczne (adresy, zakresy, agregaty, pule, rezerwacje), przestrzenie
-  adresowe, uwagi (duplikaty, adresy poza sieciami), panel na stronie urządzenia. IPv6 jest
+  adresowe, uwagi (duplikaty, adresy poza sieciami). IPv6 jest
   zapisywane, ale bez drzewa.
 
 ### Adresacja IP
@@ -223,7 +223,7 @@ tylko osoba z prawem administracji.
 | `src/Console/` | `netella-reg:install`, `:sync`, `:doctor` |
 | `src/Modules/Vlan/` | moduł VLAN: `VlanCollector` (odczyt LibreNMS), `VlanName` (VLAN z nazwy interfejsu), `VlanRange`, `VlanIndex` (statusy), `VlanManual` (wpisy ręczne, grupy) |
 | `src/Modules/Ipam/` | moduł adresacji: `IpCalc` (obliczenia IPv4), `IpInput` (wpisywane adresy/zakresy), `IpTree` (drzewo, zajętość, wolne bloki), `IpamCollector`, `IpamIndex` (statusy), `IpamManual`, `IpamSpaces` |
-| `resources/views/` | strona, ustawienia, zakładki modułów, panel urządzenia |
+| `resources/views/` | strona, ustawienia, zakładki modułów, link na karcie urządzenia |
 | `tests/run_tests.php` | testy logiki bez Laravela |
 
 ### Tabele rdzenia

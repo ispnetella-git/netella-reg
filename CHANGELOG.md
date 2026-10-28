@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.3 - 2026-10-28
+
+- VLAN: status „nieaktualny” nazywa się „tylko na wyłączonych hostach”.
+- Karta urządzenia w LibreNMS: panel Netella-Reg to tylko link do wtyczki, bez list VLAN-ów i adresów.
+- Adresacja: linki do VLAN-ów (np. przy 185.238.133.0/31) prowadziły na stronę główną LibreNMS, bo
+  LibreNMS ustawia `<base href>`. Teraz mają pełny adres strony wtyczki.
+- Adresacja: ikona kopiowania przy adresacji w szczegółach (nagłówek sieci, adresu i zakresu, wiersz
+  „Zakres”). Zakres kopiuje się jako `pierwszy-ostatni`.
+
 ## 0.6.2 - 2026-10-28
 
 - Adresacja: przełącznik „Pokaż adresy z wyłączonych hostów”. Domyślnie adresy hostów wyłączonych

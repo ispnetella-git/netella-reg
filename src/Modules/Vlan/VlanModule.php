@@ -219,27 +219,6 @@ final class VlanModule extends AbstractModule
         }));
     }
 
-    public function deviceOverview(int $deviceId): ?array
-    {
-        $rows = $this->snapshot()->rows(self::KEY, self::TYPE, function ($q) use ($deviceId) {
-            $q->where('entity_key', 'like', "v%:d{$deviceId}")->whereNull('gone_at');
-        });
-
-        if ($rows === []) {
-            return null;
-        }
-
-        usort($rows, fn ($a, $b) => $a['data']['vlan'] <=> $b['data']['vlan']);
-
-        return [
-            'view' => 'modules.vlan.device-overview',
-            'data' => [
-                'vlanRows' => $rows,
-                'vlanList' => VlanRange::compress(array_map(fn ($r) => (int) $r['data']['vlan'], $rows)),
-            ],
-        ];
-    }
-
     private function snapshot(): Snapshot
     {
         return new Snapshot(Db::connection());

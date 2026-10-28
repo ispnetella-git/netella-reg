@@ -67,6 +67,8 @@ class Page implements SinglePageHook
             'nregError' => $error,
             'nregBoot' => [
                 'api' => url('plugin/' . Plugin::NAME . '/api'),
+                // Pełny adres strony: LibreNMS ustawia <base href>, więc względne "?vlan=" trafia na stronę główną.
+                'page' => url('plugin/' . Plugin::NAME),
                 'csrf' => csrf_token(),
                 'version' => Plugin::VERSION,
                 'canEdit' => Access::canEdit(),
