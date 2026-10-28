@@ -387,6 +387,15 @@ check('kontener: sieć LibreNMS bez wpisu - adres sieci zabroniony', $nat([])->r
 check('kontener: sieć LibreNMS + agregat - cały blok', $nat([$mp(1, '45.10.136.0/24', 'aggregate')])->rangeContainer($ip('45.10.136.0'), $ip('45.10.136.255')),
     ['45.10.136.0/24', null]);
 check('kontener: sieć LibreNMS + pula - nadal sieć', $nat([$mp(1, '45.10.136.0/24', 'pool')])->rangeContainer($ip('45.10.136.0'), $ip('45.10.136.255'))[0], null);
+// Bez adresacji spoza agregatów: peer BGP na publicznej /30 znika, prywatna i agregaty zostają.
+$outIdx = fn (bool $show, array $manual = []) => new IpamIndex(
+    [$lrow('83.2.56.77', 31), $lrow('10.1.1.1', 24), $lrow('45.10.136.10', 24), $lrow('193.0.0.1', 32)], $manual, 1, [],
+    new DateTimeImmutable('2026-10-28'), 30, 'stale', [8, 16, 24], ['10.0.0.0/8', '192.168.0.0/16'], $show);
+check('ukryta adresacja spoza agregatów: korzenie', $outIdx(false)->tree()->roots(), ['10.0.0.0/8']);
+check('ukryta adresacja spoza agregatów: z agregatem z RIPE', $outIdx(false, [$mp(1, '45.10.136.0/24', 'aggregate')])->tree()->roots(), ['10.0.0.0/8', '45.10.136.0/24']);
+check('ukryta adresacja: hiddenOutside', [$outIdx(false)->hiddenOutside($ip('83.2.56.77')), $outIdx(false)->hiddenOutside($ip('10.1.1.1')), $outIdx(true)->hiddenOutside($ip('83.2.56.77'))],
+    [true, false, false]);
+check('pokazana adresacja spoza agregatów: grupy /24', $outIdx(true)->tree()->roots(), ['10.0.0.0/8', '45.10.136.0/24', '83.2.56.0/24', '193.0.0.0/24']);
 $natStats = $nat([$mp(1, '45.10.136.0/24', 'aggregate')])->tree()->node('45.10.136.0/24')['stats'];
 check('drzewo: sieć LibreNMS + agregat liczona jak blok', $natStats['capacity'], 256);
 check('drzewo: sieć LibreNMS bez wpisu - hosty', $nat([])->tree()->node('45.10.136.0/24')['stats']['capacity'], 254);

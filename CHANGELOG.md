@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.6 - 2026-10-28
+
+- Adresacja: domyślnie w drzewie jest tylko adresacja wewnętrzna (w której coś leży) i prefiksy dodane
+  ręcznie albo z RIPE. Sieci i adresy z LibreNMS spoza nich (np. połączeniówki BGP na adresacji
+  peerów) pokazuje przełącznik „Pokaż adresację spoza agregatów” (zapamiętany w przeglądarce).
+
 ## 0.6.5 - 2026-10-28
 
 - Adresacja: wolne miejsce jest zawsze liczone i pokazywane, także w grupach /24 spoza agregatów

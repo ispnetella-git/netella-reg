@@ -11,7 +11,7 @@ namespace Ispnetella\NetellaReg;
 final class Plugin
 {
     /** Wersja wtyczki - jedyne źródło prawdy. Podbijaj przy każdej zmianie funkcjonalnej. */
-    public const VERSION = '0.6.5';
+    public const VERSION = '0.6.6';
 
     /** Nazwa wtyczki w LibreNMS (tabela plugins, adres /plugin/Netella-Reg). */
     public const NAME = 'Netella-Reg';

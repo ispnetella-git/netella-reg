@@ -53,6 +53,10 @@ to jeden rekord (host, interfejs, opis portu, maska, VLAN z nazwy interfejsu).
   zaznaczone są te, których nie ma w rejestrze i które nie leżą w agregacie ani w szerszym prefiksie
   z listy. IPv6 jest pokazywane, ale jeszcze nie dodawane. Serwer musi mieć dostęp do `stat.ripe.net`
   i `rest.db.ripe.net` (proxy z ustawień LibreNMS).
+- **Adresacja spoza agregatów:** domyślnie drzewo pokazuje adresację wewnętrzną (ustawienie, np.
+  10/8, 172.16/12, 192.168/16), w której coś leży, oraz prefiksy dodane ręcznie albo z RIPE. Sieci
+  i adresy z LibreNMS poza nimi (np. połączenia BGP na adresacji peerów) są ukryte; pokazuje je
+  przełącznik „Pokaż adresację spoza agregatów”. Wyszukany ukryty adres ma podpowiedź, jak go zobaczyć.
 - **Wyłączone hosty:** adresy z hostów wyłączonych w LibreNMS są domyślnie ukryte (drzewo i wolne
   miejsce traktują je jak wolne). Pokazuje je przełącznik „Pokaż adresy z wyłączonych hostów” (wybór
   zapamiętany w przeglądarce); wtedy mają plakietkę „host wyłączony”. Dodanie takiego adresu ręcznie

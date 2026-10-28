@@ -77,6 +77,8 @@
         <button class="btn btn-default btn-sm" id="nreg-ip-ripebtn" type="button" title="Pobierz prefiksy numeru AS z RIPE i dodaj wybrane jako agregaty">
             <i class="fa fa-globe"></i> Pobierz z RIPE</button>
     @endif
+    <label class="nreg-sub" style="margin:0;font-weight:normal;opacity:1" title="Sieci i adresy z LibreNMS spoza adresacji wewnętrznej i prefiksów dodanych ręcznie (np. połączenia BGP na adresacji peerów). Swoje prefiksy publiczne dodaj ręcznie albo przyciskiem „Pobierz z RIPE”.">
+        <input type="checkbox" id="nreg-ip-outside" style="vertical-align:-2px"> Pokaż adresację spoza agregatów</label>
     @if(($nregBoot['disabledMode'] ?? 'stale') === 'stale')
         <label class="nreg-sub" style="margin:0;font-weight:normal;opacity:1" title="Adresy z hostów wyłączonych w LibreNMS. Ukryte są w drzewie i szukaniu wolnych jak wolne; dodanie ich ręcznie i tak blokuje LibreNMS.">
             <input type="checkbox" id="nreg-ip-stale" style="vertical-align:-2px"> Pokaż adresy z wyłączonych hostów</label>
@@ -183,6 +185,10 @@ document.addEventListener('nreg:ready', function () {
     // Adresy wyłączonych hostów domyślnie ukryte (traktowane jak wolne); wybór zapamiętany w przeglądarce.
     var staleBox = document.getElementById('nreg-ip-stale'), showStale = !!staleBox && localStorage.getItem('nreg-ip-stale') === '1';
     if (staleBox) { staleBox.checked = showStale; }
+    // Adresacja z LibreNMS spoza agregatów i adresacji wewnętrznej domyślnie ukryta.
+    var outsideBox = document.getElementById('nreg-ip-outside'), showOutside = localStorage.getItem('nreg-ip-outside') === '1';
+    outsideBox.checked = showOutside;
+    var OUTSIDE_HINT = 'Ten adres jest poza agregatami i adresacją wewnętrzną, więc nie ma go w drzewie. Zaznacz „Pokaż adresację spoza agregatów” albo dodaj swój prefiks jako agregat.';
 
     Object.assign(N.fieldLabels, { ips: 'adresy', prefix: 'prefiks', range: 'zakres', role: 'rola', ip: 'adres', len: 'maska', 'if': 'interfejs',
         alias: 'opis portu', network: 'sieć', ctx: 'VRF', vlan: 'VLAN' });
@@ -202,7 +208,7 @@ document.addEventListener('nreg:ready', function () {
         document.body.removeChild(ta);
         return ok ? Promise.resolve() : Promise.reject(new Error('copy'));
     }
-    function api(path, params, method) { params = Object.assign({ space: space, stale: showStale ? 1 : 0 }, params || {}); return N.api('ipam/' + path, params, method); }
+    function api(path, params, method) { params = Object.assign({ space: space, stale: showStale ? 1 : 0, outside: showOutside ? 1 : 0 }, params || {}); return N.api('ipam/' + path, params, method); }
 
     // ---------------------------------------------------------------- drzewo
 
@@ -461,7 +467,10 @@ document.addEventListener('nreg:ready', function () {
         if (!q) { return; }
         result.innerHTML = '';
         api('search', { q: q }).then(function (j) {
-            if (j.kind === 'address') { expandPath(j.path, j.ip); openIp(j.ip); return; }
+            if (j.kind === 'address') {
+                if (j.hidden) { result.innerHTML = alertBox('info', esc(OUTSIDE_HINT)); }
+                expandPath(j.path, j.ip); openIp(j.ip); return;
+            }
             if (j.kind === 'prefix') {
                 if (!j.exact) { result.innerHTML = alertBox('info', 'Nie ma prefiksu ' + esc(j.cidr) + ' w drzewie. Pokazuję najbliższą sieć, która go zawiera.'); }
                 expandPath(j.path); if (j.path.length) { openNode(j.path[j.path.length - 1]); }
@@ -799,6 +808,11 @@ document.addEventListener('nreg:ready', function () {
         });
     }
     spaceSel.addEventListener('change', function () { space = parseInt(spaceSel.value, 10) || 1; clearDetail(); refreshAll(); });
+    outsideBox.addEventListener('change', function () {
+        showOutside = outsideBox.checked;
+        localStorage.setItem('nreg-ip-outside', showOutside ? '1' : '0');
+        clearDetail(); refreshAll();
+    });
     if (staleBox) {
         staleBox.addEventListener('change', function () {
             showStale = staleBox.checked;
@@ -842,7 +856,10 @@ document.addEventListener('nreg:ready', function () {
         else if ((t = e.target.closest('[data-goto-ip]'))) {
             e.preventDefault();
             var ip = t.getAttribute('data-goto-ip');
-            api('search', { q: ip }).then(function (j) { expandPath(j.path, ip); openIp(ip); });
+            api('search', { q: ip }).then(function (j) {
+                if (j.hidden) { result.innerHTML = alertBox('info', esc(OUTSIDE_HINT)); }
+                expandPath(j.path, ip); openIp(ip);
+            });
         } else if ((t = e.target.closest('[data-goto-range]'))) {
             e.preventDefault();
             var rid = t.getAttribute('data-goto-range');

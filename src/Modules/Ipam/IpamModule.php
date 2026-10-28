@@ -120,10 +120,15 @@ final class IpamModule extends AbstractModule
 
     private bool $showStale = true;
 
+    /** Widok z adresacją LibreNMS spoza adresacji wewnętrznej i prefiksów ręcznych (outside=1). */
+    private bool $showOutside = true;
+
     public function api(string $action, Request $request): array
     {
         $space = max(1, (int) $request->input('space', IpamSpaces::GLOBAL_ID));
-        $this->showStale = ! in_array($action, self::VIEW_ACTIONS, true) || (string) $request->input('stale', '1') !== '0';
+        $view = in_array($action, self::VIEW_ACTIONS, true);
+        $this->showStale = ! $view || (string) $request->input('stale', '1') !== '0';
+        $this->showOutside = ! $view || (string) $request->input('outside', '1') !== '0';
 
         return match ($action) {
             'spaces' => ['spaces' => array_values($this->spaces()->all())],
@@ -215,7 +220,8 @@ final class IpamModule extends AbstractModule
             Settings::graceDays(),
             $this->showStale ? Settings::disabledMode() : 'ignore',
             self::levels(),
-            self::implicitPrefixes()
+            self::implicitPrefixes(),
+            $this->showOutside
         );
     }
 
@@ -538,7 +544,7 @@ final class IpamModule extends AbstractModule
             $range = $idx->rangeOf($ip);
             $path = $range ? $this->rangePath($tree, $range['id']) : ($node ? $tree->path($node) : []);
 
-            return ['kind' => 'address', 'ip' => $q, 'path' => $path,
+            return ['kind' => 'address', 'ip' => $q, 'path' => $path, 'hidden' => $idx->hiddenOutside($ip),
                 'address' => $idx->address($ip) ? $this->addrInfo($idx, $ip, $dups) : null,
                 'history' => $this->history(['a:' . $q . '/', 'a:' . $q . ':'], [$ip, $ip])];
         }
@@ -580,7 +586,7 @@ final class IpamModule extends AbstractModule
             if (str_contains(mb_strtolower(implode(' ', $text)), $needle)) {
                 $node = $tree->deepest($aip);
                 $hits[] = ['type' => 'address', 'value' => IpCalc::int2ip($aip), 'label' => mb_substr(trim(implode(' · ', $text)), 0, 140),
-                    'path' => $node ? $tree->path($node) : []];
+                    'path' => $node ? $tree->path($node) : [], 'hidden' => $idx->hiddenOutside($aip)];
             }
             if (count($hits) >= 100) {
                 break;

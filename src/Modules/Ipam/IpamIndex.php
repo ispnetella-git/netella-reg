@@ -90,6 +90,9 @@ final class IpamIndex
         string $disabledMode,
         private readonly array $levels = [8, 16, 24],
         private readonly array $implicit = [],
+        // false: drzewo bez sieci i adresów LibreNMS spoza adresacji wewnętrznej i prefiksów
+        // ręcznych (np. połączenia BGP na adresacji peerów). Publiczne prefiksy dodaje użytkownik.
+        private readonly bool $showOutside = true,
     ) {
         $graceLimit = $now->modify("-{$graceDays} days")->format('Y-m-d H:i:s');
 
@@ -429,6 +432,31 @@ final class IpamIndex
         return $out;
     }
 
+    /** Czy przedział leży w adresacji wewnętrznej (z ustawienia) albo w prefiksie ręcznym. */
+    public function covered(int $start, int $end): bool
+    {
+        foreach ($this->implicit as $cidr) {
+            $c = IpCalc::parseV4($cidr);
+            if ($c['start'] <= $start && $c['end'] >= $end) {
+                return true;
+            }
+        }
+        foreach ($this->manualPrefixes as $m) {
+            if ((int) $m['start'] <= $start && (int) $m['end'] >= $end) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Czy adres jest ukryty w drzewie (tylko z LibreNMS, spoza adresacji wewnętrznej i prefiksów ręcznych). */
+    public function hiddenOutside(int $ip): bool
+    {
+        return ! $this->showOutside && ($this->addr[$ip]['manual'] ?? null) === null && $this->rangeOf($ip) === null
+            && ! $this->covered($ip, $ip);
+    }
+
     public function tree(): IpTree
     {
         if ($this->tree !== null) {
@@ -438,6 +466,9 @@ final class IpamIndex
         $prefixes = [];
         foreach ($this->networks as $cidr => $rows) {
             $c = IpCalc::parseV4($cidr);
+            if (! $this->showOutside && ! $this->covered($c['start'], $c['end'])) {
+                continue;
+            }
             $prefixes[] = ['start' => $c['start'], 'len' => $c['len'], 'src' => 'lnms', 'subnet' => $this->isSubnet($cidr)];
         }
         foreach ($this->manualPrefixes as $cidr => $m) {
@@ -450,7 +481,9 @@ final class IpamIndex
         }
         $addresses = [];
         foreach (array_keys($this->addr) as $ip) {
-            $addresses[] = ['ip' => $ip];
+            if (! $this->hiddenOutside($ip)) {
+                $addresses[] = ['ip' => $ip];
+            }
         }
 
         $ranges = array_map(fn ($r) => ['id' => (int) $r['id'], 'start' => (int) $r['start'], 'end' => (int) $r['end']], array_values($this->ranges));
