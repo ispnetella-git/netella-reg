@@ -2,7 +2,11 @@
      wyszukiwanie, wolne bloki, wpisy ręczne, uwagi.
 
      Adres ?ip=10.0.0.1#ipam albo ?prefix=10.0.0.0/24#ipam rozwija drzewo do
-     wskazanego miejsca - z takich linków korzysta panel na stronie urządzenia. --}}
+     wskazanego miejsca - z takich linków korzysta panel na stronie urządzenia.
+
+     Panel szczegółów po prawej pokazuje ostatnio otwarty element. Czyści się przy
+     innych czynnościach (rozwijanie drzewa, dodawanie, wyszukiwanie, import z RIPE),
+     a spóźniona odpowiedź wcześniejszego kliknięcia nie nadpisuje nowszej. --}}
 
 <style>
     .nreg-ip-cols { display: flex; gap: 16px; align-items: flex-start; }
@@ -42,6 +46,10 @@
     .nreg-ip-right dl dt { float: left; width: 110px; font-weight: normal; opacity: .75; }
     .nreg-ip-right dl dd { margin-left: 120px; }
     #nreg-ip-issues summary, #nreg-ip-manual summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
+    #nreg-ip-ripe { max-width: 1200px; }
+    #nreg-ir-out table { font-size: 12px; margin-bottom: 6px; }
+    #nreg-ir-out td { vertical-align: middle; }
+    #nreg-ir-out input.nm { height: 24px; padding: 1px 5px; font-size: 12px; width: 180px; }
 </style>
 
 <div class="nreg-toolbar">
@@ -63,6 +71,8 @@
     </form>
     @if($nregBoot['canEdit'])
         <button class="btn btn-success btn-sm" id="nreg-ip-add" type="button"><i class="fa fa-plus"></i> Dodaj adresację</button>
+        <button class="btn btn-default btn-sm" id="nreg-ip-ripebtn" type="button" title="Pobierz prefiksy numeru AS z RIPE i dodaj wybrane jako agregaty">
+            <i class="fa fa-globe"></i> Agregaty z RIPE</button>
     @endif
     <span class="nreg-sub" id="nreg-ip-sync"></span>
 </div>
@@ -126,6 +136,20 @@
     </form>
 @endif
 
+@if($nregBoot['canEdit'])
+    <div class="nreg-form" id="nreg-ip-ripe" style="display:none">
+        <h4 style="margin-top:0">Agregaty z RIPE według numeru AS</h4>
+        <form class="nreg-toolbar" id="nreg-ir-form" style="margin:0 0 6px" autocomplete="off">
+            <label for="nreg-ir-asn" style="margin:0">Numer AS:</label>
+            <input class="form-control nreg-mono" id="nreg-ir-asn" placeholder="np. AS61154" style="width: 140px;">
+            <button class="btn btn-primary btn-sm" type="submit"><i class="fa fa-download"></i> Pobierz z RIPE</button>
+            <button class="btn btn-default btn-sm" type="button" id="nreg-ir-close">Zamknij</button>
+            <span class="nreg-sub">Źródła: prefiksy ogłaszane w BGP (RIPEstat), obiekty route i przydziały organizacji AS (baza RIPE).</span>
+        </form>
+        <div id="nreg-ir-out"></div>
+    </div>
+@endif
+
 <div id="nreg-ip-result"></div>
 <details id="nreg-ip-issues"><summary>Uwagi</summary><div></div></details>
 <details id="nreg-ip-manual"><summary>Wpisy ręczne</summary><div></div></details>
@@ -144,6 +168,8 @@ document.addEventListener('nreg:ready', function () {
     var result = document.getElementById('nreg-ip-result'), form = document.getElementById('nreg-ip-form');
     var spaceSel = document.getElementById('nreg-ip-space');
     var space = 1, labels = {}, prefixRoles = {}, addressRoles = {}, rangeRoles = {}, manualCache = {}, selectedEl = null, loaded = false;
+    // Numer ostatniego żądania szczegółów: odpowiedź starszego żądania jest pomijana.
+    var detailSeq = 0, DETAIL_HINT = detail.innerHTML;
     var STATE_BDG = { l: 'LibreNMS', s: 'nieaktualny', m: 'ręczny', r: 'rezerwacja', g: 'zniknął' };
 
     Object.assign(N.fieldLabels, { ips: 'adresy', prefix: 'prefiks', range: 'zakres', role: 'rola', ip: 'adres', len: 'maska', 'if': 'interfejs',
@@ -269,6 +295,21 @@ document.addEventListener('nreg:ready', function () {
         selectedEl = el; el.classList.add('sel');
     }
 
+    // Czyści panel szczegółów i zaznaczenie w drzewie (np. przy dodawaniu albo rozwijaniu drzewa).
+    function clearDetail() {
+        detailSeq++;
+        if (selectedEl) { selectedEl.classList.remove('sel'); selectedEl = null; }
+        detail.innerHTML = DETAIL_HINT;
+    }
+
+    // Start ładowania szczegółów; zwraca funkcję, która wstawia HTML tylko wtedy,
+    // gdy w międzyczasie nie otwarto niczego innego.
+    function detailLoader(text) {
+        var seq = ++detailSeq;
+        detail.innerHTML = '<p class="nreg-muted">' + esc(text) + '</p>';
+        return function (html) { if (seq === detailSeq) { detail.innerHTML = html; } return seq === detailSeq; };
+    }
+
     function renderSync(sync, v6) {
         var el = document.getElementById('nreg-ip-sync');
         el.innerHTML = sync ? 'Dane z LibreNMS z ' + esc(sync.at) + (sync.ok ? '' : ' <span class="text-danger">(błąd: ' + esc(sync.error) + ')</span>')
@@ -307,7 +348,7 @@ document.addEventListener('nreg:ready', function () {
     }
 
     function openRange(id) {
-        detail.innerHTML = '<p class="nreg-muted">Ładowanie zakresu…</p>';
+        var put = detailLoader('Ładowanie zakresu…');
         api('range', { id: id }).then(function (j) {
             var r = j.range, s = r.stats;
             var h = '<h4 class="nreg-mono">' + esc(r.first + ' – ' + r.last) + ' ' + nodeBadges(r) + '</h4>'
@@ -324,13 +365,13 @@ document.addEventListener('nreg:ready', function () {
                 }).join('') + (j.addresses_total > j.addresses.length ? ' …' : '') + '</div>';
             }
             h += '<h5>Historia</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
-            detail.innerHTML = h;
-        }).catch(function (e) { detail.innerHTML = alertBox('danger', esc(e.message)); });
+            put(h);
+        }).catch(function (e) { put(alertBox('danger', esc(e.message))); });
     }
 
     function openNode(cidr) {
         if (cidr.indexOf('range:') === 0) { openRange(cidr.substring(6)); return; }
-        detail.innerHTML = '<p class="nreg-muted">Ładowanie ' + esc(cidr) + '…</p>';
+        var put = detailLoader('Ładowanie ' + cidr + '…');
         api('node', { cidr: cidr }).then(function (j) {
             var n = j.node, s = n.stats;
             var h = '<h4 class="nreg-mono">' + esc(n.cidr) + ' ' + nodeBadges(n) + '</h4>'
@@ -356,13 +397,12 @@ document.addEventListener('nreg:ready', function () {
                     + j.free_blocks.map(function (b) { return '<a href="#" data-add="' + esc(b.cidr) + '" title="dodaj jako wpis ręczny">' + esc(b.cidr) + '</a>'; }).join('') + '</div>';
             }
             h += '<h5>Historia</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
-            detail.innerHTML = h;
-            document.getElementById('nreg-ip-within').value = n.cidr;
-        }).catch(function (e) { detail.innerHTML = alertBox('danger', esc(e.message)); });
+            if (put(h)) { document.getElementById('nreg-ip-within').value = n.cidr; }
+        }).catch(function (e) { put(alertBox('danger', esc(e.message))); });
     }
 
     function openIp(ip) {
-        detail.innerHTML = '<p class="nreg-muted">Ładowanie ' + esc(ip) + '…</p>';
+        var put = detailLoader('Ładowanie ' + ip + '…');
         api('search', { q: ip }).then(function (j) {
             var a = j.address;
             var nets = j.path.filter(function (c) { return c.indexOf('range:') !== 0; }), rng = j.path.filter(function (c) { return c.indexOf('range:') === 0; })[0];
@@ -380,8 +420,8 @@ document.addEventListener('nreg:ready', function () {
                 if (a.range && !a.rows.length && !a.manual) { h += '<p>Adres jest wolny w zakresie ' + esc(a.range.label) + '.</p>'; }
             }
             h += '<h5>Historia</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
-            detail.innerHTML = h;
-        }).catch(function (e) { detail.innerHTML = alertBox('danger', esc(e.message)); });
+            put(h);
+        }).catch(function (e) { put(alertBox('danger', esc(e.message))); });
     }
 
     // ---------------------------------------------------------------- wyszukiwanie i wolne
@@ -398,6 +438,7 @@ document.addEventListener('nreg:ready', function () {
                 expandPath(j.path); if (j.path.length) { openNode(j.path[j.path.length - 1]); }
                 return;
             }
+            clearDetail();
             if (!j.hits.length) { result.innerHTML = alertBox('warning', 'Nic nie znaleziono dla „' + esc(q) + '”.'); return; }
             result.innerHTML = alertBox('info', 'Znaleziono ' + j.hits.length + ':<br>' + j.hits.map(function (h) {
                 var go = h.type === 'range' ? 'data-goto-range="' + h.id + '" data-first="' + esc(h.first) + '"'
@@ -409,6 +450,7 @@ document.addEventListener('nreg:ready', function () {
 
     document.getElementById('nreg-ip-free').addEventListener('submit', function (e) {
         e.preventDefault();
+        clearDetail();
         api('free', { within: document.getElementById('nreg-ip-within').value.trim(), len: document.getElementById('nreg-ip-len').value, count: 10 })
             .then(function (j) {
                 result.innerHTML = j.blocks.length
@@ -531,6 +573,7 @@ document.addEventListener('nreg:ready', function () {
 
     function openForm(entry, target, group) {
         if (!form) { return; }
+        if (!entry) { clearDetail(); }
         form.reset();
         document.getElementById('nreg-if-error').textContent = '';
         form.elements.id.value = entry ? entry.id : '';
@@ -569,6 +612,7 @@ document.addEventListener('nreg:ready', function () {
                 form.style.display = 'none';
                 result.innerHTML = alertBox('success', id ? 'Zapisano zmiany.' : 'Dodano ' + (j.kind === 'prefix' ? 'prefiks ' : (j.kind === 'range' ? 'zakres ' : j.count + ' adres(ów) jako jedną pozycję: '))
                     + '<span class="nreg-mono">' + esc(j.label) + '</span>.');
+                clearDetail();
                 return refreshAll();
             }).catch(function (e2) { err.textContent = e2.message; }).then(function () { btn.disabled = false; });
         });
@@ -578,6 +622,7 @@ document.addEventListener('nreg:ready', function () {
         if (!window.confirm('Zamienić grupę adresów ' + label + ' na jeden wpis-zakres? Opis, właściciel i termin przejdą na zakres. Zmiana trafi do dziennika.')) { return; }
         api('manual_to_range', { id: id }, 'POST').then(function (j) {
             result.innerHTML = alertBox('success', 'Grupa ' + esc(label) + ' jest teraz zakresem <span class="nreg-mono">' + esc(j.entry.cidr) + '</span> (' + esc(j.entry.role_label) + ').');
+            clearDetail();
             return refreshAll();
         }).catch(function (e) { result.innerHTML = alertBox('danger', esc(e.message)); });
     }
@@ -595,9 +640,109 @@ document.addEventListener('nreg:ready', function () {
         if (comment === null) { return; }
         api('manual_delete', { id: id, comment: comment, group: group }, 'POST').then(function (j) {
             result.innerHTML = alertBox('success', 'Usunięto wpis ręczny <span class="nreg-mono">' + esc(j.deleted) + '</span>.');
-            detail.innerHTML = '';
+            clearDetail();
             return refreshAll();
         }).catch(function (e) { result.innerHTML = alertBox('danger', esc(e.message)); });
+    }
+
+    // ---------------------------------------------------------------- agregaty z RIPE
+
+    var ripePanel = document.getElementById('nreg-ip-ripe'), ripeOut = document.getElementById('nreg-ir-out'), ripeData = null;
+
+    function ripeState(p) {
+        if (p.unsupported) { return '<span class="nreg-muted">IPv6 - drzewo jeszcze nie obsługuje</span>'; }
+        var out = [];
+        if (p.exists) { out.push('<span class="label label-default">już jest: ' + esc(p.exists) + '</span>'); }
+        if (p.in_aggregate) { out.push('w agregacie <span class="nreg-mono">' + esc(p.in_aggregate) + '</span>'); }
+        if (p.parent) { out.push('w szerszym z listy <span class="nreg-mono">' + esc(p.parent) + '</span>'); }
+        if (p.lnms) { out.push(p.lnms + ' sieci w LibreNMS'); }
+        return out.join('<br>') || '<span class="nreg-muted">brak w rejestrze</span>';
+    }
+
+    function ripeRender(j) {
+        ripeData = j;
+        var h = '<p><strong>AS' + j.asn + '</strong>' + (j.holder ? ' &middot; ' + esc(j.holder) : '')
+            + (j.org ? ' &middot; organizacja ' + esc(j.org_name || '') + ' <span class="nreg-mono">' + esc(j.org) + '</span>' : '') + '</p>';
+        if (j.warnings.length) { h += alertBox('warning', j.warnings.map(esc).join('<br>')); }
+        if (!j.prefixes.length) { ripeOut.innerHTML = h + '<p>RIPE nie zna prefiksów tego AS.</p>'; return; }
+        h += '<p class="nreg-sub" style="opacity:1">Zaznaczone są prefiksy, których nie ma w rejestrze i które nie leżą w agregacie ani w szerszym prefiksie z listy. '
+            + 'Sprawdź kolumnę „Przydział w RIPE”: AS może ogłaszać też adresację klientów albo innych firm.</p>'
+            + '<table class="table table-condensed table-hover"><thead><tr><th><input type="checkbox" id="nreg-ir-all" title="zaznacz wszystkie"></th>'
+            + '<th>Prefiks</th><th>Nazwa agregatu</th><th>Źródło</th><th>Przydział w RIPE</th><th>W rejestrze</th></tr></thead><tbody>';
+        j.prefixes.forEach(function (p, i) {
+            var off = p.unsupported || !!p.exists, inet = p.inetnum;
+            h += '<tr' + (off ? ' class="nreg-muted"' : '') + '><td><input type="checkbox" data-ripe="' + i + '"' + (p.checked ? ' checked' : '') + (off ? ' disabled' : '') + '></td>'
+                + '<td class="nreg-mono">' + esc(p.cidr) + '</td>'
+                + '<td>' + (off ? '' : '<input class="form-control nm" data-ripe-name="' + i + '" maxlength="64" value="' + esc(p.name || '') + '">') + '</td>'
+                + '<td>' + esc(p.sources_label.join(', ')) + '</td>'
+                + '<td>' + (inet ? '<span class="nreg-mono">' + esc(inet.range) + '</span> ' + esc(inet.netname || '') + '<br><small>' + esc(inet.status || '')
+                    + (inet.org ? ' &middot; ' + esc(inet.org) : '') + '</small>' : '<span class="nreg-muted">' + (p.family === 4 ? 'brak danych' : '') + '</span>') + '</td>'
+                + '<td>' + ripeState(p) + '</td></tr>';
+        });
+        h += '</tbody></table><div class="row"><div class="col-sm-6"><label for="nreg-ir-desc">Opis agregatów</label>'
+            + '<input class="form-control" id="nreg-ir-desc" maxlength="1000" value="' + esc('Przydział AS' + j.asn + (j.holder ? ' ' + j.holder : '') + ' (z RIPE)') + '"></div>'
+            + '<div class="col-sm-6"><label for="nreg-ir-comment">Komentarz do zmiany (trafi do dziennika)</label>'
+            + '<input class="form-control" id="nreg-ir-comment" maxlength="1000" placeholder="opcjonalnie"></div></div>'
+            + '<button class="btn btn-success btn-sm" type="button" id="nreg-ir-import" style="margin-top:6px"><i class="fa fa-plus"></i> Dodaj zaznaczone jako agregaty</button>'
+            + ' <span id="nreg-ir-count" class="nreg-sub"></span>';
+        ripeOut.innerHTML = h;
+        ripeCount();
+    }
+
+    function ripeChecked() {
+        return Array.prototype.slice.call(ripeOut.querySelectorAll('input[data-ripe]:checked')).map(function (c) {
+            var i = c.getAttribute('data-ripe'), nm = ripeOut.querySelector('input[data-ripe-name="' + i + '"]');
+            return { cidr: ripeData.prefixes[i].cidr, name: nm ? nm.value : '' };
+        });
+    }
+
+    function ripeCount() {
+        var el = document.getElementById('nreg-ir-count');
+        if (el) { el.textContent = 'zaznaczono: ' + ripeChecked().length; }
+    }
+
+    if (ripePanel) {
+        document.getElementById('nreg-ip-ripebtn').addEventListener('click', function () {
+            clearDetail();
+            if (form) { form.style.display = 'none'; }
+            ripePanel.style.display = '';
+            var asn = document.getElementById('nreg-ir-asn');
+            if (!asn.value) { asn.value = localStorage.getItem('nreg-ripe-asn') || ''; }
+            asn.focus();
+        });
+        document.getElementById('nreg-ir-close').addEventListener('click', function () { ripePanel.style.display = 'none'; });
+        document.getElementById('nreg-ir-form').addEventListener('submit', function (e) {
+            e.preventDefault();
+            var asn = document.getElementById('nreg-ir-asn').value.trim(), btn = this.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            ripeOut.innerHTML = '<p class="nreg-muted">Pobieram dane z RIPE (do kilkunastu sekund)…</p>';
+            api('ripe_lookup', { asn: asn }).then(function (j) {
+                localStorage.setItem('nreg-ripe-asn', asn);
+                ripeRender(j);
+            }).catch(function (e2) { ripeOut.innerHTML = alertBox('danger', esc(e2.message)); }).then(function () { btn.disabled = false; });
+        });
+        ripeOut.addEventListener('change', function (e) {
+            if (e.target.id === 'nreg-ir-all') {
+                ripeOut.querySelectorAll('input[data-ripe]:not(:disabled)').forEach(function (c) { c.checked = e.target.checked; });
+            }
+            ripeCount();
+        });
+        ripeOut.addEventListener('click', function (e) {
+            if (!e.target.closest('#nreg-ir-import')) { return; }
+            var items = ripeChecked(), btn = document.getElementById('nreg-ir-import');
+            if (!items.length) { window.alert('Zaznacz co najmniej jeden prefiks.'); return; }
+            if (!window.confirm('Dodać ' + items.length + ' agregat(ów)? Każdy trafi do dziennika zmian.')) { return; }
+            btn.disabled = true;
+            api('ripe_import', { asn: ripeData.asn, items: items, description: document.getElementById('nreg-ir-desc').value,
+                comment: document.getElementById('nreg-ir-comment').value }, 'POST').then(function (j) {
+                var bad = j.results.filter(function (r) { return !r.ok; });
+                result.innerHTML = alertBox(bad.length ? 'warning' : 'success', 'Dodano agregatów: ' + j.added + ' z ' + j.results.length + '.'
+                    + bad.map(function (r) { return '<br><span class="nreg-mono">' + esc(r.cidr) + '</span>: ' + esc(r.error); }).join(''));
+                ripePanel.style.display = 'none';
+                ripeOut.innerHTML = '';
+                return refreshAll();
+            }).catch(function (e2) { result.innerHTML = alertBox('danger', esc(e2.message)); btn.disabled = false; });
+        });
     }
 
     // ---------------------------------------------------------------- przestrzenie
@@ -610,7 +755,7 @@ document.addEventListener('nreg:ready', function () {
             spaceSel.value = String(space);
         });
     }
-    spaceSel.addEventListener('change', function () { space = parseInt(spaceSel.value, 10) || 1; detail.innerHTML = ''; refreshAll(); });
+    spaceSel.addEventListener('change', function () { space = parseInt(spaceSel.value, 10) || 1; clearDetail(); refreshAll(); });
     var newSpace = document.getElementById('nreg-ip-newspace');
     if (newSpace) {
         newSpace.addEventListener('click', function () {
@@ -627,7 +772,7 @@ document.addEventListener('nreg:ready', function () {
 
     tab.addEventListener('click', function (e) {
         var t;
-        if ((t = e.target.closest('[data-toggle-node]'))) { toggle(t.getAttribute('data-toggle-node')); }
+        if ((t = e.target.closest('[data-toggle-node]'))) { clearDetail(); toggle(t.getAttribute('data-toggle-node')); }
         else if ((t = e.target.closest('[data-open-node]'))) {
             e.preventDefault();
             var row = treeEl.querySelector('.nreg-tn[data-cidr="' + t.getAttribute('data-open-node') + '"]');

@@ -24,6 +24,7 @@ require $src . '/Modules/Ipam/IpCalc.php';
 require $src . '/Modules/Ipam/IpInput.php';
 require $src . '/Modules/Ipam/IpTree.php';
 require $src . '/Modules/Ipam/IpamIndex.php';
+require $src . '/Modules/Ipam/RipeLookup.php';
 
 use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\ApiException;
@@ -33,6 +34,7 @@ use Ispnetella\NetellaReg\Modules\Ipam\IpCalc;
 use Ispnetella\NetellaReg\Modules\Ipam\IpamIndex;
 use Ispnetella\NetellaReg\Modules\Ipam\IpInput;
 use Ispnetella\NetellaReg\Modules\Ipam\IpTree;
+use Ispnetella\NetellaReg\Modules\Ipam\RipeLookup;
 use Ispnetella\NetellaReg\Core\SnapshotDiff;
 use Ispnetella\NetellaReg\Modules\Vlan\VlanIndex;
 use Ispnetella\NetellaReg\Modules\Vlan\VlanManual;
@@ -423,6 +425,51 @@ check('backup ustawienia puste', Backup::settingsLookConfigured([]), false);
 check('backup nazwa pliku', (bool) preg_match(Backup::FILE_PATTERN, 'netella-reg-20261027-031500-auto.json.gz'), true);
 check('backup nazwa ze ścieżką', (bool) preg_match(Backup::FILE_PATTERN, '../netella-reg-20261027-031500-auto.json.gz'), false);
 check('backup nazwa inny rodzaj', (bool) preg_match(Backup::FILE_PATTERN, 'netella-reg-20261027-031500-x.json.gz'), false);
+
+// --- RipeLookup ---
+$asnErr = function (string $t) { try { RipeLookup::parseAsn($t); return 'ok'; } catch (\InvalidArgumentException $e) { return 'błąd'; } };
+check('asn: AS61154', RipeLookup::parseAsn('AS61154'), 61154);
+check('asn: as 61154 / 61154', [RipeLookup::parseAsn(' as 61154 '), RipeLookup::parseAsn('61154')], [61154, 61154]);
+check('asn: prywatne i błędne', [$asnErr('65102'), $asnErr('4200000001'), $asnErr('abc'), $asnErr('0'), $asnErr('23456')], ['błąd', 'błąd', 'błąd', 'błąd', 'błąd']);
+check('asn: 4-bajtowy publiczny', RipeLookup::parseAsn('AS200000'), 200000);
+check('normCidr', [RipeLookup::normCidr('45.10.136.1/24'), RipeLookup::normCidr('2A0E:39C0:0::/29'), RipeLookup::normCidr('x/24')],
+    ['45.10.136.0/24', '2a0e:39c0::/29', null]);
+
+$obj = fn (string $type, array $attrs) => ['type' => $type, 'attributes' => ['attribute' => array_map(fn ($k, $v) => ['name' => $k, 'value' => $v], array_keys($attrs), $attrs)]];
+$ripe = [
+    'as-overview' => ['data' => ['holder' => 'TEST-AS']],
+    'announced-prefixes' => ['data' => ['prefixes' => [['prefix' => '45.10.136.0/24'], ['prefix' => '193.106.128.0/22'], ['prefix' => '2a0e:39c0::/29']]]],
+    'inverse-attribute=origin' => ['objects' => ['object' => [$obj('route', ['route' => '45.10.136.0/24', 'descr' => 'PL-TEST-1']),
+        $obj('route', ['route' => '77.87.78.0/24', 'descr' => 'abuse-mail: x@y.pl'])]]],
+    'aut-num/AS64000' => [],
+    'aut-num/AS61154' => ['objects' => ['object' => [$obj('aut-num', ['aut-num' => 'AS61154', 'org' => 'ORG-T1'])]]],
+    'organisation/ORG-T1' => ['objects' => ['object' => [$obj('organisation', ['org-name' => 'Test Sp. z o.o.'])]]],
+    'inverse-attribute=org' => ['objects' => ['object' => [$obj('inetnum', ['inetnum' => '78.31.214.0 - 78.31.214.255', 'netname' => 'T-PI', 'status' => 'ASSIGNED PI'])]]],
+    'query-string=45.10.136.0%2F24&type-filter=inetnum' => ['objects' => ['object' => [$obj('inetnum', ['inetnum' => '45.10.136.0 - 45.10.139.255', 'netname' => 'LIR-ALLOC', 'status' => 'ALLOCATED PA', 'org' => 'ORG-LIR'])]]],
+    'query-string=193.106.128.0%2F22&type-filter=inetnum' => ['objects' => ['object' => [$obj('inetnum', ['inetnum' => '0.0.0.0 - 255.255.255.255', 'netname' => 'IANA-BLK', 'status' => 'ALLOCATED UNSPECIFIED'])]]],
+];
+$fake = function (array $map) {
+    return function (string $url) use ($map): ?array {
+        foreach ($map as $k => $v) { if (str_contains($url, $k)) { return $v; } }
+        return [];
+    };
+};
+$rl = (new RipeLookup($fake($ripe)))->lookup(61154);
+$byCidr = array_column($rl['prefixes'], null, 'cidr');
+check('ripe: lista prefiksów (v4 wg adresu, potem v6)', array_column($rl['prefixes'], 'cidr'),
+    ['45.10.136.0/24', '77.87.78.0/24', '78.31.214.0/24', '193.106.128.0/22', '2a0e:39c0::/29']);
+check('ripe: źródła bez powtórzeń', $byCidr['45.10.136.0/24']['sources'], ['bgp', 'route']);
+check('ripe: opis route, bez abuse-mail', [$byCidr['45.10.136.0/24']['route_descr'], $byCidr['77.87.78.0/24']['route_descr']], ['PL-TEST-1', null]);
+check('ripe: przydział szerszy', [$byCidr['45.10.136.0/24']['inetnum']['range'], $byCidr['45.10.136.0/24']['inetnum']['netname']], ['45.10.136.0/22', 'LIR-ALLOC']);
+check('ripe: IANA-BLK pominięty', $byCidr['193.106.128.0/22']['inetnum'], null);
+check('ripe: przydział organizacji AS', [$byCidr['78.31.214.0/24']['sources'], $byCidr['78.31.214.0/24']['inetnum']['org']], [['org'], 'ORG-T1']);
+check('ripe: właściciel i organizacja', [$rl['holder'], $rl['org'], $rl['org_name'], $rl['warnings']], ['TEST-AS', 'ORG-T1', 'Test Sp. z o.o.', []]);
+check('ripe: rodzina v6', $byCidr['2a0e:39c0::/29']['family'], 6);
+$err = null;
+try { (new RipeLookup(fn ($u) => null))->lookup(61154); } catch (\RuntimeException $e) { $err = 'brak'; }
+check('ripe: RIPE nie odpowiada', $err, 'brak');
+$slow = (new RipeLookup($fake($ripe), 0.0))->lookup(61154);
+check('ripe: limit czasu -> bez przydziałów, ostrzeżenie', [array_column($slow['prefixes'], 'inetnum', 'cidr')['45.10.136.0/24'], count($slow['warnings'])], [null, 1]);
 
 // --- Access ---
 check('matches pusta lista view', Access::matches(['user'], [], true), true);

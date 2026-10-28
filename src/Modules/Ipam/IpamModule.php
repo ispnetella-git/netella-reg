@@ -11,6 +11,9 @@
  * Zakresy ręczne (pule a-b) są w drzewie wierszami "range:<id>" między
  * dziećmi węzła; rozwinięty zakres pokazuje swoje adresy i wolne miejsce.
  *
+ * Import z RIPE (ripe_lookup, ripe_import): prefiksy numeru AS z RIPEstat
+ * i bazy RIPE, użytkownik wybiera, które dodać jako agregaty.
+ *
  * Part of the Netella-Reg LibreNMS plugin. Licencja GPL-3.0-or-later.
  */
 
@@ -102,7 +105,7 @@ final class IpamModule extends AbstractModule
         return match ($action) {
             'space_create' => Access::ADMIN,
             'manual_delete' => Access::DELETE,
-            'manual_create', 'manual_update', 'manual_to_range' => Access::EDIT,
+            'manual_create', 'manual_update', 'manual_to_range', 'ripe_lookup', 'ripe_import' => Access::EDIT,
             default => Access::VIEW,
         };
     }
@@ -131,6 +134,8 @@ final class IpamModule extends AbstractModule
             'manual_update' => $this->post($request) ?? $this->apiManualUpdate($request),
             'manual_delete' => $this->post($request) ?? $this->apiManualDelete($request),
             'manual_to_range' => $this->post($request) ?? $this->apiManualToRange($request),
+            'ripe_lookup' => $this->apiRipeLookup($space, trim((string) $request->query('asn', ''))),
+            'ripe_import' => $this->post($request) ?? $this->apiRipeImport($space, $request),
             default => parent::api($action, $request),
         };
     }
@@ -754,5 +759,125 @@ final class IpamModule extends AbstractModule
     private function apiManualDelete(Request $request): array
     {
         return ['deleted' => $this->manual()->delete((int) $request->input('id', 0), self::comment($request), $request->boolean('group'))];
+    }
+
+    // ---------------------------------------------------------------- import z RIPE
+
+    /** Pobieranie JSON-a przez klienta HTTP LibreNMS (proxy z ustawień LibreNMS). */
+    private static function ripeFetch(): \Closure
+    {
+        return function (string $url): ?array {
+            try {
+                $client = class_exists(\LibreNMS\Util\Http::class) ? \LibreNMS\Util\Http::client() : \Illuminate\Support\Facades\Http::withOptions([]);
+                $res = $client->timeout(10)->acceptJson()->get($url);
+            } catch (\Throwable) {
+                return null;
+            }
+            if ($res->status() === 404) {
+                return []; // baza RIPE: brak wyników
+            }
+
+            return $res->successful() && is_array($res->json()) ? $res->json() : null;
+        };
+    }
+
+    /**
+     * Prefiksy AS z RIPE z oceną względem rejestru: czy już jest wpis, czy leży
+     * w agregacie albo w szerszym kandydacie, ile sieci LibreNMS obejmuje.
+     * "checked" = proponowane do dodania.
+     */
+    private function apiRipeLookup(int $space, string $asn): array
+    {
+        try {
+            $res = (new RipeLookup(self::ripeFetch()))->lookup(RipeLookup::parseAsn($asn));
+        } catch (\InvalidArgumentException $e) {
+            throw new ApiException($e->getMessage());
+        } catch (\RuntimeException $e) {
+            throw new ApiException($e->getMessage(), 502);
+        }
+
+        $idx = $this->index($space);
+        $manual = $idx->manualPrefixes();
+        $nets = [];
+        foreach (array_keys($idx->networks()) as $c) {
+            $p = IpCalc::parseV4((string) $c);
+            $nets[] = [$p['start'], $p['end']];
+        }
+        $v4 = [];
+        foreach ($res['prefixes'] as $p) {
+            if ($p['family'] === 4) {
+                $v4[$p['cidr']] = IpCalc::parseV4($p['cidr']);
+            }
+        }
+
+        foreach ($res['prefixes'] as &$p) {
+            $p['sources_label'] = array_map(fn ($s) => RipeLookup::SOURCES[$s] ?? $s, $p['sources']);
+            if ($p['family'] !== 4) {
+                $p += ['unsupported' => true, 'checked' => false, 'exists' => null, 'in_aggregate' => null, 'parent' => null, 'lnms' => 0];
+                continue;
+            }
+            $r = $v4[$p['cidr']];
+            $p['unsupported'] = false;
+            $p['exists'] = isset($manual[$p['cidr']]) ? (IpamManual::PREFIX_ROLES[$manual[$p['cidr']]['role']] ?? $manual[$p['cidr']]['role']) : null;
+            $p['in_aggregate'] = null;
+            foreach ($manual as $c => $m) {
+                if ($c !== $p['cidr'] && $m['role'] === 'aggregate' && $m['start'] <= $r['start'] && $m['end'] >= $r['end']) {
+                    $p['in_aggregate'] = $c;
+                    break;
+                }
+            }
+            $p['parent'] = null;
+            foreach ($v4 as $c => $o) {
+                if ($c !== $p['cidr'] && $o['start'] <= $r['start'] && $o['end'] >= $r['end']) {
+                    $p['parent'] = $c;
+                    break;
+                }
+            }
+            $p['lnms'] = count(array_filter($nets, fn ($n) => $n[0] >= $r['start'] && $n[1] <= $r['end']));
+            // Nazwa agregatu: netname przydziału, jeśli to dokładnie ten prefiks, inaczej opis z route.
+            $p['name'] = ($p['inetnum']['range'] ?? null) === $p['cidr'] ? ($p['inetnum']['netname'] ?? null) : null;
+            $p['name'] ??= $p['route_descr'];
+            $p['checked'] = $p['exists'] === null && $p['in_aggregate'] === null && $p['parent'] === null;
+        }
+        unset($p);
+
+        return $res;
+    }
+
+    /** Dodaje wybrane prefiksy jako agregaty; każdy osobno, błąd jednego nie zatrzymuje reszty. */
+    private function apiRipeImport(int $space, Request $request): array
+    {
+        try {
+            $asn = RipeLookup::parseAsn((string) $request->input('asn', ''));
+        } catch (\InvalidArgumentException $e) {
+            throw new ApiException($e->getMessage());
+        }
+        $items = $request->input('items', []);
+        if (! is_array($items) || ! $items) {
+            throw new ApiException('Zaznacz co najmniej jeden prefiks.');
+        }
+        if (count($items) > 200) {
+            throw new ApiException('Najwięcej 200 prefiksów naraz.');
+        }
+        $desc = trim((string) $request->input('description', '')) ?: "Przydział AS{$asn} (z RIPE)";
+        $comment = self::comment($request) ?? "dodano z RIPE dla AS{$asn}";
+
+        $out = [];
+        foreach ($items as $it) {
+            $cidr = trim((string) (is_array($it) ? ($it['cidr'] ?? '') : $it));
+            $name = is_array($it) ? mb_substr(trim((string) ($it['name'] ?? '')), 0, 64) : '';
+            try {
+                if ($cidr === '' || str_contains($cidr, ':')) {
+                    throw new ApiException('IPv6 nie jest jeszcze obsługiwane.');
+                }
+                $this->manual()->create($space, $cidr, ['role' => 'aggregate', 'name' => $name, 'description' => $desc],
+                    $comment, $this->index($space));
+                $out[] = ['cidr' => $cidr, 'ok' => true];
+            } catch (ApiException $e) {
+                $out[] = ['cidr' => $cidr, 'ok' => false, 'error' => $e->getMessage()];
+            }
+        }
+
+        return ['results' => $out, 'added' => count(array_filter($out, fn ($r) => $r['ok']))];
     }
 }

@@ -42,6 +42,13 @@ to jeden rekord (host, interfejs, opis portu, maska, VLAN z nazwy interfejsu).
   zakres jest wierszem z fioletową kreską. Liczy się jako zajęty, a po rozwinięciu pokazuje adresy
   w środku i wolne miejsce. Zajętość zakresu to adresy z LibreNMS i wpisów ręcznych w nim. Ciągłą
   grupę adresów zamienia się na zakres przyciskiem „Na zakres” w liście wpisów ręcznych.
+- **Agregaty z RIPE** (prawo edycji): po podaniu numeru AS wtyczka pobiera prefiksy ogłaszane w BGP
+  (RIPEstat), obiekty route z `origin:` tego AS i przydziały organizacji z obiektu aut-num (baza RIPE).
+  Do każdego prefiksu IPv4 pokazuje przydział z bazy RIPE (netname, status, organizacja), stan
+  w rejestrze i liczbę sieci LibreNMS w środku. Użytkownik zaznacza, które dodać jako agregaty; domyślnie
+  zaznaczone są te, których nie ma w rejestrze i które nie leżą w agregacie ani w szerszym prefiksie
+  z listy. IPv6 jest pokazywane, ale jeszcze nie dodawane. Serwer musi mieć dostęp do `stat.ripe.net`
+  i `rest.db.ripe.net` (proxy z ustawień LibreNMS).
 - **Blokady:** adresu widocznego w LibreNMS nie da się dodać. Sieci z LibreNMS nie da się dodać jako
   „sieć używana” (można jako agregat, żeby ją opisać). Rezerwacji nie da się dodać, gdy LibreNMS ma
   w prefiksie adresy. Przejęcie przez LibreNMS działa jak w module VLAN.

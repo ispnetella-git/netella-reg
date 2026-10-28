@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 - 2026-10-28
+
+- Adresacja: „Agregaty z RIPE” - po podaniu numeru AS lista prefiksów z RIPEstat (ogłaszane w BGP)
+  i bazy RIPE (obiekty route, przydziały organizacji AS) z przydziałem RIPE, stanem w rejestrze
+  i liczbą sieci LibreNMS. Wybrane dodaje jako agregaty (każdy osobno w dzienniku). IPv6 tylko
+  do podglądu.
+- Adresacja: panel szczegółów czyści się przy rozwijaniu drzewa, dodawaniu, wyszukiwaniu i imporcie,
+  a spóźniona odpowiedź wcześniejszego kliknięcia nie nadpisuje nowszej.
+
 ## 0.5.3 - 2026-10-28
 
 - Jeden odcień fioletu (`#b57edc`) dla wpisów ręcznych wszędzie: mapa VLAN, plakietki i zakresy
