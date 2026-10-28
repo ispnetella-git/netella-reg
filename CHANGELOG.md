@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.2 - 2026-10-28
+
+- Adresacja IP i IPv6: po zapisie, zamianie grupy na zakres i usunięciu wpisu ręcznego drzewo nie zwija się
+  (rozwinięte gałęzie wracają), a zapisany wpis jest odsłonięty, podświetlony i otwarty w szczegółach.
+
 ## 0.8.1 - 2026-10-28
 
 - Adresacja IPv4 i IPv6: wiersz znaleziony przez „Szukaj” (i przez linki do adresu, prefiksu, zakresu)

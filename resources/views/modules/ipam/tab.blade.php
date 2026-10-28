@@ -658,6 +658,37 @@ document.addEventListener('nreg:ready', function () {
         return Promise.all([loadRoot(), loadManual(), loadIssues()]);
     }
 
+    // Rozwinięte gałęzie drzewa (kolejność z DOM: rodzic przed dzieckiem), żeby odtworzyć widok po zapisie.
+    function openBranches() {
+        return Array.prototype.filter.call(treeEl.querySelectorAll('.nreg-tc[data-loaded]'), function (b) { return b.style.display !== 'none'; })
+            .map(function (b) { return b.getAttribute('data-children-of'); });
+    }
+
+    // Przeładowuje dane po zapisie albo usunięciu bez zwijania drzewa; zapisany wpis pokazuje i podświetla.
+    function refreshKeep(entry) {
+        var open = openBranches();
+        return refreshAll().then(function () {
+            var p = Promise.resolve();
+            open.forEach(function (c) { p = p.then(function () { return toggle(c, true); }); });
+            return p;
+        }).then(function () { if (entry) { return showEntry(entry); } });
+    }
+
+    function showEntry(m) {
+        var q = m.kind === 'prefix' ? m.cidr : (m.kind === 'range' ? m.first : m.ip);
+        return api('search', { q: q }).then(function (j) {
+            if (m.kind === 'address') {
+                if (j.hidden) { result.innerHTML += alertBox('info', esc(OUTSIDE_HINT)); }
+                expandPath(j.path, m.ip); openIp(m.ip);
+            } else if (m.kind === 'range') {
+                // Ścieżka pierwszego adresu kończy się na zakresie.
+                expandPath(j.path); openRange(m.id);
+            } else {
+                expandPath(j.path); if (j.path.length) { openNode(j.path[j.path.length - 1]); }
+            }
+        });
+    }
+
     if (form) {
         form.elements.target.addEventListener('input', function () { updateAs(); fillRoles(formKind(), form.elements.role.value); });
         form.elements.as.addEventListener('change', function () { fillRoles(formKind(), form.elements.role.value); });
@@ -676,7 +707,7 @@ document.addEventListener('nreg:ready', function () {
                 result.innerHTML = alertBox('success', id ? 'Zapisano zmiany.' : 'Dodano ' + (j.kind === 'prefix' ? 'prefiks ' : (j.kind === 'range' ? 'zakres ' : j.count + ' adres(ów) jako jedną pozycję: '))
                     + '<span class="nreg-mono">' + esc(j.label) + '</span>.');
                 clearDetail();
-                return refreshAll();
+                return refreshKeep(j.entry);
             }).catch(function (e2) { err.textContent = e2.message; }).then(function () { btn.disabled = false; });
         });
     }
@@ -686,7 +717,7 @@ document.addEventListener('nreg:ready', function () {
         api('manual_to_range', { id: id }, 'POST').then(function (j) {
             result.innerHTML = alertBox('success', 'Grupa ' + esc(label) + ' jest teraz zakresem <span class="nreg-mono">' + esc(j.entry.cidr) + '</span> (' + esc(j.entry.role_label) + ').');
             clearDetail();
-            return refreshAll();
+            return refreshKeep(j.entry);
         }).catch(function (e) { result.innerHTML = alertBox('danger', esc(e.message)); });
     }
 
@@ -704,7 +735,7 @@ document.addEventListener('nreg:ready', function () {
         api('manual_delete', { id: id, comment: comment, group: group }, 'POST').then(function (j) {
             result.innerHTML = alertBox('success', 'Usunięto wpis ręczny <span class="nreg-mono">' + esc(j.deleted) + '</span>.');
             clearDetail();
-            return refreshAll();
+            return refreshKeep(null);
         }).catch(function (e) { result.innerHTML = alertBox('danger', esc(e.message)); });
     }
 

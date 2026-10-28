@@ -418,7 +418,7 @@ final class IpamManual
                 AuditLog::CREATE, null, self::groupView($fields, $label, count($rows), $kind) + ['space' => $space], $comment, $range);
         });
 
-        return ['label' => $label, 'count' => count($rows), 'kind' => $kind, 'batch_id' => $batch];
+        return ['label' => $label, 'count' => count($rows), 'kind' => $kind, 'batch_id' => $batch, 'entry' => $this->find($batch)];
     }
 
     /** Edycja wpisu albo (przy $group) całej grupy. Jeden wpis w dzienniku. */

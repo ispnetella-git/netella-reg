@@ -474,6 +474,36 @@ document.addEventListener('nreg:ready', function () {
 
     function refreshAll() { return Promise.all([loadRoot(), loadManual()]); }
 
+    // Rozwinięte gałęzie drzewa (kolejność z DOM: rodzic przed dzieckiem), żeby odtworzyć widok po zapisie.
+    function openBranches() {
+        return Array.prototype.filter.call(treeEl.querySelectorAll('.tc[data-loaded]'), function (b) { return b.style.display !== 'none'; })
+            .map(function (b) { return b.getAttribute('data-children-of'); });
+    }
+
+    // Przeładowuje dane po zapisie albo usunięciu bez zwijania drzewa; zapisany wpis pokazuje i podświetla.
+    function refreshKeep(entry) {
+        var open = openBranches();
+        return refreshAll().then(function () {
+            var p = Promise.resolve();
+            open.forEach(function (c) { p = p.then(function () { return toggle(c, true); }); });
+            return p;
+        }).then(function () { if (entry) { return showEntry(entry); } });
+    }
+
+    function showEntry(m) {
+        if (m.kind === 'range') {
+            return api('range', { id: m.id }).then(function (j) { expandPath(j.path, null, m.id); openRange(m.id); });
+        }
+        return api('search', { q: m.cidr }).then(function (j) {
+            if (m.kind === 'address') {
+                if (j.hidden) { result.innerHTML += alertBox('info', 'Ten adres jest ukryty w drzewie (poza agregatami albo na wyłączonym hoście).'); }
+                expandPath(j.path, j.ip); openIp(j.ip);
+            } else {
+                expandPath(j.path); if (j.path.length) { openNode(j.path[j.path.length - 1]); }
+            }
+        });
+    }
+
     if (form) {
         document.getElementById('nreg6-cancel').addEventListener('click', function () { form.style.display = 'none'; });
         document.getElementById('nreg6-add').addEventListener('click', function () { openForm(null, document.getElementById('nreg6-within').value); });
@@ -490,7 +520,7 @@ document.addEventListener('nreg:ready', function () {
                 result.innerHTML = alertBox('success', id ? 'Zapisano zmiany.' : 'Dodano ' + ({ prefix: 'prefiks', address: 'adres', range: 'zakres' }[j.kind] || 'wpis')
                     + ' <span class="nreg-mono">' + esc(j.label) + '</span>.');
                 clearDetail();
-                return refreshAll();
+                return refreshKeep(j.entry);
             }).catch(function (e2) { err.textContent = e2.message; }).then(function () { btn.disabled = false; });
         });
     }
@@ -502,7 +532,7 @@ document.addEventListener('nreg:ready', function () {
         api('manual_delete', { id: id, comment: comment }, 'POST').then(function (j) {
             result.innerHTML = alertBox('success', 'Usunięto wpis ręczny <span class="nreg-mono">' + esc(j.deleted) + '</span>.');
             clearDetail();
-            return refreshAll();
+            return refreshKeep(null);
         }).catch(function (e) { result.innerHTML = alertBox('danger', esc(e.message)); });
     }
 
