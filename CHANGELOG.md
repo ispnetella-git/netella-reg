@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.1 - 2026-10-28
+
+- Adresacja: rola wpisu ręcznego na tym samym prefiksie wygrywa z LibreNMS. Agregat na sieci
+  z interfejsu (np. adresy puli NAT z maską /24 na MikroTiku) liczy się jako cały blok, więc zakres
+  może objąć adres sieci i rozgłoszeniowy (pula NAT 45.10.136.0-255). Pula i sieć używana dalej
+  chronią te adresy.
+- Przycisk „Pobierz z RIPE” (było „Agregaty z RIPE”), pole numeru AS bez podpowiedzi.
+
 ## 0.6.0 - 2026-10-28
 
 - Adresacja: „Agregaty z RIPE” - po podaniu numeru AS lista prefiksów z RIPEstat (ogłaszane w BGP)

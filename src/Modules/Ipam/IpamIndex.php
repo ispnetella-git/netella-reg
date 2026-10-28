@@ -359,6 +359,20 @@ final class IpamIndex
         return $out;
     }
 
+    /**
+     * Czy prefiks liczyć jak sieć (hosty bez adresu sieci i rozgłoszeniowego).
+     * Rola wpisu ręcznego na tym samym prefiksie wygrywa z LibreNMS: agregat na
+     * sieci z interfejsu (np. pula NAT dodana na MikroTiku z maską /24) to cały blok.
+     */
+    public function isSubnet(string $cidr): bool
+    {
+        if (isset($this->manualPrefixes[$cidr])) {
+            return in_array($this->manualPrefixes[$cidr]['role'], ['used', 'pool'], true);
+        }
+
+        return isset($this->networks[$cidr]);
+    }
+
     /** @return array<string,array{start:int,end:int,len:int,subnet:bool}> sieci z LibreNMS, prefiksy ręczne i adresacja wewnętrzna */
     private function realPrefixes(): array
     {
@@ -367,17 +381,9 @@ final class IpamIndex
             $c = IpCalc::parseV4($cidr);
             $out[$c['cidr']] = ['start' => $c['start'], 'end' => $c['end'], 'len' => $c['len'], 'subnet' => false];
         }
-        foreach (array_keys($this->networks) as $cidr) {
-            $c = IpCalc::parseV4($cidr);
-            $out[$cidr] = ['start' => $c['start'], 'end' => $c['end'], 'len' => $c['len'], 'subnet' => true];
-        }
-        foreach ($this->manualPrefixes as $cidr => $m) {
-            $sub = in_array($m['role'], ['used', 'pool'], true);
-            if (isset($out[$cidr])) {
-                $out[$cidr]['subnet'] = $out[$cidr]['subnet'] || $sub;
-            } else {
-                $out[$cidr] = ['start' => (int) $m['start'], 'end' => (int) $m['end'], 'len' => (int) $m['len'], 'subnet' => $sub];
-            }
+        foreach (array_keys($this->networks + $this->manualPrefixes) as $cidr) {
+            $c = IpCalc::parseV4((string) $cidr);
+            $out[$c['cidr']] = ['start' => $c['start'], 'end' => $c['end'], 'len' => $c['len'], 'subnet' => $this->isSubnet($c['cidr'])];
         }
 
         return $out;
@@ -432,12 +438,11 @@ final class IpamIndex
         $prefixes = [];
         foreach ($this->networks as $cidr => $rows) {
             $c = IpCalc::parseV4($cidr);
-            $prefixes[] = ['start' => $c['start'], 'len' => $c['len'], 'src' => 'lnms', 'subnet' => true];
+            $prefixes[] = ['start' => $c['start'], 'len' => $c['len'], 'src' => 'lnms', 'subnet' => $this->isSubnet($cidr)];
         }
         foreach ($this->manualPrefixes as $cidr => $m) {
             $c = IpCalc::parseV4($cidr);
-            $prefixes[] = ['start' => $c['start'], 'len' => $c['len'], 'src' => 'manual',
-                'subnet' => in_array($m['role'], ['used', 'pool'], true)];
+            $prefixes[] = ['start' => $c['start'], 'len' => $c['len'], 'src' => 'manual', 'subnet' => $this->isSubnet($cidr)];
         }
         foreach ($this->usedImplicit() as $cidr => $c) {
             $prefixes[] = ['start' => $c['start'], 'len' => $c['len'], 'src' => 'implicit', 'subnet' => false,

@@ -637,8 +637,8 @@ final class IpamModule extends AbstractModule
             }
         }
         // W sieci (podsieć interfejsu, sieć używana, pula) adres sieci i rozgłoszeniowy są zajęte.
-        $isSubnet = $idx->knownNetwork($w['cidr'])
-            || in_array($idx->manualPrefixes()[$w['cidr']]['role'] ?? '', ['used', 'pool'], true);
+        // Agregat na sieci z LibreNMS to cały blok (IpamIndex::isSubnet).
+        $isSubnet = $idx->isSubnet($w['cidr']);
         if ($isSubnet && $w['len'] <= 30) {
             $busy[] = [$w['start'], $w['start']];
             $busy[] = [$w['end'], $w['end']];

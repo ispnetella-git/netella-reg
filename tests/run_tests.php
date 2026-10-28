@@ -23,6 +23,7 @@ require $src . '/Modules/Vlan/VlanManual.php';
 require $src . '/Modules/Ipam/IpCalc.php';
 require $src . '/Modules/Ipam/IpInput.php';
 require $src . '/Modules/Ipam/IpTree.php';
+require $src . '/Modules/Ipam/IpamSpaces.php';
 require $src . '/Modules/Ipam/IpamIndex.php';
 require $src . '/Modules/Ipam/RipeLookup.php';
 
@@ -366,6 +367,16 @@ check('kontener: przecina sieć', $idxR->rangeContainer($ip('10.3.0.250'), $ip('
 check('kontener: adres sieci', $idxR->rangeContainer($ip('10.3.1.0'), $ip('10.3.1.5'))[0], null);
 check('kontener: rozgłoszeniowy', $idxR->rangeContainer($ip('10.3.1.250'), $ip('10.3.1.255'))[0], null);
 check('kontener: poza prefiksami', $idxR->rangeContainer($ip('10.9.0.1'), $ip('10.9.0.5'))[0], null);
+// Sieć z LibreNMS (/24 na interfejsie) z agregatem na tym samym prefiksie: cały blok, np. pula NAT.
+$lrow = fn (string $ip, int $len) => ['gone_at' => null, 'data' => ['ip' => $ip, 'len' => $len, 'family' => 4]];
+$nat = fn (array $manual) => new IpamIndex([$lrow('45.10.136.10', 24)], $manual, 1, [], new DateTimeImmutable('2026-10-28'), 30, 'stale');
+check('kontener: sieć LibreNMS bez wpisu - adres sieci zabroniony', $nat([])->rangeContainer($ip('45.10.136.0'), $ip('45.10.136.255'))[0], null);
+check('kontener: sieć LibreNMS + agregat - cały blok', $nat([$mp(1, '45.10.136.0/24', 'aggregate')])->rangeContainer($ip('45.10.136.0'), $ip('45.10.136.255')),
+    ['45.10.136.0/24', null]);
+check('kontener: sieć LibreNMS + pula - nadal sieć', $nat([$mp(1, '45.10.136.0/24', 'pool')])->rangeContainer($ip('45.10.136.0'), $ip('45.10.136.255'))[0], null);
+$natStats = $nat([$mp(1, '45.10.136.0/24', 'aggregate')])->tree()->node('45.10.136.0/24')['stats'];
+check('drzewo: sieć LibreNMS + agregat liczona jak blok', $natStats['capacity'], 256);
+check('drzewo: sieć LibreNMS bez wpisu - hosty', $nat([])->tree()->node('45.10.136.0/24')['stats']['capacity'], 254);
 $idxP = new IpamIndex([], [$mp(1, '10.3.1.0/24', 'used')], 1, [], new DateTimeImmutable('2026-10-27'), 30, 'stale', [8, 16, 24], ['10.0.0.0/8', '192.168.0.0/16']);
 check('kontener: adresacja wewnętrzna', $idxP->rangeContainer($ip('10.9.0.1'), $ip('10.9.0.5')), ['10.0.0.0/8', null]);
 check('wewnętrzna tylko używana', array_keys($idxP->usedImplicit()), ['10.0.0.0/8']);

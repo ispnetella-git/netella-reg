@@ -72,7 +72,7 @@
     @if($nregBoot['canEdit'])
         <button class="btn btn-success btn-sm" id="nreg-ip-add" type="button"><i class="fa fa-plus"></i> Dodaj adresację</button>
         <button class="btn btn-default btn-sm" id="nreg-ip-ripebtn" type="button" title="Pobierz prefiksy numeru AS z RIPE i dodaj wybrane jako agregaty">
-            <i class="fa fa-globe"></i> Agregaty z RIPE</button>
+            <i class="fa fa-globe"></i> Pobierz z RIPE</button>
     @endif
     <span class="nreg-sub" id="nreg-ip-sync"></span>
 </div>
@@ -141,7 +141,7 @@
         <h4 style="margin-top:0">Agregaty z RIPE według numeru AS</h4>
         <form class="nreg-toolbar" id="nreg-ir-form" style="margin:0 0 6px" autocomplete="off">
             <label for="nreg-ir-asn" style="margin:0">Numer AS:</label>
-            <input class="form-control nreg-mono" id="nreg-ir-asn" placeholder="np. AS61154" style="width: 140px;">
+            <input class="form-control nreg-mono" id="nreg-ir-asn" style="width: 140px;">
             <button class="btn btn-primary btn-sm" type="submit"><i class="fa fa-download"></i> Pobierz z RIPE</button>
             <button class="btn btn-default btn-sm" type="button" id="nreg-ir-close">Zamknij</button>
             <span class="nreg-sub">Źródła: prefiksy ogłaszane w BGP (RIPEstat), obiekty route i przydziały organizacji AS (baza RIPE).</span>
