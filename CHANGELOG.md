@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.4 - 2026-10-28
+
+- Adresacja: w korzeniu drzewa nie ma masek dłuższych niż /24. Sieci (np. /29-/31), adresy i zakresy
+  spoza agregatów i adresacji wewnętrznej trafiają do grupy /24 „poza znaną adresacją”. Grupa pokazuje
+  liczbę zajętych adresów, bez paska i bez wolnego miejsca, bo reszta tej /24 nie musi być nasza.
+
 ## 0.6.3 - 2026-10-28
 
 - VLAN: status „nieaktualny” nazywa się „tylko na wyłączonych hostach”.

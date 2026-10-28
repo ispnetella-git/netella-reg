@@ -25,7 +25,9 @@ to jeden rekord (host, interfejs, opis portu, maska, VLAN z nazwy interfejsu).
   przydział publiczny dodaj jako agregat, a sieci ułożą się pod nim. Adresacja wewnętrzna (ustawienie,
   domyślnie RFC 1918 i CGNAT 100.64.0.0/10) jest korzeniem jak agregat, o ile coś w niej leży. Wewnątrz
   agregatów są poziomy grupowania (domyślnie /8 → /16 → /24, ustawienie „Poziomy grupowania”). Adresy
-  poza wszystkimi prefiksami (np. publiczne loopbacki) leżą w korzeniu. Pasek pokazuje zajętość.
+  poza wszystkimi prefiksami (np. publiczne loopbacki) i sieci drobniejsze niż /24 poza agregatami
+  trafiają do grupy /24 („poza znaną adresacją”, bez wolnego miejsca), więc w korzeniu nie ma masek
+  dłuższych niż /24. Pasek pokazuje zajętość.
   W sieciach liczą się hosty, bez adresu sieci i rozgłoszeniowego.
 - **Szczegóły sieci:** interfejsy z LibreNMS, wpis ręczny, wolne bloki (w agregatach i grupach) albo
   wolne adresy hostów (w sieciach), historia. Kliknięcie wolnego bloku otwiera formularz dodania.

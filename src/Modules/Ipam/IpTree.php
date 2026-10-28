@@ -13,8 +13,10 @@
  *     klasa po klasie. Tylko wewnątrz prawdziwego prefiksu, który nie jest
  *     siecią (agregat, adresacja wewnętrzna): korzeniami drzewa są najszersze
  *     prawdziwe prefiksy, a nie np. 45.0.0.0/8, którego nie mamy.
- * Adres poza wszystkimi prefiksami (np. loopback /32) leży w korzeniu
- * (rootAddresses()); wolnego miejsca w korzeniu nie pokazujemy.
+ * W korzeniu nie ma masek dłuższych niż /24 (ROOT_LEN): sieci, adresy i zakresy
+ * spoza prawdziwych prefiksów (np. 91.225.156.80/29, loopback /32) trafiają do
+ * wirtualnej grupy /24 z meta 'outside'. Taka grupa nie ma wolnego miejsca -
+ * reszta tej /24 nie musi być nasza. Wolnego miejsca w korzeniu nie pokazujemy.
  * Prefiksy CIDR nigdy nie nachodzą na siebie częściowo, więc rodzic węzła to
  * najkrótszy... a dokładniej najbliższy (najdłuższy) prefiks, który go zawiera.
  *
@@ -38,6 +40,9 @@ namespace Ispnetella\NetellaReg\Modules\Ipam;
 
 final class IpTree
 {
+    /** Najdłuższa maska węzła w korzeniu drzewa (drobniejsze grupujemy w /24). */
+    public const ROOT_LEN = 24;
+
     /** @var array<string,array> cidr => węzeł */
     private array $nodes = [];
 
@@ -99,9 +104,65 @@ final class IpTree
             $this->linkParents();
         }
 
+        $this->groupRoot($addresses, $ranges);
         $this->placeAddresses($addresses);
         $this->placeRanges($ranges);
         $this->computeStats();
+    }
+
+    /**
+     * Grupy /24 w korzeniu dla prefiksów dłuższych niż /24, adresów i zakresów
+     * spoza wszystkich prefiksów, żeby korzeń nie był długą listą /29-/32.
+     */
+    private function groupRoot(array $addresses, array $ranges): void
+    {
+        $groups = [];
+        foreach ($this->roots as $c) {
+            if ($this->nodes[$c]['len'] > self::ROOT_LEN) {
+                $groups[IpCalc::network($this->nodes[$c]['start'], self::ROOT_LEN)] = true;
+            }
+        }
+        foreach ($addresses as $a) {
+            if ($this->deepest($a['ip']) === null) {
+                $groups[IpCalc::network($a['ip'], self::ROOT_LEN)] = true;
+            }
+        }
+        foreach ($ranges as $r) {
+            $g = IpCalc::network($r['start'], self::ROOT_LEN);
+            if ($g === IpCalc::network($r['end'], self::ROOT_LEN) && $this->container($r['start'], $r['end']) === null) {
+                $groups[$g] = true;
+            }
+        }
+        if ($groups === []) {
+            return;
+        }
+        foreach (array_keys($groups) as $g) {
+            $this->addNode($g, self::ROOT_LEN, 'virtual', ['label' => 'poza znaną adresacją', 'outside' => true], false);
+        }
+        foreach ($this->nodes as &$n) {
+            $n['parent'] = null;
+            $n['children'] = [];
+        }
+        unset($n);
+        $this->roots = [];
+        $this->linkParents();
+    }
+
+    /** Najgłębszy węzeł zawierający cały przedział albo null. */
+    private function container(int $start, int $end): ?string
+    {
+        $node = $this->deepest($start);
+        while ($node !== null && $this->nodes[$node]['end'] < $end) {
+            $node = $this->nodes[$node]['parent'];
+        }
+
+        return $node;
+    }
+
+    /** Czy węzeł to grupa /24 spoza znanej adresacji (bez wolnego miejsca). */
+    public static function isOutside(array $node): bool
+    {
+        return ! empty($node['meta']['outside']);
     }
 
     /** Liczba wspólnych początkowych bitów dwóch adresów. */
@@ -120,10 +181,7 @@ final class IpTree
     private function placeRanges(array $ranges): void
     {
         foreach ($ranges as $r) {
-            $node = $this->deepest($r['start']);
-            while ($node !== null && $this->nodes[$node]['end'] < $r['end']) {
-                $node = $this->nodes[$node]['parent'];
-            }
+            $node = $this->container($r['start'], $r['end']);
             $this->ranges[$r['id']] = $r + ['node' => $node];
             if ($node !== null) {
                 $this->nodes[$node]['ranges'][] = $r['id'];
@@ -355,6 +413,12 @@ final class IpTree
                 'util' => $capacity > 0 ? round(($capacity - $freeCount) * 100 / $capacity, 1) : 100.0,
             ];
             $n['free_intervals'] = $free;
+            if (self::isOutside($n)) {
+                // Grupa spoza znanej adresacji: tylko to, co w niej jest, bez wolnego miejsca.
+                $used = $capacity - $freeCount;
+                $n['stats'] = ['size' => $n['stats']['size'], 'capacity' => $used, 'addresses' => $addrTotal, 'free' => 0, 'used' => $used, 'util' => null];
+                $n['free_intervals'] = [];
+            }
             unset($n);
         }
     }
@@ -435,7 +499,7 @@ final class IpTree
     public function gaps(string $cidr): array
     {
         $n = $this->nodes[$cidr] ?? null;
-        if ($n === null) {
+        if ($n === null || self::isOutside($n)) {
             return [];
         }
         $busy = [];

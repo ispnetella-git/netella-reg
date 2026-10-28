@@ -288,7 +288,7 @@ $tree = new IpTree(
         ['ip' => $ip('193.0.0.1')]],
     [8, 16, 24]
 );
-check('tree korzenie: najszersze prawdziwe prefiksy, bez klas nad nimi', $tree->roots(), ['10.0.0.0/8', '45.10.136.0/22', '91.238.142.0/24']);
+check('tree korzenie: najszersze prawdziwe prefiksy, bez klas nad nimi', $tree->roots(), ['10.0.0.0/8', '45.10.136.0/22', '91.238.142.0/24', '193.0.0.0/24']);
 check('tree brak 45.0.0.0/8 i 45.10.0.0/16', [$tree->node('45.0.0.0/8'), $tree->node('45.10.0.0/16')], [null, null]);
 check('tree rodzic /24', $tree->node('45.10.136.0/24')['parent'], '45.10.136.0/22');
 check('tree /22 bez rodzica', $tree->node('45.10.136.0/22')['parent'], null);
@@ -297,8 +297,18 @@ check('tree adres w /24', $tree->deepest($ip('45.10.136.2')), '45.10.136.0/24');
 check('tree adres poza siecią w adresacji wewnętrznej -> wirtualny /24', $tree->deepest($ip('10.218.0.3')), '10.218.0.0/24');
 check('tree /30 pod wirtualnym /24', $tree->node('10.218.8.0/30')['parent'], '10.218.8.0/24');
 check('tree wirtualny /16 w adresacji wewnętrznej', IpTree::isVirtual($tree->node('10.218.0.0/16')), true);
-check('tree publiczny loopback w korzeniu', [$tree->deepest($ip('193.0.0.1')), $tree->node('193.0.0.0/24')], [null, null]);
-check('tree adresy w korzeniu', array_map(fn ($i) => IpCalc::int2ip($tree->address($i)['ip']), $tree->rootAddresses()), ['193.0.0.1']);
+$g193 = $tree->node('193.0.0.0/24');
+check('tree publiczny loopback w grupie /24 spoza adresacji', [$tree->deepest($ip('193.0.0.1')), IpTree::isOutside($g193), $g193['parent']], ['193.0.0.0/24', true, null]);
+check('tree grupa spoza adresacji: bez wolnego miejsca', [$g193['stats']['capacity'], $g193['stats']['free'], $g193['free_intervals'], $tree->gaps('193.0.0.0/24')], [1, 0, [], []]);
+check('tree adresy w korzeniu', $tree->rootAddresses(), []);
+// Sieci dłuższe niż /24 poza agregatami: korzeń pokazuje /24, nie listę /29-/31.
+$tPub = new IpTree([$pfx('91.225.156.80/29'), $pfx('91.225.156.176/29'), $pfx('91.225.156.0/31'), $pfx('195.149.232.0/22'), $pfx('178.216.40.0/21', 'manual', false)],
+    [['ip' => $ip('91.225.156.81')], ['ip' => $ip('178.216.41.5')]], [8, 16, 24]);
+check('tree korzeń bez masek dłuższych niż /24', $tPub->roots(), ['91.225.156.0/24', '178.216.40.0/21', '195.149.232.0/22']);
+check('tree /29 pod grupą /24', [$tPub->node('91.225.156.80/29')['parent'], $tPub->node('91.225.156.0/24')['children']],
+    ['91.225.156.0/24', ['91.225.156.0/31', '91.225.156.80/29', '91.225.156.176/29']]);
+check('tree grupa /24: zajęte = suma sieci', $tPub->node('91.225.156.0/24')['stats']['used'], 18);
+check('tree agregat dalej ma poziomy i wolne', [$tPub->node('178.216.41.0/24')['parent'], $tPub->freeBlocks('178.216.40.0/21', 1)[0]['cidr']], ['178.216.40.0/21', '178.216.44.0/22']);
 check('tree inNetwork', [$tree->inNetwork($ip('10.218.8.1')), $tree->inNetwork($ip('10.218.0.3')), $tree->inNetwork($ip('193.0.0.1'))], [true, false, false]);
 check('tree realContainer', [$tree->realContainer($ip('45.10.138.0'), $ip('45.10.139.255')), $tree->realContainer($ip('45.10.0.0'), $ip('45.10.255.255')),
     $tree->realContainer($ip('10.5.0.0'), $ip('10.5.0.255'))], ['45.10.136.0/22', null, '10.0.0.0/8']);
@@ -354,7 +364,8 @@ $tRA = new IpTree([$pfx('10.2.0.0/16', 'manual', false)], [], [8, 16, 24],
 check('tree zakres tworzy wirtualny /24', $tRA->range(1)['node'], '10.2.5.0/24');
 check('tree zakres przez granicę /24 należy do agregatu', $tRA->range(2)['node'], '10.2.0.0/16');
 check('tree agregat liczy oba zakresy', $tRA->node('10.2.0.0/16')['stats']['used'], 11 + 67);
-check('tree zakres bez prefiksu w korzeniu', (new IpTree([], [], [8, 16, 24], [['id' => 3, 'start' => $ip('192.0.2.1'), 'end' => $ip('192.0.2.9')]]))->range(3)['node'], null);
+check('tree zakres bez prefiksu w grupie /24', (new IpTree([], [], [8, 16, 24], [['id' => 3, 'start' => $ip('192.0.2.1'), 'end' => $ip('192.0.2.9')]]))->range(3)['node'], '192.0.2.0/24');
+check('tree zakres ponad /24 bez prefiksu w korzeniu', (new IpTree([], [], [8, 16, 24], [['id' => 4, 'start' => $ip('192.0.2.1'), 'end' => $ip('192.0.3.9')]]))->range(4)['node'], null);
 
 // IpamIndex::rangeContainer na wpisach ręcznych (bez migawki).
 $mp = function (int $id, string $cidr, string $role) {

@@ -213,7 +213,7 @@ document.addEventListener('nreg:ready', function () {
 
     function nodeBadges(n) {
         var h = '';
-        if (n.virtual) { h += '<span class="nreg-bdg v">grupa /' + n.len + '</span>'; }
+        if (n.virtual) { h += '<span class="nreg-bdg v"' + (n.outside ? ' title="grupa porządkowa: poza agregatami i adresacją wewnętrzną, bez wolnego miejsca"' : '') + '>grupa /' + n.len + '</span>'; }
         if (n.sources.indexOf('implicit') >= 0 && !n.manual && !n.state) { h += '<span class="nreg-bdg v" title="ustawienie „Adresacja wewnętrzna”">wewnętrzna</span>'; }
         if (n.state) { h += '<span class="nreg-bdg ' + n.state + '">' + esc(STATE_BDG[n.state]) + '</span>'; }
         if (n.manual) {
@@ -232,7 +232,8 @@ document.addEventListener('nreg:ready', function () {
             + '<span class="tg" data-toggle-node="' + esc(n.cidr) + '">' + (expandable ? '▸' : '·') + '</span>'
             + '<span class="cidr" data-open-node="' + esc(n.cidr) + '">' + esc(n.range ? n.first + ' – ' + n.last : n.cidr) + '</span>' + nodeBadges(n)
             + '<span class="lbl" title="' + esc(n.label || '') + '">' + esc(n.label || '') + '</span>'
-            + bar(s.util) + '<span class="cnt" title="zajęte / pojemność, adresów: ' + s.addresses + '">' + s.used + '/' + s.capacity + '</span></div>'
+            + (n.outside ? '<span class="nreg-bar" style="visibility:hidden"></span><span class="cnt" title="adresów: ' + s.addresses + '">' + s.used + ' adr.</span></div>'
+                : bar(s.util) + '<span class="cnt" title="zajęte / pojemność, adresów: ' + s.addresses + '">' + s.used + '/' + s.capacity + '</span></div>')
             + '<div class="nreg-tc" data-children-of="' + esc(n.cidr) + '" style="display:none"></div>';
     }
 
@@ -403,10 +404,14 @@ document.addEventListener('nreg:ready', function () {
             var h = '<h4 class="nreg-mono">' + esc(n.cidr) + copyBtn(n.cidr) + ' ' + nodeBadges(n) + '</h4>'
                 + '<dl><dt>Zakres</dt><dd class="nreg-mono">' + esc(n.first) + ' – ' + esc(n.last) + copyBtn(n.first + '-' + n.last) + '</dd>'
                 + '<dt>Rozmiar</dt><dd>' + s.size + (n.subnet && n.len <= 30 ? ' (hostów: ' + s.capacity + ')' : '') + '</dd>'
-                + '<dt>Zajęte</dt><dd>' + s.used + ' z ' + s.capacity + ' (' + s.util + '%) ' + bar(s.util) + '</dd>'
+                + (n.outside ? '<dt>Zajęte</dt><dd>' + s.used + ' adr. (sieci, zakresy i adresy w tej grupie)</dd>'
+                    : '<dt>Zajęte</dt><dd>' + s.used + ' z ' + s.capacity + ' (' + s.util + '%) ' + bar(s.util) + '</dd>')
                 + '<dt>Adresów</dt><dd>' + s.addresses + '</dd>'
                 + (n.label ? '<dt>Opis</dt><dd>' + esc(n.label) + '</dd>' : '') + '</dl>';
-            if (n.virtual) { h += '<p class="nreg-muted" style="font-size:12px">To poziom grupowania /' + n.len + ' - nie ma tu prawdziwego prefiksu.</p>'; }
+            if (n.outside) {
+                h += '<p class="nreg-muted" style="font-size:12px">Grupa /24 tylko porządkuje drzewo: to, co tu leży, jest poza agregatami i adresacją wewnętrzną. '
+                    + 'Wolnego miejsca nie pokazujemy, bo reszta tej /24 nie musi być Wasza. Jeśli jest, dodaj agregat (np. z RIPE).</p>';
+            } else if (n.virtual) { h += '<p class="nreg-muted" style="font-size:12px">To poziom grupowania /' + n.len + ' - nie ma tu prawdziwego prefiksu.</p>'; }
             if (n.lnms.length) { h += '<h5>Na interfejsach (LibreNMS)</h5>' + lnmsTable(n.lnms, true); }
             if (n.manual) { h += manualBlock(n.manual); }
             else if (can.canEdit) {

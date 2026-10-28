@@ -264,6 +264,7 @@ final class IpamModule extends AbstractModule
             'first' => IpCalc::int2ip($n['start']),
             'last' => IpCalc::int2ip($n['end']),
             'virtual' => IpTree::isVirtual($n),
+            'outside' => IpTree::isOutside($n),
             'sources' => array_keys($n['sources']),
             'subnet' => $n['subnet'],
             'state' => $lnms === [] ? null : ($active !== [] ? IpamIndex::LNMS : $lnms[0]['state']),
