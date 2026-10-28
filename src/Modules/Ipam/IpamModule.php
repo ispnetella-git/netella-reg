@@ -604,12 +604,7 @@ final class IpamModule extends AbstractModule
             throw new ApiException("Blok /{$len} jest większy niż {$w['cidr']}.");
         }
         $idx = $this->index($space);
-
-        // Szukamy tylko w adresacji, którą znamy (sieć, prefiks ręczny, adresacja wewnętrzna).
-        if ($idx->tree()->realContainer($w['start'], $w['end']) === null) {
-            throw new ApiException("{$w['cidr']} nie leży w żadnej znanej adresacji (sieć z LibreNMS, prefiks ręczny, adresacja wewnętrzna). "
-                . 'Jeśli to Wasza pula, dodaj ją najpierw jako agregat.');
-        }
+        // Wolne liczymy w każdym prefiksie, także spoza agregatów (zasada: zawsze pokazujemy wolne miejsce).
 
         // Zajęte: prefiksy leżące wewnątrz (nie sam przeszukiwany i nie te, które go zawierają) i adresy.
         $busy = [];

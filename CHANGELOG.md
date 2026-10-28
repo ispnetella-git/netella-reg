@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.5 - 2026-10-28
+
+- Adresacja: wolne miejsce jest zawsze liczone i pokazywane, także w grupach /24 spoza agregatów
+  (pasek, wolne bloki i adresy, jak w każdym węźle). „Wolne /N” działa w dowolnym prefiksie (wcześniej
+  tylko w znanej adresacji).
+
 ## 0.6.4 - 2026-10-28
 
 - Adresacja: w korzeniu drzewa nie ma masek dłuższych niż /24. Sieci (np. /29-/31), adresy i zakresy

@@ -26,14 +26,13 @@ to jeden rekord (host, interfejs, opis portu, maska, VLAN z nazwy interfejsu).
   domyślnie RFC 1918 i CGNAT 100.64.0.0/10) jest korzeniem jak agregat, o ile coś w niej leży. Wewnątrz
   agregatów są poziomy grupowania (domyślnie /8 → /16 → /24, ustawienie „Poziomy grupowania”). Adresy
   poza wszystkimi prefiksami (np. publiczne loopbacki) i sieci drobniejsze niż /24 poza agregatami
-  trafiają do grupy /24 („poza znaną adresacją”, bez wolnego miejsca), więc w korzeniu nie ma masek
-  dłuższych niż /24. Pasek pokazuje zajętość.
+  trafiają do grupy /24 („poza znaną adresacją”), więc w korzeniu nie ma masek dłuższych niż /24.
+  Wolne miejsce jest liczone i pokazywane wszędzie, także w tych grupach. Pasek pokazuje zajętość.
   W sieciach liczą się hosty, bez adresu sieci i rozgłoszeniowego.
 - **Szczegóły sieci:** interfejsy z LibreNMS, wpis ręczny, wolne bloki (w agregatach i grupach) albo
   wolne adresy hostów (w sieciach), historia. Kliknięcie wolnego bloku otwiera formularz dodania.
 - **Szukaj:** adres (rozwija drzewo do niego), prefiks albo tekst (opisy, urządzenia, interfejsy).
-- **Wolne /N w prefiksie:** pierwsze wolne, wyrównane bloki danej maski, tylko w znanej adresacji
-  (sieć, prefiks ręczny, adresacja wewnętrzna).
+- **Wolne /N w prefiksie:** pierwsze wolne, wyrównane bloki danej maski w dowolnym prefiksie.
 - **Dodaj adresację** (prawo edycji): `10.0.0.0/24` (prefiks z rolą agregat, pula, rezerwacja albo
   sieć używana), `10.0.0.5`, `10.0.0.10-20`, `10.0.0.10-10.0.0.40` albo lista adresów (do 1024 naraz,
   jedna grupa i jeden wpis w dzienniku). Wymagana nazwa, opcjonalnie opis, właściciel, VLAN, urządzenia

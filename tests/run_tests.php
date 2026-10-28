@@ -299,7 +299,7 @@ check('tree /30 pod wirtualnym /24', $tree->node('10.218.8.0/30')['parent'], '10
 check('tree wirtualny /16 w adresacji wewnętrznej', IpTree::isVirtual($tree->node('10.218.0.0/16')), true);
 $g193 = $tree->node('193.0.0.0/24');
 check('tree publiczny loopback w grupie /24 spoza adresacji', [$tree->deepest($ip('193.0.0.1')), IpTree::isOutside($g193), $g193['parent']], ['193.0.0.0/24', true, null]);
-check('tree grupa spoza adresacji: bez wolnego miejsca', [$g193['stats']['capacity'], $g193['stats']['free'], $g193['free_intervals'], $tree->gaps('193.0.0.0/24')], [1, 0, [], []]);
+check('tree grupa spoza adresacji: wolne miejsce liczone', [$g193['stats']['capacity'], $g193['stats']['free'], count($tree->gaps('193.0.0.0/24'))], [256, 255, 2]);
 check('tree adresy w korzeniu', $tree->rootAddresses(), []);
 // Sieci dłuższe niż /24 poza agregatami: korzeń pokazuje /24, nie listę /29-/31.
 $tPub = new IpTree([$pfx('91.225.156.80/29'), $pfx('91.225.156.176/29'), $pfx('91.225.156.0/31'), $pfx('195.149.232.0/22'), $pfx('178.216.40.0/21', 'manual', false)],

@@ -15,8 +15,9 @@
  *     prawdziwe prefiksy, a nie np. 45.0.0.0/8, którego nie mamy.
  * W korzeniu nie ma masek dłuższych niż /24 (ROOT_LEN): sieci, adresy i zakresy
  * spoza prawdziwych prefiksów (np. 91.225.156.80/29, loopback /32) trafiają do
- * wirtualnej grupy /24 z meta 'outside'. Taka grupa nie ma wolnego miejsca -
- * reszta tej /24 nie musi być nasza. Wolnego miejsca w korzeniu nie pokazujemy.
+ * wirtualnej grupy /24 z meta 'outside'. Wolne miejsce liczymy i pokazujemy w niej
+ * jak wszędzie (zasada: zawsze pokazujemy wolne miejsce; zbędne wpisy użytkownik
+ * usunie). Wolnego miejsca między korzeniami nie pokazujemy.
  * Prefiksy CIDR nigdy nie nachodzą na siebie częściowo, więc rodzic węzła to
  * najkrótszy... a dokładniej najbliższy (najdłuższy) prefiks, który go zawiera.
  *
@@ -159,7 +160,7 @@ final class IpTree
         return $node;
     }
 
-    /** Czy węzeł to grupa /24 spoza znanej adresacji (bez wolnego miejsca). */
+    /** Czy węzeł to grupa /24 spoza agregatów i adresacji wewnętrznej. */
     public static function isOutside(array $node): bool
     {
         return ! empty($node['meta']['outside']);
@@ -413,12 +414,6 @@ final class IpTree
                 'util' => $capacity > 0 ? round(($capacity - $freeCount) * 100 / $capacity, 1) : 100.0,
             ];
             $n['free_intervals'] = $free;
-            if (self::isOutside($n)) {
-                // Grupa spoza znanej adresacji: tylko to, co w niej jest, bez wolnego miejsca.
-                $used = $capacity - $freeCount;
-                $n['stats'] = ['size' => $n['stats']['size'], 'capacity' => $used, 'addresses' => $addrTotal, 'free' => 0, 'used' => $used, 'util' => null];
-                $n['free_intervals'] = [];
-            }
             unset($n);
         }
     }
@@ -499,7 +494,7 @@ final class IpTree
     public function gaps(string $cidr): array
     {
         $n = $this->nodes[$cidr] ?? null;
-        if ($n === null || self::isOutside($n)) {
+        if ($n === null) {
             return [];
         }
         $busy = [];
