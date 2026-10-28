@@ -54,5 +54,4 @@ interface RegModule
 
     /** Prawo wymagane do akcji API (Access::VIEW, EDIT, DELETE, ADMIN). */
     public function apiPermission(string $action, string $method): string;
-
 }

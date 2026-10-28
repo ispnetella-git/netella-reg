@@ -774,7 +774,7 @@ final class IpamModule extends AbstractModule
     // ---------------------------------------------------------------- import z RIPE
 
     /** Pobieranie JSON-a przez klienta HTTP LibreNMS (proxy z ustawień LibreNMS). */
-    private static function ripeFetch(): \Closure
+    public static function ripeFetch(): \Closure
     {
         return function (string $url): ?array {
             try {

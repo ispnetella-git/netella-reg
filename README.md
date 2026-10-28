@@ -76,6 +76,22 @@ Linki: `/plugin/Netella-Reg?ip=45.10.136.1#ipam`, `/plugin/Netella-Reg?prefix=45
 
 Plan kolejnych wersji jest w `../PROPOZYCJA.md` (rozdział 11).
 
+### Adresacja IPv6 (moduł `ipam6`)
+
+Osobna zakładka „Adresacja IPv6”. Wymaga rozszerzenia PHP `gmp` (LibreNMS ma je w pakietach
+instalacyjnych; bez niego zakładka pokazuje komunikat, a reszta wtyczki działa). Adresy IPv6 z LibreNMS
+zbiera moduł „Adresacja IP”, więc ten moduł nie ma własnej synchronizacji.
+
+- **Drzewo** jak w IPv4: domyślnie adresacja wewnętrzna (ustawienie, domyślnie ULA `fc00::/7`), w której
+  coś leży, i prefiksy dodane ręcznie albo z RIPE. Reszta za przełącznikami „Pokaż adresację spoza
+  agregatów” i „Pokaż adresy z wyłączonych hostów”. W korzeniu nie ma masek dłuższych niż /48. Wewnątrz
+  agregatów poziomy /32 → /48 → /56 → /64 (ustawienie).
+- **Zajętość** w prefiksach /64 i szerszych liczy się w blokach /64 (adres albo /127 zajmuje całą swoją
+  /64); w węższych - w adresach. Wolne miejsce to bloki prefiksów, kliknięcie dodaje wpis.
+- **Prefiksy ręczne:** agregat, sieć używana, rezerwacja (te same blokady co w IPv4), nazwa wymagana.
+- **Pobierz z RIPE:** jak w IPv4, dodaje prefiksy IPv6 jako agregaty.
+- Na razie bez pojedynczych adresów ręcznych, zakresów i „Wolne /N” (kolejny etap).
+
 ## Instalacja
 
 Repozytorium jest prywatne, więc composer potrzebuje tokenu i adresu repo. Wszystko jako

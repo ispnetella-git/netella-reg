@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0 - 2026-10-28
+
+- Nowy moduł „Adresacja IPv6” (osobna zakładka, klucz `ipam6`, obliczenia na GMP): drzewo z LibreNMS
+  i prefiksów ręcznych, zajętość w blokach /64, wolne bloki, szczegóły prefiksu i adresu, prefiksy ręczne
+  (agregat, sieć używana, rezerwacja) z dziennikiem, import agregatów IPv6 z RIPE, przełączniki adresacji
+  spoza agregatów i wyłączonych hostów. Ustawienia: poziomy grupowania IPv6 i adresacja wewnętrzna (ULA).
+
 ## 0.6.6 - 2026-10-28
 
 - Adresacja: domyślnie w drzewie jest tylko adresacja wewnętrzna (w której coś leży) i prefiksy dodane

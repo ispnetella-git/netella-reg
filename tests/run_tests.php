@@ -27,6 +27,8 @@ require $src . '/Modules/Ipam/IpamSpaces.php';
 require $src . '/Modules/Ipam/IpamIndex.php';
 require $src . '/Modules/Ipam/IpamManual.php';
 require $src . '/Modules/Ipam/RipeLookup.php';
+require $src . '/Modules/Ipam6/Ip6Calc.php';
+require $src . '/Modules/Ipam6/Ip6Tree.php';
 
 use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\ApiException;
@@ -38,6 +40,8 @@ use Ispnetella\NetellaReg\Modules\Ipam\IpInput;
 use Ispnetella\NetellaReg\Modules\Ipam\IpTree;
 use Ispnetella\NetellaReg\Modules\Ipam\IpamManual;
 use Ispnetella\NetellaReg\Modules\Ipam\RipeLookup;
+use Ispnetella\NetellaReg\Modules\Ipam6\Ip6Calc;
+use Ispnetella\NetellaReg\Modules\Ipam6\Ip6Tree;
 use Ispnetella\NetellaReg\Core\SnapshotDiff;
 use Ispnetella\NetellaReg\Modules\Vlan\VlanIndex;
 use Ispnetella\NetellaReg\Modules\Vlan\VlanManual;
@@ -510,6 +514,47 @@ try { (new RipeLookup(fn ($u) => null))->lookup(61154); } catch (\RuntimeExcepti
 check('ripe: RIPE nie odpowiada', $err, 'brak');
 $slow = (new RipeLookup($fake($ripe), 0.0))->lookup(61154);
 check('ripe: limit czasu -> bez przydziałów, ostrzeżenie', [array_column($slow['prefixes'], 'inetnum', 'cidr')['45.10.136.0/24'], count($slow['warnings'])], [null, 1]);
+
+// --- IPv6 (GMP) ---
+if (! Ip6Calc::available()) {
+    echo "  POMINIĘTO testy IPv6: brak rozszerzenia gmp\n";
+} else {
+    $g6 = fn (string $ip) => Ip6Calc::ip2gmp($ip);
+    $p6 = Ip6Calc::parse('2a0e:39c0::/29');
+    check('ip6: parse /29', [$p6['cidr'], Ip6Calc::gmp2ip($p6['end']), $p6['start_hex']],
+        ['2a0e:39c0::/29', '2a0e:39c7:ffff:ffff:ffff:ffff:ffff:ffff', '2a0e39c0000000000000000000000000']);
+    check('ip6: normalizacja', Ip6Calc::parse('2A0E:39C0:0:0::1/64')['cidr'], '2a0e:39c0::/64');
+    $e6 = null;
+    try { Ip6Calc::parse('2a0e:39c0::1/64', true); } catch (\InvalidArgumentException $e) { $e6 = $e->getMessage(); }
+    check('ip6: bity hosta w trybie ścisłym', str_contains((string) $e6, '2a0e:39c0::/64'), true);
+    check('ip6: adres bez maski = /128', Ip6Calc::parse('::1')['len'], 128);
+    $bad6 = 'ok';
+    try { Ip6Calc::parse('10.0.0.0/8'); } catch (\InvalidArgumentException) { $bad6 = 'błąd'; }
+    check('ip6: IPv4 odrzucone', $bad6, 'błąd');
+    check('ip6: rozmiar /64', gmp_strval(Ip6Calc::size(64)), '18446744073709551616');
+    check('ip6: rangeToCidrs', array_map(fn ($b) => Ip6Calc::cidr($b['start'], $b['len']),
+        Ip6Calc::rangeToCidrs($g6('2001:db8::'), $g6('2001:db8:2:ffff:ffff:ffff:ffff:ffff'))), ['2001:db8::/47', '2001:db8:2::/48']);
+    check('ip6: roundOut do /64', array_map(fn ($iv) => Ip6Calc::gmp2ip($iv[0]) . '-' . Ip6Calc::gmp2ip($iv[1]),
+        Ip6Calc::roundOut([[$g6('2001:db8:0:5::1'), $g6('2001:db8:0:5::2')]], 64)), ['2001:db8:0:5::-2001:db8:0:5:ffff:ffff:ffff:ffff']);
+    check('ip6: fmt', Ip6Calc::fmt(gmp_pow(2, 35)), '34 359 738 368');
+
+    // Agregat /29 z dwiema sieciami /64 i adresem; połączeniówka u peera poza agregatem.
+    $pf6 = fn (string $c, string $src = 'lnms', bool $sub = true) => ['start' => Ip6Calc::parse($c)['start'], 'len' => Ip6Calc::parse($c)['len'], 'src' => $src, 'subnet' => $sub];
+    $t6 = new Ip6Tree([$pf6('2a0e:39c0::/29', 'manual', false), $pf6('2a0e:39c0:0:1::/64'), $pf6('2a0e:39c0:0:2::/64'), $pf6('2001:7f8:1::/64')],
+        [$g6('2a0e:39c0:0:1::1'), $g6('2a0e:39c0:10::1'), $g6('2001:7f8:1::a')], [32, 48, 56, 64]);
+    check('ip6 drzewo: korzenie (agregat, grupa /48 dla peera)', $t6->roots(), ['2001:7f8:1::/48', '2a0e:39c0::/29']);
+    check('ip6 drzewo: grupa spoza adresacji', Ip6Tree::isOutside($t6->node('2001:7f8:1::/48')), true);
+    check('ip6 drzewo: poziomy w agregacie', $t6->path('2a0e:39c0:0:1::/64'), ['2a0e:39c0::/29', '2a0e:39c0::/32', '2a0e:39c0::/48', '2a0e:39c0::/56', '2a0e:39c0:0:1::/64']);
+    check('ip6 drzewo: adres w sieci', $t6->deepest($g6('2a0e:39c0:0:1::1')), '2a0e:39c0:0:1::/64');
+    check('ip6 drzewo: adres poza siecią -> wirtualna /64', $t6->deepest($g6('2a0e:39c0:10::1')), '2a0e:39c0:10::/64');
+    $s29 = $t6->node('2a0e:39c0::/29')['stats'];
+    check('ip6 drzewo: /29 w blokach /64', [$s29['unit'], $s29['capacity'], $s29['used'], $s29['addresses']], ['/64', '34359738368', '3', 2]);
+    check('ip6 drzewo: wolne bloki /29', array_column($t6->freeBlocks('2a0e:39c0::/29', 2), 'cidr'), ['2a0e:39c4::/30', '2a0e:39c2::/31']);
+    check('ip6 drzewo: wolne w /56 omijają zajęte /64', array_map(fn ($iv) => Ip6Calc::gmp2ip($iv[0]), $t6->gaps('2a0e:39c0::/56')), ['2a0e:39c0::', '2a0e:39c0:0:3::']);
+    $t128 = new Ip6Tree([$pf6('2001:db8::/126')], [$g6('2001:db8::1')]);
+    check('ip6 drzewo: sieć /126 liczona w adresach', [$t128->node('2001:db8::/126')['stats']['unit'], $t128->node('2001:db8::/126')['stats']['capacity'],
+        $t128->node('2001:db8::/126')['stats']['used']], ['adr.', '4', '1']);
+}
 
 // --- Access ---
 check('matches pusta lista view', Access::matches(['user'], [], true), true);
