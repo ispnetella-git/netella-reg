@@ -74,6 +74,10 @@
         <button class="btn btn-default btn-sm" id="nreg-ip-ripebtn" type="button" title="Pobierz prefiksy numeru AS z RIPE i dodaj wybrane jako agregaty">
             <i class="fa fa-globe"></i> Pobierz z RIPE</button>
     @endif
+    @if(($nregBoot['disabledMode'] ?? 'stale') === 'stale')
+        <label class="nreg-sub" style="margin:0;font-weight:normal;opacity:1" title="Adresy z hostów wyłączonych w LibreNMS. Ukryte są w drzewie i szukaniu wolnych jak wolne; dodanie ich ręcznie i tak blokuje LibreNMS.">
+            <input type="checkbox" id="nreg-ip-stale" style="vertical-align:-2px"> Pokaż adresy z wyłączonych hostów</label>
+    @endif
     <span class="nreg-sub" id="nreg-ip-sync"></span>
 </div>
 
@@ -96,13 +100,13 @@
                 <select class="form-control" id="nreg-if-role" name="role"></select>
             </div>
             <div class="col-sm-5">
-                <label for="nreg-if-name">Nazwa</label>
+                <label class="req" for="nreg-if-name">Nazwa</label>
                 <input class="form-control" id="nreg-if-name" name="name" maxlength="64">
             </div>
         </div>
         <div class="row">
             <div class="col-sm-12">
-                <label class="req" for="nreg-if-description">Opis</label>
+                <label for="nreg-if-description">Opis</label>
                 <textarea class="form-control" id="nreg-if-description" name="description" rows="2" maxlength="1000"></textarea>
             </div>
         </div>
@@ -121,7 +125,9 @@
             </div>
             <div class="col-sm-4">
                 <label for="nreg-if-devices">Urządzenia / lokalizacja</label>
-                <input class="form-control" id="nreg-if-devices" name="devices" maxlength="1000">
+                <input class="form-control" id="nreg-if-devices" name="devices" maxlength="1000" list="nreg-if-devlist"
+                       placeholder="wybierz host z LibreNMS albo wpisz">
+                <datalist id="nreg-if-devlist"></datalist>
             </div>
         </div>
         <div class="row">
@@ -170,13 +176,16 @@ document.addEventListener('nreg:ready', function () {
     var space = 1, labels = {}, prefixRoles = {}, addressRoles = {}, rangeRoles = {}, manualCache = {}, selectedEl = null, loaded = false;
     // Numer ostatniego żądania szczegółów: odpowiedź starszego żądania jest pomijana.
     var detailSeq = 0, DETAIL_HINT = detail.innerHTML;
-    var STATE_BDG = { l: 'LibreNMS', s: 'nieaktualny', m: 'ręczny', r: 'rezerwacja', g: 'zniknął' };
+    var STATE_BDG = { l: 'LibreNMS', s: 'host wyłączony', m: 'ręczny', r: 'rezerwacja', g: 'zniknął' };
+    // Adresy wyłączonych hostów domyślnie ukryte (traktowane jak wolne); wybór zapamiętany w przeglądarce.
+    var staleBox = document.getElementById('nreg-ip-stale'), showStale = !!staleBox && localStorage.getItem('nreg-ip-stale') === '1';
+    if (staleBox) { staleBox.checked = showStale; }
 
     Object.assign(N.fieldLabels, { ips: 'adresy', prefix: 'prefiks', range: 'zakres', role: 'rola', ip: 'adres', len: 'maska', 'if': 'interfejs',
         alias: 'opis portu', network: 'sieć', ctx: 'VRF', vlan: 'VLAN' });
 
     function alertBox(kind, html) { return '<div class="alert alert-' + kind + '">' + html + '</div>'; }
-    function api(path, params, method) { params = Object.assign({ space: space }, params || {}); return N.api('ipam/' + path, params, method); }
+    function api(path, params, method) { params = Object.assign({ space: space, stale: showStale ? 1 : 0 }, params || {}); return N.api('ipam/' + path, params, method); }
 
     // ---------------------------------------------------------------- drzewo
 
@@ -337,7 +346,7 @@ document.addEventListener('nreg:ready', function () {
             + (m.adopted_at ? '<span class="label label-primary">przejęty przez LibreNMS ' + esc(m.adopted_at) + '</span>' : '')
             + '<dl style="margin-top:6px">' + (m.kind === 'range' ? '<dt>Zakres</dt><dd class="nreg-mono">' + esc(m.first + ' – ' + m.last) + ' (' + m.size + ' adr.)</dd>' : '')
             + (m.name ? '<dt>Nazwa</dt><dd>' + esc(m.name) + '</dd>' : '')
-            + '<dt>Opis</dt><dd>' + esc(m.description) + '</dd>' + (m.owner ? '<dt>Właściciel</dt><dd>' + esc(m.owner) + '</dd>' : '')
+            + (m.description ? '<dt>Opis</dt><dd>' + esc(m.description) + '</dd>' : '') + (m.owner ? '<dt>Właściciel</dt><dd>' + esc(m.owner) + '</dd>' : '')
             + (m.vlan ? '<dt>VLAN</dt><dd><a href="?vlan=' + m.vlan + '#vlan">' + m.vlan + '</a></dd>' : '')
             + (m.valid_until ? '<dt>Ważne do</dt><dd>' + N.expiryHtml(m) + '</dd>' : '')
             + (m.devices ? '<dt>Urządzenia</dt><dd>' + esc(m.devices) + '</dd>' : '')
@@ -588,7 +597,21 @@ document.addEventListener('nreg:ready', function () {
         if (entry) { ['name', 'description', 'owner', 'vlan', 'devices', 'valid_until'].forEach(function (f) { form.elements[f].value = entry[f] || ''; }); }
         form.style.display = '';
         form.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        (entry ? form.elements.description : t).focus();
+        (entry ? form.elements.name : t).focus();
+        loadDevices();
+    }
+
+    // Podpowiedzi hostów z LibreNMS do pola „Urządzenia / lokalizacja” (raz na wczytanie strony).
+    var devicesLoaded = false;
+    function loadDevices() {
+        if (devicesLoaded) { return; }
+        devicesLoaded = true;
+        api('devices').then(function (j) {
+            document.getElementById('nreg-if-devlist').innerHTML = j.devices.map(function (d) {
+                var info = [d.hostname !== d.name ? d.hostname : '', d.location || '', d.disabled ? 'wyłączony' : ''].filter(Boolean).join(' · ');
+                return '<option value="' + esc(d.name) + '"' + (info ? ' label="' + esc(info) + '"' : '') + '></option>';
+            }).join('');
+        }).catch(function () { devicesLoaded = false; });
     }
 
     function refreshAll() {
@@ -756,6 +779,13 @@ document.addEventListener('nreg:ready', function () {
         });
     }
     spaceSel.addEventListener('change', function () { space = parseInt(spaceSel.value, 10) || 1; clearDetail(); refreshAll(); });
+    if (staleBox) {
+        staleBox.addEventListener('change', function () {
+            showStale = staleBox.checked;
+            localStorage.setItem('nreg-ip-stale', showStale ? '1' : '0');
+            clearDetail(); refreshAll();
+        });
+    }
     var newSpace = document.getElementById('nreg-ip-newspace');
     if (newSpace) {
         newSpace.addEventListener('click', function () {

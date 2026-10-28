@@ -96,7 +96,7 @@
         <div class="form-group">
             <label>Urządzenia wyłączone w LibreNMS</label>
             <select class="form-control" style="width: 420px;" name="settings[disabled_devices]">
-                <option value="stale" @selected(($s['disabled_devices'] ?? 'stale') === 'stale')>zajęte, oznaczone jako nieaktualne</option>
+                <option value="stale" @selected(($s['disabled_devices'] ?? 'stale') === 'stale')>zajęte; w adresacji widoczne po zaznaczeniu „Pokaż adresy z wyłączonych hostów”</option>
                 <option value="ignore" @selected(($s['disabled_devices'] ?? '') === 'ignore')>ignorowane (traktowane jak wolne)</option>
             </select>
             <p class="pomoc">LibreNMS zostawia w bazie dane urządzeń wyłączonych, nawet sprzed wielu miesięcy.</p>

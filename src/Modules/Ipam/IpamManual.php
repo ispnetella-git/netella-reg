@@ -242,7 +242,7 @@ final class IpamManual
     }
 
     /** Pola z formularza po walidacji. */
-    public static function validate(array $input, bool $requireDescription = true): array
+    public static function validate(array $input, bool $requireName = true): array
     {
         $out = [];
         foreach (self::FIELDS as $f => $max) {
@@ -253,7 +253,8 @@ final class IpamManual
             if (mb_strlen($v) > $max) {
                 throw new ApiException("Pole „{$f}” może mieć najwyżej {$max} znaków.");
             }
-            $out[$f] = $v === '' ? null : $v;
+            // Opis jest opcjonalny, ale kolumna jest NOT NULL: pusty = ''.
+            $out[$f] = $v === '' ? ($f === 'description' ? '' : null) : $v;
         }
         if (array_key_exists('vlan', $input)) {
             $v = trim((string) $input['vlan']);
@@ -272,8 +273,8 @@ final class IpamManual
         if (array_key_exists(Expiry::FIELD, $input)) {
             $out[Expiry::FIELD] = Expiry::parse($input[Expiry::FIELD], Expiry::today(), true);
         }
-        if ($requireDescription && ($out['description'] ?? null) === null) {
-            throw new ApiException('Opis jest wymagany.');
+        if ($requireName && ($out['name'] ?? null) === null) {
+            throw new ApiException('Nazwa jest wymagana.');
         }
 
         return $out;
@@ -386,8 +387,11 @@ final class IpamManual
             $blocked = array_values(array_filter($ips, fn ($ip) => $index->knownAddress($ip)));
             if ($blocked !== []) {
                 $free = array_values(array_diff($ips, $blocked));
+                $stale = array_filter($blocked, fn ($ip) => $index->status($ip) === IpamIndex::STALE);
                 throw new ApiException('Tych adresów nie można dodać ręcznie, bo są już w LibreNMS: '
-                    . IpInput::compress($blocked) . '.' . ($free !== [] ? ' Bez nich zostaje: ' . IpInput::compress($free) . '.' : ''), 409);
+                    . IpInput::compress($blocked) . '.'
+                    . ($stale !== [] ? ' Na wyłączonych hostach: ' . IpInput::compress(array_values($stale)) . ' (włącz „Pokaż adresy z wyłączonych hostów”, żeby je zobaczyć).' : '')
+                    . ($free !== [] ? ' Bez nich zostaje: ' . IpInput::compress($free) . '.' : ''), 409);
             }
             foreach ($ips as $ip) {
                 $rows[] = ['kind' => 'address', 'cidr' => IpCalc::int2ip($ip) . '/32', 'start' => $ip, 'end' => $ip, 'len' => 32];
@@ -424,8 +428,8 @@ final class IpamManual
             throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
         }
         $fields = self::validate($input, false);
-        if (array_key_exists('description', $fields) && $fields['description'] === null) {
-            throw new ApiException('Opis jest wymagany.');
+        if (array_key_exists('name', $fields) && $fields['name'] === null) {
+            throw new ApiException('Nazwa jest wymagana.');
         }
         if (isset($fields['role'])) {
             $roles = self::rolesFor($before['kind']);

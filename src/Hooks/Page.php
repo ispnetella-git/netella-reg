@@ -74,6 +74,8 @@ class Page implements SinglePageHook
                 'canAdmin' => Access::canAdmin(),
                 'modules' => array_map(fn ($t) => ['key' => $t['key'], 'name' => $t['name']], $tabs),
                 'deviceUrl' => url('device'),
+                // 'stale': adresy wyłączonych hostów są w rejestrze (przełącznik w adresacji), 'ignore': nie ma ich wcale.
+                'disabledMode' => \Ispnetella\NetellaReg\Core\Settings::disabledMode(),
             ],
         ];
     }

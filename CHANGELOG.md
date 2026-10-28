@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.2 - 2026-10-28
+
+- Adresacja: przełącznik „Pokaż adresy z wyłączonych hostów”. Domyślnie adresy hostów wyłączonych
+  w LibreNMS są ukryte (jak wolne w drzewie, wyszukiwaniu i wolnych blokach); plakietka „host
+  wyłączony” zamiast „nieaktualny”. Zapis ręczny dalej ich nie przyjmuje, komunikat o tym mówi.
+- Formularz adresacji: pole „Urządzenia / lokalizacja” podpowiada hosty z LibreNMS (nazwa, adres,
+  lokalizacja), można wpisać własny tekst. Nazwa jest obowiązkowa, opis nie. Import z RIPE nadaje
+  nazwę `AS<numer>`, gdy RIPE nie podał żadnej.
+
 ## 0.6.1 - 2026-10-28
 
 - Adresacja: rola wpisu ręcznego na tym samym prefiksie wygrywa z LibreNMS. Agregat na sieci

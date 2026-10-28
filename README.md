@@ -34,7 +34,8 @@ to jeden rekord (host, interfejs, opis portu, maska, VLAN z nazwy interfejsu).
   (sieć, prefiks ręczny, adresacja wewnętrzna).
 - **Dodaj adresację** (prawo edycji): `10.0.0.0/24` (prefiks z rolą agregat, pula, rezerwacja albo
   sieć używana), `10.0.0.5`, `10.0.0.10-20`, `10.0.0.10-10.0.0.40` albo lista adresów (do 1024 naraz,
-  jedna grupa i jeden wpis w dzienniku). Wymagany opis, opcjonalnie nazwa, właściciel, VLAN, urządzenia.
+  jedna grupa i jeden wpis w dzienniku). Wymagana nazwa, opcjonalnie opis, właściciel, VLAN, urządzenia
+  (pole podpowiada hosty z LibreNMS, można też wpisać własny tekst).
 - **Zakresy (pule):** zakres `a-b` można zapisać jako jeden wpis zamiast grupy adresów (pole „jako”
   w formularzu; powyżej 1024 adresów tylko tak). Role: pula DHCP, pula PPPoE, NAT, adresy statyczne,
   rezerwacja. Granice nie muszą pasować do maski, ale zakres musi leżeć w całości w jednej sieci
@@ -51,6 +52,10 @@ to jeden rekord (host, interfejs, opis portu, maska, VLAN z nazwy interfejsu).
   zaznaczone są te, których nie ma w rejestrze i które nie leżą w agregacie ani w szerszym prefiksie
   z listy. IPv6 jest pokazywane, ale jeszcze nie dodawane. Serwer musi mieć dostęp do `stat.ripe.net`
   i `rest.db.ripe.net` (proxy z ustawień LibreNMS).
+- **Wyłączone hosty:** adresy z hostów wyłączonych w LibreNMS są domyślnie ukryte (drzewo i wolne
+  miejsce traktują je jak wolne). Pokazuje je przełącznik „Pokaż adresy z wyłączonych hostów” (wybór
+  zapamiętany w przeglądarce); wtedy mają plakietkę „host wyłączony”. Dodanie takiego adresu ręcznie
+  i tak jest blokowane. Przy ustawieniu „ignorowane” przełącznika nie ma.
 - **Blokady:** adresu widocznego w LibreNMS nie da się dodać. Sieci z LibreNMS nie da się dodać jako
   „sieć używana” (można jako agregat, żeby ją opisać). Rezerwacji nie da się dodać, gdy LibreNMS ma
   w prefiksie adresy. Przejęcie przez LibreNMS działa jak w module VLAN.

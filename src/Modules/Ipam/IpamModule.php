@@ -115,9 +115,15 @@ final class IpamModule extends AbstractModule
         return 'modules.ipam.tab';
     }
 
+    /** Widok bez adresów wyłączonych hostów (stale=0) - tylko dla akcji odczytu; zapisy sprawdzają wg ustawienia. */
+    private const VIEW_ACTIONS = ['tree', 'node', 'range', 'search', 'free', 'issues', 'manual_list'];
+
+    private bool $showStale = true;
+
     public function api(string $action, Request $request): array
     {
         $space = max(1, (int) $request->input('space', IpamSpaces::GLOBAL_ID));
+        $this->showStale = ! in_array($action, self::VIEW_ACTIONS, true) || (string) $request->input('stale', '1') !== '0';
 
         return match ($action) {
             'spaces' => ['spaces' => array_values($this->spaces()->all())],
@@ -134,6 +140,7 @@ final class IpamModule extends AbstractModule
             'manual_update' => $this->post($request) ?? $this->apiManualUpdate($request),
             'manual_delete' => $this->post($request) ?? $this->apiManualDelete($request),
             'manual_to_range' => $this->post($request) ?? $this->apiManualToRange($request),
+            'devices' => ['devices' => $this->apiDevices()],
             'ripe_lookup' => $this->apiRipeLookup($space, trim((string) $request->query('asn', ''))),
             'ripe_import' => $this->post($request) ?? $this->apiRipeImport($space, $request),
             default => parent::api($action, $request),
@@ -221,7 +228,7 @@ final class IpamModule extends AbstractModule
             $spaces,
             $now ?? new \DateTimeImmutable(),
             Settings::graceDays(),
-            Settings::disabledMode(),
+            $this->showStale ? Settings::disabledMode() : 'ignore',
             self::levels(),
             self::implicitPrefixes()
         );
@@ -761,6 +768,22 @@ final class IpamModule extends AbstractModule
         return ['deleted' => $this->manual()->delete((int) $request->input('id', 0), self::comment($request), $request->boolean('group'))];
     }
 
+    /**
+     * Hosty z LibreNMS do podpowiedzi w polu „Urządzenia / lokalizacja”.
+     *
+     * @return list<array{name:string,hostname:string,location:?string,disabled:bool}>
+     */
+    private function apiDevices(): array
+    {
+        return \Illuminate\Support\Facades\DB::table('devices as d')
+            ->leftJoin('locations as l', 'l.id', '=', 'd.location_id')
+            ->orderBy('d.sysName')->orderBy('d.hostname')
+            ->get(['d.hostname', 'd.sysName', 'd.disabled', 'l.location'])
+            ->map(fn ($d) => ['name' => (string) ($d->sysName ?: $d->hostname), 'hostname' => (string) $d->hostname,
+                'location' => $d->location ?: null, 'disabled' => (bool) $d->disabled])
+            ->all();
+    }
+
     // ---------------------------------------------------------------- import z RIPE
 
     /** Pobieranie JSON-a przez klienta HTTP LibreNMS (proxy z ustawień LibreNMS). */
@@ -866,6 +889,7 @@ final class IpamModule extends AbstractModule
         foreach ($items as $it) {
             $cidr = trim((string) (is_array($it) ? ($it['cidr'] ?? '') : $it));
             $name = is_array($it) ? mb_substr(trim((string) ($it['name'] ?? '')), 0, 64) : '';
+            $name = $name !== '' ? $name : "AS{$asn}"; // nazwa jest wymagana
             try {
                 if ($cidr === '' || str_contains($cidr, ':')) {
                     throw new ApiException('IPv6 nie jest jeszcze obsługiwane.');

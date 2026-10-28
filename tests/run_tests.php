@@ -25,6 +25,7 @@ require $src . '/Modules/Ipam/IpInput.php';
 require $src . '/Modules/Ipam/IpTree.php';
 require $src . '/Modules/Ipam/IpamSpaces.php';
 require $src . '/Modules/Ipam/IpamIndex.php';
+require $src . '/Modules/Ipam/IpamManual.php';
 require $src . '/Modules/Ipam/RipeLookup.php';
 
 use Ispnetella\NetellaReg\Core\Access;
@@ -35,6 +36,7 @@ use Ispnetella\NetellaReg\Modules\Ipam\IpCalc;
 use Ispnetella\NetellaReg\Modules\Ipam\IpamIndex;
 use Ispnetella\NetellaReg\Modules\Ipam\IpInput;
 use Ispnetella\NetellaReg\Modules\Ipam\IpTree;
+use Ispnetella\NetellaReg\Modules\Ipam\IpamManual;
 use Ispnetella\NetellaReg\Modules\Ipam\RipeLookup;
 use Ispnetella\NetellaReg\Core\SnapshotDiff;
 use Ispnetella\NetellaReg\Modules\Vlan\VlanIndex;
@@ -436,6 +438,13 @@ check('backup ustawienia puste', Backup::settingsLookConfigured([]), false);
 check('backup nazwa pliku', (bool) preg_match(Backup::FILE_PATTERN, 'netella-reg-20261027-031500-auto.json.gz'), true);
 check('backup nazwa ze ścieżką', (bool) preg_match(Backup::FILE_PATTERN, '../netella-reg-20261027-031500-auto.json.gz'), false);
 check('backup nazwa inny rodzaj', (bool) preg_match(Backup::FILE_PATTERN, 'netella-reg-20261027-031500-x.json.gz'), false);
+
+// --- IpamManual::validate: nazwa wymagana, opis nie ---
+$vErr = function (array $in, bool $req = true) { try { IpamManual::validate($in, $req); return 'ok'; } catch (ApiException $e) { return $e->getMessage(); } };
+check('ipam: bez nazwy', $vErr(['name' => ' ', 'description' => 'x']), 'Nazwa jest wymagana.');
+check('ipam: bez opisu', $vErr(['name' => 'NAT']), 'ok');
+check('ipam: pusty opis zapisany jako ""', IpamManual::validate(['name' => 'NAT', 'description' => ''])['description'], '');
+check('ipam: edycja bez pola nazwy', $vErr(['owner' => 'x'], false), 'ok');
 
 // --- RipeLookup ---
 $asnErr = function (string $t) { try { RipeLookup::parseAsn($t); return 'ok'; } catch (\InvalidArgumentException $e) { return 'błąd'; } };

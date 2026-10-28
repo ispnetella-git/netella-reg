@@ -41,7 +41,7 @@ final class IpamIndex
 
     public const LABELS = [
         self::LNMS => 'LibreNMS',
-        self::STALE => 'nieaktualny (urządzenie wyłączone)',
+        self::STALE => 'host wyłączony w LibreNMS',
         self::MANUAL => 'wpis ręczny',
         self::RESERVED => 'rezerwacja',
         self::GONE => 'zniknął z LibreNMS (karencja)',
