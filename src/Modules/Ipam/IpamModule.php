@@ -52,7 +52,7 @@ final class IpamModule extends AbstractModule
 
     public function name(): string
     {
-        return 'Adresacja IP';
+        return 'Adresy IPv4';
     }
 
     public function schemaVersion(): int

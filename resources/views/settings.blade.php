@@ -102,7 +102,7 @@
             <p class="pomoc">LibreNMS zostawia w bazie dane urządzeń wyłączonych, nawet sprzed wielu miesięcy.</p>
         </div>
 
-        <h5>Adresacja IP</h5>
+        <h5>Adresy IPv4</h5>
         <div class="form-group">
             <label>Pomijane zakresy IPv4</label>
             <input class="form-control nreg-mono" style="width: 520px;" name="settings[ipam_ignore]" value="{{ $s['ipam_ignore'] ?? '' }}">
@@ -126,7 +126,7 @@
                 prawdziwy prefiks (sieć z LibreNMS albo agregat). Swój przydział publiczny (np. od RIPE) dodaj jako agregat.</p>
         </div>
 
-        <h5>Adresacja IPv6</h5>
+        <h5>Adresy IPv6</h5>
         <div class="form-group">
             <label>Poziomy grupowania drzewa IPv6 (maski)</label>
             <input class="form-control nreg-mono" style="width: 200px;" name="settings[ipam6_levels]" value="{{ $s['ipam6_levels'] ?? '32,48,56,64' }}">
@@ -135,7 +135,7 @@
         <div class="form-group">
             <label>Adresacja wewnętrzna IPv6</label>
             <input class="form-control nreg-mono" style="width: 420px;" name="settings[ipam6_private]" value="{{ $s['ipam6_private'] ?? 'fc00::/7' }}">
-            <p class="pomoc">Domyślnie ULA (fc00::/7). Jest w drzewie korzeniem, o ile coś w niej leży. Adresy IPv6 z LibreNMS zbiera moduł „Adresacja IP”.</p>
+            <p class="pomoc">Domyślnie ULA (fc00::/7). Jest w drzewie korzeniem, o ile coś w niej leży. Adresy IPv6 z LibreNMS zbiera moduł „Adresy IPv4”.</p>
         </div>
 
         <h5>Kopie zapasowe</h5>

@@ -39,7 +39,7 @@ final class Settings
         // Adresacja: poziomy grupowania drzewa (maski węzłów wirtualnych).
         'ipam_levels' => '8,16,24',
         'ipam_private' => '10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10',
-        // Adresacja IPv6: poziomy grupowania i adresacja wewnętrzna (ULA).
+        // Adresy IPv6: poziomy grupowania i adresacja wewnętrzna (ULA).
         'ipam6_levels' => '32,48,56,64',
         'ipam6_private' => 'fc00::/7',
         // Ile pełnych kopii zapasowych trzymać (Core\Backup, jedna automatyczna na dobę).

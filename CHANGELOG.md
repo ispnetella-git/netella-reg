@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.3 - 2026-10-29
+
+- Zakładki nazywają się „Adresy IPv4” i „Adresy IPv6” (wcześniej „Adresacja IP”, „Adresacja IPv6”).
+- Pole „Wolne /N w prefiksie” bez przykładowego prefiksu w środku.
+
 ## 0.8.2 - 2026-10-28
 
 - Adresacja IP i IPv6: po zapisie, zamianie grupy na zakres i usunięciu wpisu ręcznego drzewo nie zwija się

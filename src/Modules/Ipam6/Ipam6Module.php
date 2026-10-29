@@ -64,7 +64,7 @@ class Ipam6Module extends AbstractModule
 
     public function name(): string
     {
-        return 'Adresacja IPv6';
+        return 'Adresy IPv6';
     }
 
     public function schemaVersion(): int
@@ -87,7 +87,7 @@ class Ipam6Module extends AbstractModule
     public function sync(SyncContext $ctx): array
     {
         $n = $ctx->db->table(Ip6Manual::TABLE)->whereNull('deleted_at')->count();
-        $ctx->log("{$n} wpisów ręcznych IPv6" . (Settings::moduleEnabled(IpamModule::KEY) ? '' : '; moduł Adresacja IP wyłączony - adresy IPv6 z LibreNMS się nie odświeżają'));
+        $ctx->log("{$n} wpisów ręcznych IPv6" . (Settings::moduleEnabled(IpamModule::KEY) ? '' : '; moduł „Adresy IPv4” wyłączony - adresy IPv6 z LibreNMS się nie odświeżają'));
 
         return ['manual' => $n];
     }
@@ -630,7 +630,7 @@ class Ipam6Module extends AbstractModule
         foreach ($res['prefixes'] as &$p) {
             $p['sources_label'] = array_map(fn ($s) => RipeLookup::SOURCES[$s] ?? $s, $p['sources']);
             if ($p['family'] !== 6) {
-                $p += ['unsupported' => true, 'unsupported_label' => 'IPv4 - dodaj w zakładce „Adresacja IP”', 'checked' => false,
+                $p += ['unsupported' => true, 'unsupported_label' => 'IPv4 - dodaj w zakładce „Adresy IPv4”', 'checked' => false,
                     'exists' => null, 'in_aggregate' => null, 'parent' => null, 'lnms' => 0, 'name' => null];
                 continue;
             }
@@ -684,7 +684,7 @@ class Ipam6Module extends AbstractModule
             $name = is_array($it) ? mb_substr(trim((string) ($it['name'] ?? '')), 0, 64) : '';
             try {
                 if (! str_contains($cidr, ':') || ! str_contains($cidr, '/')) {
-                    throw new ApiException('Tu dodaje się tylko prefiksy IPv6 (IPv4 w zakładce „Adresacja IP”).');
+                    throw new ApiException('Tu dodaje się tylko prefiksy IPv6 (IPv4 w zakładce „Adresy IPv4”).');
                 }
                 $this->manual()->create($space, $cidr, ['role' => 'aggregate', 'name' => $name !== '' ? $name : "AS{$asn}", 'description' => $desc],
                     $comment, $this->context($space));

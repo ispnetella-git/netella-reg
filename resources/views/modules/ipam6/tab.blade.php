@@ -51,7 +51,7 @@
         Zainstaluj je (np. <code>apt install php-gmp</code>) i przeładuj PHP-FPM.</div>
 @else
 @if(! ($tab['data']['ipamEnabled'] ?? true))
-    <div class="alert alert-warning">Moduł „Adresacja IP” jest wyłączony, a to on zbiera adresy IPv6 z LibreNMS - dane LibreNMS się nie odświeżają.</div>
+    <div class="alert alert-warning">Moduł „Adresy IPv4” jest wyłączony, a to on zbiera adresy IPv6 z LibreNMS - dane LibreNMS się nie odświeżają.</div>
 @endif
 
 <div class="nreg-toolbar">
@@ -65,7 +65,7 @@
         <span>Wolne /</span>
         <input class="form-control nreg-num" type="number" min="8" max="128" value="56" id="nreg6-len" style="width:64px !important">
         <span>w</span>
-        <input class="form-control nreg-mono" id="nreg6-within" placeholder="np. 2a0e:39c0::/29" style="width: 200px;">
+        <input class="form-control nreg-mono" id="nreg6-within" style="width: 200px;">
         <button class="btn btn-default btn-sm" type="submit"><i class="fa fa-search"></i> Znajdź</button>
     </form>
     @if($nregBoot['canEdit'])

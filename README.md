@@ -10,12 +10,12 @@ Stan na 0.3.0:
   (jedna akcja = jedna linia), migawki stanu LibreNMS, synchronizacja z crona, komendy `lnms`;
 - **moduł VLAN**: mapa numerów 1–4094 w całej sieci, sprawdzanie zakresu, wpisy ręczne i rezerwacje
   (grupy), szukanie wolnych numerów, szczegóły i historia numeru;
-- **moduł Adresacja IP**: drzewo IPv4 grupowane według masek, zajętość i wolne bloki, wyszukiwanie,
+- **moduł „Adresy IPv4”**: drzewo IPv4 grupowane według masek, zajętość i wolne bloki, wyszukiwanie,
   szukanie wolnej podsieci, wpisy ręczne (adresy, zakresy, agregaty, pule, rezerwacje), przestrzenie
   adresowe, uwagi (duplikaty, adresy poza sieciami). IPv6 jest
   zapisywane, ale bez drzewa.
 
-### Adresacja IP
+### Adresy IPv4
 
 Źródło: `ipv4_addresses`, `ipv6_addresses`, `ports`, `devices` w LibreNMS. Każdy adres na porcie
 to jeden rekord (host, interfejs, opis portu, maska, VLAN z nazwy interfejsu).
@@ -76,11 +76,11 @@ Linki: `/plugin/Netella-Reg?ip=45.10.136.1#ipam`, `/plugin/Netella-Reg?prefix=45
 
 Plan kolejnych wersji jest w `../PROPOZYCJA.md` (rozdział 11).
 
-### Adresacja IPv6 (moduł `ipam6`)
+### Adresy IPv6 (moduł `ipam6`)
 
-Osobna zakładka „Adresacja IPv6”. Wymaga rozszerzenia PHP `gmp` (LibreNMS ma je w pakietach
+Osobna zakładka „Adresy IPv6”. Wymaga rozszerzenia PHP `gmp` (LibreNMS ma je w pakietach
 instalacyjnych; bez niego zakładka pokazuje komunikat, a reszta wtyczki działa). Adresy IPv6 z LibreNMS
-zbiera moduł „Adresacja IP”, więc ten moduł nie ma własnej synchronizacji.
+zbiera moduł „Adresy IPv4”, więc ten moduł nie ma własnej synchronizacji.
 
 - **Drzewo** jak w IPv4: domyślnie adresacja wewnętrzna (ustawienie, domyślnie ULA `fc00::/7`), w której
   coś leży, i prefiksy dodane ręcznie albo z RIPE. Reszta za przełącznikami „Pokaż adresację spoza

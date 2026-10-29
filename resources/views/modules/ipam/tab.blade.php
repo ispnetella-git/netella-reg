@@ -69,7 +69,7 @@
         <span>Wolne</span>
         <input class="form-control nreg-num" type="number" min="8" max="32" value="29" id="nreg-ip-len" style="width:64px !important">
         <span>w</span>
-        <input class="form-control nreg-mono" id="nreg-ip-within" placeholder="np. 45.10.136.0/22" style="width: 160px;">
+        <input class="form-control nreg-mono" id="nreg-ip-within" style="width: 160px;">
         <button class="btn btn-default btn-sm" type="submit"><i class="fa fa-search"></i> Znajdź</button>
     </form>
     @if($nregBoot['canEdit'])
