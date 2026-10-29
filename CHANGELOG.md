@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.1 - 2026-10-29
+
+- Ikonki kopiowania w drzewach IPv4 i IPv6 w kolorze tekstu (czarne, w ciemnym motywie białe) zamiast niebieskich.
+
 ## 0.9.0 - 2026-10-29
 
 - Interfejs po angielsku (domyślnie) i po polsku: przełącznik języka w nagłówku strony wtyczki i na stronie

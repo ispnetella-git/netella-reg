@@ -47,6 +47,7 @@
     .nreg-chips a.cf { color: #d9534f; font-weight: bold; }
     .nreg-chips a { display: inline-block; font-family: monospace; font-size: 12px; margin: 0 4px 4px 0; padding: 1px 6px; border: 1px solid rgba(128,128,128,.45); border-radius: 3px; }
     .nreg-ip-right h4 { margin-top: 4px; }
+    .nreg-copy, .nreg-copy:hover, .nreg-copy:focus { color: inherit; }
     .nreg-copy { margin-left: 4px; font-size: 13px; opacity: .55; cursor: pointer; }
     .nreg-copy:hover { opacity: 1; text-decoration: none; }
     .nreg-ip-right dl dt { float: left; width: 110px; font-weight: normal; opacity: .75; }

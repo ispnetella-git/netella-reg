@@ -38,6 +38,7 @@
     #nreg-tab-ipam6 .tf .plus { font-style: normal; opacity: 0; }
     #nreg-tab-ipam6 .tf.add:hover .plus { opacity: 1; }
     #nreg-tab-ipam6 .chips a { display: inline-block; font-family: monospace; font-size: 12px; margin: 0 4px 4px 0; padding: 1px 6px; border: 1px solid rgba(128,128,128,.45); border-radius: 3px; }
+    #nreg-tab-ipam6 .copy, #nreg-tab-ipam6 .copy:hover, #nreg-tab-ipam6 .copy:focus { color: inherit; }
     #nreg-tab-ipam6 .copy { margin-left: 4px; font-size: 13px; opacity: .55; cursor: pointer; }
     #nreg-tab-ipam6 .copy:hover { opacity: 1; text-decoration: none; }
     #nreg-tab-ipam6 .tn.rng { border-left: 3px solid #b57edc; }
