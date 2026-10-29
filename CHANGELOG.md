@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.5 - 2026-10-29
+
+- Poprawka 0.8.4: licznik adresów z LibreNMS w zakresie był nadpisywany pustą listą (`lnms`), więc każdy
+  zakres IPv4 miał czerwony znaczek i ostrzeżenie bez liczby. Pole nazywa się teraz `conflicts`.
+- Pusty zakres nie rozwija się i nie pokazuje komentarza.
+
 ## 0.8.4 - 2026-10-29
 
 - Zakres ręczny (pula NAT, PPPoE, DHCP, adresy statyczne, rezerwacja) jest zajęty w całości: po rozwinięciu

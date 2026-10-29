@@ -230,14 +230,14 @@ document.addEventListener('nreg:ready', function () {
             h += '<span class="nreg-bdg ' + (n.manual.role === 'reserved' ? 'r' : 'm') + '">' + esc(n.manual.role_label) + '</span>';
             if (n.manual.expiry === 'expired') { h += '<span class="nreg-bdg d" title="termin ważności ' + esc(n.manual.valid_until) + '">termin minął</span>'; }
         }
-        if (n.range && n.lnms) { h += '<span class="nreg-bdg d" title="' + esc(CONFLICT_HINT) + '">' + n.lnms + ' adr. z LibreNMS</span>'; }
+        if (n.range && n.conflicts) { h += '<span class="nreg-bdg d" title="' + esc(CONFLICT_HINT) + '">' + n.conflicts + ' adr. z LibreNMS</span>'; }
         n.vlans.forEach(function (v) { h += '<a class="nreg-bdg v" href="' + esc(can.page) + '?vlan=' + v + '#vlan" title="VLAN ' + v + '">VLAN ' + v + '</a>'; });
         return h;
     }
 
     function nodeRow(n, depth) {
-        // Każdy prefiks da się rozwinąć: nawet pusty pokazuje swoje wolne miejsce. Zakres (n.range) też.
-        var expandable = n.range || n.len < 32;
+        // Każdy prefiks da się rozwinąć: nawet pusty pokazuje swoje wolne miejsce. Zakres tylko wtedy, gdy ma adresy.
+        var expandable = n.range ? n.stats.addresses > 0 : n.len < 32;
         var s = n.stats;
         return '<div class="nreg-tn' + (n.range ? ' rng' : '') + '" data-cidr="' + esc(n.cidr) + '" style="padding-left:' + (depth * 16 + 4) + 'px">'
             + '<span class="tg" data-toggle-node="' + esc(n.cidr) + '">' + (expandable ? '▸' : '·') + '</span>'
@@ -289,8 +289,8 @@ document.addEventListener('nreg:ready', function () {
             if (j.addresses_total > j.addresses.length) {
                 h += '<div class="nreg-muted" style="padding-left:' + (depth * 16 + 22) + 'px;font-size:11px">… i ' + (j.addresses_total - j.addresses.length) + ' więcej</div>';
             }
-            container.innerHTML = h || '<p class="nreg-muted" style="padding-left:' + (depth * 16 + 4) + 'px">'
-                + (String(cidr).indexOf('range:') === 0 ? 'Zakres jest przydzielony w całości; LibreNMS nie ma w nim adresów.' : 'Brak adresacji w tej przestrzeni.') + '</p>';
+            container.innerHTML = h || (String(cidr).indexOf('range:') === 0 ? ''
+                : '<p class="nreg-muted" style="padding-left:' + (depth * 16 + 4) + 'px">Brak adresacji w tej przestrzeni.</p>');
             container.querySelectorAll('.nreg-tc').forEach(function (c) { c.setAttribute('data-depth', depth + 1); });
             container.setAttribute('data-loaded', '1');
         });
@@ -404,11 +404,11 @@ document.addEventListener('nreg:ready', function () {
             var h = '<h4 class="nreg-mono">' + esc(r.first + ' – ' + r.last) + copyBtn(r.first + '-' + r.last) + ' ' + nodeBadges(r) + '</h4>'
                 + '<dl><dt>Rozmiar</dt><dd>' + s.size + ' adr.</dd>'
                 + '<dt>Zajęte</dt><dd>w całości (wpis ręczny)</dd>'
-                + '<dt>Adresów w środku</dt><dd>' + s.addresses + (r.lnms ? ', z LibreNMS: ' + r.lnms : '') + '</dd>'
+                + '<dt>Adresów w środku</dt><dd>' + s.addresses + (r.conflicts ? ', z LibreNMS: ' + r.conflicts : '') + '</dd>'
                 + (j.container ? '<dt>W prefiksie</dt><dd><a href="#" class="nreg-mono" data-open-node="' + esc(j.container) + '">' + esc(j.container) + '</a></dd>' : '')
                 + '</dl>';
             if (j.problem) { h += alertBox('warning', esc(j.problem)); }
-            if (r.lnms) { h += alertBox('danger', esc(CONFLICT_HINT) + ' Adresów z LibreNMS w zakresie: ' + r.lnms + ' (na czerwono niżej).'); }
+            if (r.conflicts) { h += alertBox('danger', esc(CONFLICT_HINT) + ' Adresów z LibreNMS w zakresie: ' + r.conflicts + ' (na czerwono niżej).'); }
             h += manualBlock(r.manual);
             if (j.addresses.length) {
                 h += '<h5>Adresy w zakresie (' + j.addresses_total + ')</h5><div class="nreg-chips">' + j.addresses.map(function (a) {

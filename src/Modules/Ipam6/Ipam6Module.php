@@ -432,7 +432,7 @@ class Ipam6Module extends AbstractModule
         $lnms = count(array_filter($inside, fn ($hex) => $data['all_addr'][$hex]['state'] === 'l'));
 
         return ['range' => true, 'id' => $r['id'], 'cidr' => $r['cidr'], 'n' => $r['start_hex'], 'len' => 128,
-            'first' => $r['first'], 'last' => $r['last'], 'size' => $r['size'], 'addresses' => count($inside), 'lnms' => $lnms,
+            'first' => $r['first'], 'last' => $r['last'], 'size' => $r['size'], 'addresses' => count($inside), 'conflicts' => $lnms,
             'label' => $r['name'] ?: $r['description'], 'manual' => self::publicManual($r)];
     }
 

@@ -329,7 +329,7 @@ final class IpamModule extends AbstractModule
             'state' => null,
             // Zakres ręczny jest zajęty w całości (jak w węźle nadrzędnym); adresy w środku to tylko informacja.
             'stats' => ['size' => $size, 'capacity' => $size, 'addresses' => $used, 'free' => 0, 'used' => $size, 'util' => 100],
-            'children' => 0, 'direct' => $used, 'lnms' => $lnms,
+            'children' => 0, 'direct' => $used, 'conflicts' => $lnms,
             'label' => $m['name'] ?: $m['description'], 'lnms' => [], 'manual' => $m, 'vlans' => $m['vlan'] ? [$m['vlan']] : [],
         ];
     }

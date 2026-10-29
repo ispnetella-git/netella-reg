@@ -233,7 +233,7 @@ document.addEventListener('nreg:ready', function () {
             + '<span class="tg">·</span><span class="cidr" data-open-range="' + r.id + '">' + esc(r.first + ' – ' + r.last) + '</span>'
             + '<span class="bdg ' + (m.role === 'reserved' ? 'r' : 'm') + '">' + esc(m.role_label) + '</span>'
             + (m.expiry === 'expired' ? '<span class="bdg d">termin minął</span>' : '')
-            + (r.lnms ? '<span class="bdg d" title="' + esc(CONFLICT_HINT) + '">' + r.lnms + ' adr. z LibreNMS</span>' : '')
+            + (r.conflicts ? '<span class="bdg d" title="' + esc(CONFLICT_HINT) + '">' + r.conflicts + ' adr. z LibreNMS</span>' : '')
             + '<span class="lbl" title="' + esc(r.label || '') + '">' + esc(r.label || '') + '</span>'
             + '<span class="cnt" title="adresów w zakresie / rozmiar">' + r.addresses + '/' + big(r.size) + ' adr.</span></div>';
     }
@@ -412,7 +412,7 @@ document.addEventListener('nreg:ready', function () {
             var h = '<h4 class="nreg-mono">' + esc(r.first + ' – ' + r.last) + copyBtn(r.first + '-' + r.last) + '</h4>'
                 + '<dl><dt>Rozmiar</dt><dd>' + big(r.size) + ' adr.</dd><dt>Adresów w środku</dt><dd>' + j.addresses_total + '</dd>'
                 + (j.container ? '<dt>W prefiksie</dt><dd><a href="#" class="nreg-mono" data-open-node="' + esc(j.container) + '">' + esc(j.container) + '</a></dd>' : '')
-                + '</dl>' + (r.lnms ? alertBox('danger', esc(CONFLICT_HINT) + ' Adresów z LibreNMS w zakresie: ' + r.lnms + ' (na czerwono niżej).') : '') + manualBlock(r.manual);
+                + '</dl>' + (r.conflicts ? alertBox('danger', esc(CONFLICT_HINT) + ' Adresów z LibreNMS w zakresie: ' + r.conflicts + ' (na czerwono niżej).') : '') + manualBlock(r.manual);
             if (j.addresses.length) {
                 h += '<h5>Adresy w zakresie (' + j.addresses_total + ')</h5><div class="chips">' + j.addresses.map(function (a) {
                     return '<a href="#" data-goto-ip="' + esc(a.ip) + '"' + (a.conflict ? ' class="cf"' : '') + ' title="' + esc(STATE_BDG[a.state] || '') + '">' + esc(a.ip) + '</a>';
