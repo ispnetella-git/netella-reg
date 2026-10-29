@@ -19,6 +19,7 @@ namespace Ispnetella\NetellaReg\Hooks;
 use Illuminate\Support\Facades\Log;
 use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\Db;
+use Ispnetella\NetellaReg\Core\Lang;
 use Ispnetella\NetellaReg\Core\ModuleRegistry;
 use Ispnetella\NetellaReg\Core\SyncRunner;
 use Ispnetella\NetellaReg\Plugin;
@@ -78,6 +79,10 @@ class Page implements SinglePageHook
                 'deviceUrl' => url('device'),
                 // 'stale': adresy wyłączonych hostów są w rejestrze (przełącznik w adresacji), 'ignore': nie ma ich wcale.
                 'disabledMode' => \Ispnetella\NetellaReg\Core\Settings::disabledMode(),
+                // Język interfejsu i słownik dla JS (NReg.t); pusty po polsku.
+                'lang' => Lang::current(),
+                'langCookie' => Lang::COOKIE,
+                'i18n' => (object) Lang::jsDict(),
             ],
         ];
     }

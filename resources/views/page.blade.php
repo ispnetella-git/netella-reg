@@ -10,6 +10,7 @@
     .nreg { margin-top: 12px; }
     .nreg-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
     .nreg-head h3 { margin: 0 0 8px; font-weight: 600; }
+    .nreg-head .nreg-lang { margin-left: auto; width: auto; height: 28px; padding: 2px 6px; }
     .nreg-sub { font-size: 12px; opacity: .75; }
     .nreg .nav-tabs { margin-bottom: 12px; }
     .nreg-toolbar { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-bottom: 10px; }
@@ -48,7 +49,12 @@
 <div class="container-fluid nreg">
     <div class="nreg-head">
         <h3>Netella-Reg</h3>
-        <span class="nreg-sub">rejestr VLAN-ów i adresacji &middot; wersja {{ $nregBoot['version'] }}</span>
+        <span class="nreg-sub">{{ nreg_t('rejestr VLAN-ów i adresacji') }} &middot; {{ nreg_t('wersja {v}', ['v' => $nregBoot['version']]) }}</span>
+        <select class="form-control nreg-lang" id="nreg-lang" title="{{ nreg_t('Język interfejsu') }}">
+            @foreach(\Ispnetella\NetellaReg\Core\Lang::LANGS as $code => $label)
+                <option value="{{ $code }}" @if($code === $nregBoot['lang']) selected @endif>{{ $label }}</option>
+            @endforeach
+        </select>
     </div>
 
     @if($nregError)
@@ -86,6 +92,32 @@
 (function () {
     'use strict';
     var boot = JSON.parse(document.getElementById('nreg-boot').textContent);
+
+    // Tłumaczenie: kluczem jest polski tekst, słownik (boot.i18n) jest pusty po polsku.
+    // Wstawki {nazwa} wypełnia drugi argument: t("Usunięto {n} wpisów", { n: 3 }).
+    var DICT = boot.i18n || {};
+    function t(pl, vars) {
+        var s = Object.prototype.hasOwnProperty.call(DICT, pl) ? DICT[pl] : pl;
+        if (vars) {
+            s = s.replace(/\{(\w+)\}/g, function (m, k) { return vars[k] !== undefined && vars[k] !== null ? String(vars[k]) : m; });
+        }
+        return s;
+    }
+
+    // Przełącznik języka: cookie (czyta je serwer: widoki i komunikaty API) i localStorage, potem przeładowanie.
+    var LANG_KEY = 'netella-reg.lang';
+    function setLang(l) {
+        document.cookie = boot.langCookie + '=' + l + '; path=/; max-age=31536000; SameSite=Lax';
+        try { localStorage.setItem(LANG_KEY, l); } catch (e) { /* brak localStorage */ }
+    }
+    (function () {
+        var saved = null;
+        try { saved = localStorage.getItem(LANG_KEY); } catch (e) { saved = null; }
+        // Cookie wygasło albo zostało wyczyszczone, a przeglądarka pamięta inny wybór.
+        if (saved && saved !== boot.lang && document.cookie.indexOf(boot.langCookie + '=') < 0) { setLang(saved); location.reload(); }
+    })();
+    var langSel = document.getElementById('nreg-lang');
+    if (langSel) { langSel.addEventListener('change', function () { setLang(langSel.value); location.reload(); }); }
 
     function esc(v) {
         return String(v === null || v === undefined ? '' : v)
@@ -208,7 +240,7 @@
     }
 
     window.NReg = {
-        boot: boot, api: api, esc: esc, diffHtml: diffHtml, who: who, short: short,
+        boot: boot, t: t, api: api, esc: esc, diffHtml: diffHtml, who: who, short: short,
         recordLabel: recordLabel, logTable: logTable, fieldLabels: FIELD_LABELS, expiryHtml: expiryHtml
     };
 

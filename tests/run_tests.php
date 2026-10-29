@@ -10,6 +10,8 @@
  */
 
 $src = __DIR__ . '/../src';
+require $src . '/Core/Lang.php';
+require $src . '/helpers.php';
 require $src . '/Core/SnapshotDiff.php';
 require $src . '/Core/Settings.php';
 require $src . '/Core/Access.php';
@@ -33,6 +35,7 @@ require $src . '/Modules/Ipam6/Ip6Context.php';
 require $src . '/Modules/Ipam6/Ip6Manual.php';
 
 use Ispnetella\NetellaReg\Core\Access;
+use Ispnetella\NetellaReg\Core\Lang;
 use Ispnetella\NetellaReg\Core\ApiException;
 use Ispnetella\NetellaReg\Core\Backup;
 use Ispnetella\NetellaReg\Core\Expiry;
@@ -54,6 +57,9 @@ use Ispnetella\NetellaReg\Modules\Vlan\VlanRange;
 
 $passed = 0;
 $failed = 0;
+
+// Testy porównują komunikaty po polsku (tekst źródłowy); tłumaczenia sprawdza blok „Język” na końcu.
+Lang::force('pl');
 
 function check(string $name, mixed $got, mixed $expected): void
 {
@@ -601,6 +607,9 @@ check('level 10', Access::roleFromLevel(10), 'admin');
 check('level 5', Access::roleFromLevel(5), 'global-read');
 check('level 1', Access::roleFromLevel(1), 'user');
 check('level 0', Access::roleFromLevel(0), null);
+
+// --- Język: tłumaczenia i ich kompletność ---
+require __DIR__ . '/lang_check.inc.php';
 
 echo "\n" . ($failed === 0 ? 'OK' : 'BŁĘDY') . ": $passed zaliczonych, $failed niezaliczonych\n";
 exit($failed === 0 ? 0 : 1);
