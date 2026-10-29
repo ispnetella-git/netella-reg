@@ -26,6 +26,8 @@
 
 namespace Ispnetella\NetellaReg\Modules\Vlan;
 
+use Ispnetella\NetellaReg\Core\Lang;
+
 final class VlanIndex
 {
     public const FREE = 'f';
@@ -43,6 +45,12 @@ final class VlanIndex
         self::RESERVED => 'rezerwacja',
         self::GONE => 'zniknął z LibreNMS (karencja)',
     ];
+
+    /** Etykiety statusów w języku interfejsu (stałe LABELS zostają po polsku). */
+    public static function labels(): array
+    {
+        return array_map(fn (string $l) => Lang::t($l), self::LABELS);
+    }
 
     /** Większa liczba wygrywa przy kilku źródłach. */
     private const RANK = [

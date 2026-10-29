@@ -5,7 +5,7 @@
             <div class="panel-heading">
                 <i class="fa fa-list-alt fa-lg"></i>
                 <strong><a href="{{ $pageUrl }}">Netella-Reg</a></strong>
-                <span style="opacity:.75">&middot; rejestr VLAN-ów i adresacji</span>
+                <span style="opacity:.75">&middot; {{ nreg_t('rejestr VLAN-ów i adresacji') }}</span>
             </div>
         </div>
     </div>

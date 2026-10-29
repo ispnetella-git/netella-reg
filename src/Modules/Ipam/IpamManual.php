@@ -48,6 +48,7 @@ use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\ApiException;
 use Ispnetella\NetellaReg\Core\AuditLog;
 use Ispnetella\NetellaReg\Core\Expiry;
+use Ispnetella\NetellaReg\Core\Lang;
 
 final class IpamManual
 {
@@ -136,6 +137,12 @@ final class IpamManual
     {
     }
 
+    /** Role w języku interfejsu (do odpowiedzi API); stałe zostają po polsku. */
+    public static function roleLabels(array $roles): array
+    {
+        return array_map(fn ($l) => Lang::t($l), $roles);
+    }
+
     public static function rolesFor(string $kind): array
     {
         return match ($kind) {
@@ -185,7 +192,7 @@ final class IpamManual
         $r['end'] = $r['end'] === null ? null : (int) $r['end'];
         $r['vlan'] = $r['vlan'] === null ? null : (int) $r['vlan'];
         $r['ip'] = $r['kind'] === 'address' && $r['start'] !== null ? IpCalc::int2ip($r['start']) : null;
-        $r['role_label'] = self::rolesFor($r['kind'])[$r['role']] ?? $r['role'];
+        $r['role_label'] = isset(self::rolesFor($r['kind'])[$r['role']]) ? Lang::t(self::rolesFor($r['kind'])[$r['role']]) : $r['role'];
         if ($r['kind'] === 'range') {
             $r['first'] = IpCalc::int2ip($r['start']);
             $r['last'] = IpCalc::int2ip($r['end']);
@@ -251,7 +258,7 @@ final class IpamManual
             }
             $v = trim((string) ($input[$f] ?? ''));
             if (mb_strlen($v) > $max) {
-                throw new ApiException("Pole „{$f}” może mieć najwyżej {$max} znaków.");
+                throw new ApiException(Lang::t('Pole „{f}” może mieć najwyżej {max} znaków.', ['f' => $f, 'max' => $max]));
             }
             // Opis jest opcjonalny, ale kolumna jest NOT NULL: pusty = ''.
             $out[$f] = $v === '' ? ($f === 'description' ? '' : null) : $v;
@@ -263,7 +270,7 @@ final class IpamManual
             } elseif (ctype_digit($v) && (int) $v >= 1 && (int) $v <= 4094) {
                 $out['vlan'] = (int) $v;
             } else {
-                throw new ApiException('VLAN musi być liczbą 1-4094.');
+                throw new ApiException(Lang::t('VLAN musi być liczbą 1-4094.'));
             }
         }
         if (array_key_exists('role', $input)) {
@@ -274,7 +281,7 @@ final class IpamManual
             $out[Expiry::FIELD] = Expiry::parse($input[Expiry::FIELD], Expiry::today(), true);
         }
         if ($requireName && ($out['name'] ?? null) === null) {
-            throw new ApiException('Nazwa jest wymagana.');
+            throw new ApiException(Lang::t('Nazwa jest wymagana.'));
         }
 
         return $out;
@@ -311,11 +318,13 @@ final class IpamManual
             $q->where('id', '!=', $exceptId);
         }
         if (($other = $q->first()) !== null) {
-            throw new ApiException("Zakres nachodzi na zakres {$other->cidr}" . ($other->name ? " ({$other->name})" : '') . '.', 409);
+            throw new ApiException($other->name
+                ? Lang::t('Zakres nachodzi na zakres {cidr} ({name}).', ['cidr' => $other->cidr, 'name' => $other->name])
+                : Lang::t('Zakres nachodzi na zakres {cidr}.', ['cidr' => $other->cidr]), 409);
         }
         if ($role === 'reserved' && ($inside = $index->knownInside($a, $b)) !== []) {
-            throw new ApiException('Nie można zarezerwować ' . IpInput::rangeLabel($a, $b) . ', bo LibreNMS ma w nim adresy: '
-                . IpInput::compress(array_slice($inside, 0, 50)) . (count($inside) > 50 ? ' …' : '') . '.', 409);
+            throw new ApiException(Lang::t('Nie można zarezerwować {cidr}, bo LibreNMS ma w nim adresy: {ips}.', ['cidr' => IpInput::rangeLabel($a, $b),
+                'ips' => IpInput::compress(array_slice($inside, 0, 50)) . (count($inside) > 50 ? ' …' : '')]), 409);
         }
 
         return $container;
@@ -341,7 +350,7 @@ final class IpamManual
         $roles = self::rolesFor($kind);
         $fields['role'] ??= match ($kind) { 'prefix' => 'aggregate', 'range' => 'static', default => 'used' };
         if (! isset($roles[$fields['role']])) {
-            throw new ApiException('Dozwolone role: ' . implode(', ', array_keys($roles)) . '.');
+            throw new ApiException(Lang::t('Dozwolone role: {roles}.', ['roles' => implode(', ', array_keys($roles))]));
         }
 
         $now = date('Y-m-d H:i:s');
@@ -352,22 +361,23 @@ final class IpamManual
             $p = $parsed['prefix'];
             if ($this->db->table(self::TABLE)->where('space_id', $space)->whereNull('deleted_at')
                 ->where('kind', 'prefix')->where('cidr', $p['cidr'])->exists()) {
-                throw new ApiException("Prefiks {$p['cidr']} ma już wpis ręczny w tej przestrzeni (edytuj go).");
+                throw new ApiException(Lang::t('Prefiks {cidr} ma już wpis ręczny w tej przestrzeni (edytuj go).', ['cidr' => $p['cidr']]));
             }
             if ($fields['role'] === 'used' && $index->knownNetwork($p['cidr'])) {
-                throw new ApiException("Sieci {$p['cidr']} nie można dodać ręcznie jako używanej, bo jest już w LibreNMS. "
-                    . 'Jeśli chcesz ją opisać albo zgrupować, dodaj ją jako agregat.', 409);
+                throw new ApiException(Lang::t('Sieci {cidr} nie można dodać ręcznie jako używanej, bo jest już w LibreNMS. Jeśli chcesz ją opisać albo zgrupować, dodaj ją jako agregat.',
+                    ['cidr' => $p['cidr']]), 409);
             }
             if ($fields['role'] === 'reserved' && ($inside = $index->knownInside($p['start'], $p['end'])) !== []) {
-                throw new ApiException("Nie można zarezerwować {$p['cidr']}, bo LibreNMS ma w nim adresy: "
-                    . IpInput::compress(array_slice($inside, 0, 50)) . (count($inside) > 50 ? ' …' : '') . '.', 409);
+                throw new ApiException(Lang::t('Nie można zarezerwować {cidr}, bo LibreNMS ma w nim adresy: {ips}.', ['cidr' => $p['cidr'],
+                    'ips' => IpInput::compress(array_slice($inside, 0, 50)) . (count($inside) > 50 ? ' …' : '')]), 409);
             }
             // Prefiks może objąć cały zakres, ale nie może go przeciąć.
             $cut = $this->db->table(self::TABLE)->where('space_id', $space)->whereNull('deleted_at')->where('kind', 'range')
                 ->where('start', '<=', $p['end'])->where('end', '>=', $p['start'])
                 ->where(fn ($q) => $q->where('start', '<', $p['start'])->orWhere('end', '>', $p['end']))->first();
             if ($cut !== null) {
-                throw new ApiException("Prefiks {$p['cidr']} przecina zakres {$cut->cidr}. Zakres musi leżeć w całości w jednym prefiksie.", 409);
+                throw new ApiException(Lang::t('Prefiks {cidr} przecina zakres {range}. Zakres musi leżeć w całości w jednym prefiksie.',
+                    ['cidr' => $p['cidr'], 'range' => $cut->cidr]), 409);
             }
             $rows[] = ['kind' => 'prefix', 'cidr' => $p['cidr'], 'start' => $p['start'], 'end' => $p['end'], 'len' => $p['len']];
             $label = $p['cidr'];
@@ -383,16 +393,16 @@ final class IpamManual
             $taken = $this->db->table(self::TABLE)->where('space_id', $space)->whereNull('deleted_at')
                 ->where('kind', 'address')->whereIn('start', $ips)->pluck('start')->map(fn ($v) => (int) $v)->all();
             if ($taken !== []) {
-                throw new ApiException('Te adresy mają już wpis ręczny (edytuj go): ' . IpInput::compress($taken) . '.');
+                throw new ApiException(Lang::t('Te adresy mają już wpis ręczny (edytuj go): {ips}.', ['ips' => IpInput::compress($taken)]));
             }
             $blocked = array_values(array_filter($ips, fn ($ip) => $index->knownAddress($ip)));
             if ($blocked !== []) {
                 $free = array_values(array_diff($ips, $blocked));
                 $stale = array_filter($blocked, fn ($ip) => $index->status($ip) === IpamIndex::STALE);
-                throw new ApiException('Tych adresów nie można dodać ręcznie, bo są już w LibreNMS: '
-                    . IpInput::compress($blocked) . '.'
-                    . ($stale !== [] ? ' Na wyłączonych hostach: ' . IpInput::compress(array_values($stale)) . ' (włącz „Pokaż adresy z wyłączonych hostów”, żeby je zobaczyć).' : '')
-                    . ($free !== [] ? ' Bez nich zostaje: ' . IpInput::compress($free) . '.' : ''), 409);
+                throw new ApiException(Lang::t('Tych adresów nie można dodać ręcznie, bo są już w LibreNMS: {ips}.', ['ips' => IpInput::compress($blocked)])
+                    . ($stale !== [] ? ' ' . Lang::t('Na wyłączonych hostach: {ips} (włącz „Pokaż adresy z wyłączonych hostów”, żeby je zobaczyć).',
+                        ['ips' => IpInput::compress(array_values($stale))]) : '')
+                    . ($free !== [] ? ' ' . Lang::t('Bez nich zostaje: {ips}.', ['ips' => IpInput::compress($free)]) : ''), 409);
             }
             foreach ($ips as $ip) {
                 $rows[] = ['kind' => 'address', 'cidr' => IpCalc::int2ip($ip) . '/32', 'start' => $ip, 'end' => $ip, 'len' => 32];
@@ -426,28 +436,28 @@ final class IpamManual
     {
         $before = $this->find($id);
         if ($before === null) {
-            throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
+            throw new ApiException(Lang::t('Nie ma takiego wpisu (mógł zostać usunięty).'), 404);
         }
         $fields = self::validate($input, false);
         if (array_key_exists('name', $fields) && $fields['name'] === null) {
-            throw new ApiException('Nazwa jest wymagana.');
+            throw new ApiException(Lang::t('Nazwa jest wymagana.'));
         }
         if (isset($fields['role'])) {
             $roles = self::rolesFor($before['kind']);
             if (! isset($roles[$fields['role']])) {
-                throw new ApiException('Dozwolone role: ' . implode(', ', array_keys($roles)) . '.');
+                throw new ApiException(Lang::t('Dozwolone role: {roles}.', ['roles' => implode(', ', array_keys($roles))]));
             }
             if ($before['kind'] === 'range' && $fields['role'] === 'reserved' && $before['role'] !== 'reserved'
                 && $index->knownInside($before['start'], $before['end']) !== []) {
-                throw new ApiException("W {$before['cidr']} są adresy z LibreNMS - nie można go zarezerwować.", 409);
+                throw new ApiException(Lang::t('W {cidr} są adresy z LibreNMS - nie można go zarezerwować.', ['cidr' => $before['cidr']]), 409);
             }
             // Zmiana roli prefiksu podlega tym samym blokadom co dodanie.
             if ($before['kind'] === 'prefix' && $fields['role'] !== $before['role']) {
                 if ($fields['role'] === 'used' && $index->knownNetwork($before['cidr'])) {
-                    throw new ApiException("Sieć {$before['cidr']} jest w LibreNMS - nie może być ręczną siecią używaną.", 409);
+                    throw new ApiException(Lang::t('Sieć {cidr} jest w LibreNMS - nie może być ręczną siecią używaną.', ['cidr' => $before['cidr']]), 409);
                 }
                 if ($fields['role'] === 'reserved' && $index->knownInside($before['start'], $before['end']) !== []) {
-                    throw new ApiException("W {$before['cidr']} są adresy z LibreNMS - nie można go zarezerwować.", 409);
+                    throw new ApiException(Lang::t('W {cidr} są adresy z LibreNMS - nie można go zarezerwować.', ['cidr' => $before['cidr']]), 409);
                 }
             }
         }
@@ -500,7 +510,7 @@ final class IpamManual
     {
         $before = $this->find($id);
         if ($before === null) {
-            throw new ApiException('Nie ma takiego wpisu (mógł zostać już usunięty).', 404);
+            throw new ApiException(Lang::t('Nie ma takiego wpisu (mógł zostać już usunięty).'), 404);
         }
         $rows = $group && $before['batch_id'] ? $this->batchRows($before['batch_id']) : [$before];
         [, $label, $range] = self::describe($rows);
@@ -528,21 +538,21 @@ final class IpamManual
     {
         $before = $this->find($id);
         if ($before === null) {
-            throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
+            throw new ApiException(Lang::t('Nie ma takiego wpisu (mógł zostać usunięty).'), 404);
         }
         if ($before['kind'] !== 'address' || ! $before['batch_id']) {
-            throw new ApiException('Na zakres można zamienić tylko grupę adresów.');
+            throw new ApiException(Lang::t('Na zakres można zamienić tylko grupę adresów.'));
         }
         $rows = $this->batchRows($before['batch_id']);
         if (count($rows) < 2) {
-            throw new ApiException('Grupa ma jeden adres - zakres musi mieć co najmniej dwa.');
+            throw new ApiException(Lang::t('Grupa ma jeden adres - zakres musi mieć co najmniej dwa.'));
         }
         if (array_filter($rows, fn ($r) => $r['adopted_at'] !== null) !== []) {
-            throw new ApiException('Część adresów grupy przejął LibreNMS - takiej grupy nie zamieniamy na zakres.');
+            throw new ApiException(Lang::t('Część adresów grupy przejął LibreNMS - takiej grupy nie zamieniamy na zakres.'));
         }
         [, $label, [$a, $b]] = self::describe($rows);
         if ($b - $a + 1 !== count($rows)) {
-            throw new ApiException("Adresy grupy ({$label}) nie tworzą ciągłego zakresu.");
+            throw new ApiException(Lang::t('Adresy grupy ({ips}) nie tworzą ciągłego zakresu.', ['ips' => $label]));
         }
         $role = $before['role'] === 'reserved' ? 'reserved' : 'static';
         $this->checkRange((int) $before['space_id'], $a, $b, $role, $index);

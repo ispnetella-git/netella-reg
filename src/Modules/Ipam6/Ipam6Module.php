@@ -28,6 +28,7 @@ use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\ApiException;
 use Ispnetella\NetellaReg\Core\AuditLog;
 use Ispnetella\NetellaReg\Core\Db;
+use Ispnetella\NetellaReg\Core\Lang;
 use Ispnetella\NetellaReg\Core\Settings;
 use Ispnetella\NetellaReg\Core\Snapshot;
 use Ispnetella\NetellaReg\Core\SyncContext;
@@ -64,7 +65,7 @@ class Ipam6Module extends AbstractModule
 
     public function name(): string
     {
-        return 'Adresy IPv6';
+        return Lang::t('Adresy IPv6');
     }
 
     public function schemaVersion(): int
@@ -87,7 +88,8 @@ class Ipam6Module extends AbstractModule
     public function sync(SyncContext $ctx): array
     {
         $n = $ctx->db->table(Ip6Manual::TABLE)->whereNull('deleted_at')->count();
-        $ctx->log("{$n} wpisów ręcznych IPv6" . (Settings::moduleEnabled(IpamModule::KEY) ? '' : '; moduł „Adresy IPv4” wyłączony - adresy IPv6 z LibreNMS się nie odświeżają'));
+        $ctx->log(Settings::moduleEnabled(IpamModule::KEY) ? Lang::t('{n} wpisów ręcznych IPv6', ['n' => $n])
+            : Lang::t('{n} wpisów ręcznych IPv6; moduł „Adresy IPv4” wyłączony - adresy IPv6 z LibreNMS się nie odświeżają', ['n' => $n]));
 
         return ['manual' => $n];
     }
@@ -114,7 +116,7 @@ class Ipam6Module extends AbstractModule
     public function api(string $action, Request $request): array
     {
         if (! Ip6Calc::available()) {
-            throw new ApiException('Brak rozszerzenia PHP gmp - zainstaluj php-gmp, żeby używać adresacji IPv6.', 501);
+            throw new ApiException(Lang::t('Brak rozszerzenia PHP gmp - zainstaluj php-gmp, żeby używać adresacji IPv6.'), 501);
         }
         $space = max(1, (int) $request->input('space', IpamSpaces::GLOBAL_ID));
         $view = in_array($action, self::VIEW_ACTIONS, true);
@@ -145,7 +147,7 @@ class Ipam6Module extends AbstractModule
     private function post(Request $request): ?array
     {
         if (! $request->isMethod('POST')) {
-            throw new ApiException('Wymagany POST.', 405);
+            throw new ApiException(Lang::t('Wymagany POST.'), 405);
         }
 
         return null;
@@ -237,7 +239,7 @@ class Ipam6Module extends AbstractModule
     {
         $spaces = (new IpamSpaces(Db::connection()))->all();
         if (! isset($spaces[$space])) {
-            throw new ApiException('Nie ma takiej przestrzeni adresowej.', 404);
+            throw new ApiException(Lang::t('Nie ma takiej przestrzeni adresowej.'), 404);
         }
         [$lnmsAddr, $networks, $suspicious] = $this->lnms($space, $spaces);
 
@@ -329,7 +331,7 @@ class Ipam6Module extends AbstractModule
                 }
             }
             if ($used) {
-                $prefixes[] = ['start' => $p['start'], 'len' => $p['len'], 'src' => 'implicit', 'meta' => ['label' => 'adresacja wewnętrzna (ULA)']];
+                $prefixes[] = ['start' => $p['start'], 'len' => $p['len'], 'src' => 'implicit', 'meta' => ['label' => Lang::t('adresacja wewnętrzna (ULA)')]];
             }
         }
         $tree = new Ip6Tree($prefixes, array_map(fn ($a) => $a['ip'], array_values($view)), self::levels(),
@@ -447,7 +449,7 @@ class Ipam6Module extends AbstractModule
             $children = $tree->roots();
             $addrIdx = $tree->rootAddresses();
         } else {
-            $n = $tree->node($node) ?? throw new ApiException("Nie ma węzła {$node}.", 404);
+            $n = $tree->node($node) ?? throw new ApiException(Lang::t('Nie ma węzła {cidr}.', ['cidr' => $node]), 404);
             $children = $n['children'];
             $addrIdx = $n['addr'];
             foreach ($n['ranges'] as $id) {
@@ -482,7 +484,7 @@ class Ipam6Module extends AbstractModule
     private function apiNode(int $space, string $cidr): array
     {
         $data = $this->data($space);
-        $n = $data['tree']->node($cidr) ?? throw new ApiException("Nie ma węzła {$cidr}.", 404);
+        $n = $data['tree']->node($cidr) ?? throw new ApiException(Lang::t('Nie ma węzła {cidr}.', ['cidr' => $cidr]), 404);
 
         return [
             'node' => $this->nodeInfo($data, $n),
@@ -495,7 +497,7 @@ class Ipam6Module extends AbstractModule
     private function apiRange(int $space, int $id): array
     {
         $data = $this->data($space);
-        $r = $data['ranges'][$id] ?? throw new ApiException('Nie ma takiego zakresu (mógł zostać usunięty).', 404);
+        $r = $data['ranges'][$id] ?? throw new ApiException(Lang::t('Nie ma takiego zakresu (mógł zostać usunięty).'), 404);
         $node = $data['tree']->range($id)['node'] ?? null;
         $inside = self::addressesIn($data, $r['start'], $r['end']);
 
@@ -512,7 +514,7 @@ class Ipam6Module extends AbstractModule
     private function apiSearch(int $space, string $q): array
     {
         if ($q === '') {
-            throw new ApiException('Wpisz adres, prefiks albo tekst.');
+            throw new ApiException(Lang::t('Wpisz adres, prefiks albo tekst.'));
         }
         $data = $this->data($space);
         $tree = $data['tree'];
@@ -581,7 +583,7 @@ class Ipam6Module extends AbstractModule
             throw new ApiException($e->getMessage());
         }
         if ($len < $w['len'] || $len > 128) {
-            throw new ApiException("Maska musi być z zakresu /{$w['len']}-/128.");
+            throw new ApiException(Lang::t('Maska musi być z zakresu /{len}-/128.', ['len' => $w['len']]));
         }
         $saved = [$this->showStale, $this->showOutside];
         [$this->showStale, $this->showOutside] = [true, true];
@@ -615,13 +617,13 @@ class Ipam6Module extends AbstractModule
             array_values(array_filter(array_map(fn ($a) => $a['manual'], $data['all_addr']))));
         usort($rows, fn ($a, $b) => [$a['start_hex'], $a['len']] <=> [$b['start_hex'], $b['len']]);
 
-        return ['rows' => array_map([self::class, 'publicManual'], $rows), 'prefix_roles' => Ip6Manual::PREFIX_ROLES,
-            'address_roles' => Ip6Manual::ADDRESS_ROLES, 'range_roles' => Ip6Manual::RANGE_ROLES];
+        return ['rows' => array_map([self::class, 'publicManual'], $rows), 'prefix_roles' => array_map(fn ($l) => Lang::t($l), Ip6Manual::PREFIX_ROLES),
+            'address_roles' => array_map(fn ($l) => Lang::t($l), Ip6Manual::ADDRESS_ROLES), 'range_roles' => array_map(fn ($l) => Lang::t($l), Ip6Manual::RANGE_ROLES)];
     }
 
     private function apiManualUpdate(Request $request): array
     {
-        $entry = $this->manual()->find((int) $request->input('id', 0)) ?? throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
+        $entry = $this->manual()->find((int) $request->input('id', 0)) ?? throw new ApiException(Lang::t('Nie ma takiego wpisu (mógł zostać usunięty).'), 404);
 
         return ['entry' => $this->manual()->update($entry['id'], $request->only(self::FORM_FIELDS), self::comment($request), $this->context($entry['space_id']))];
     }
@@ -651,9 +653,9 @@ class Ipam6Module extends AbstractModule
             }
         }
         foreach ($res['prefixes'] as &$p) {
-            $p['sources_label'] = array_map(fn ($s) => RipeLookup::SOURCES[$s] ?? $s, $p['sources']);
+            $p['sources_label'] = RipeLookup::sourceLabels($p['sources']);
             if ($p['family'] !== 6) {
-                $p += ['unsupported' => true, 'unsupported_label' => 'IPv4 - dodaj w zakładce „Adresy IPv4”', 'checked' => false,
+                $p += ['unsupported' => true, 'unsupported_label' => Lang::t('IPv4 - dodaj w zakładce „Adresy IPv4”'), 'checked' => false,
                     'exists' => null, 'in_aggregate' => null, 'parent' => null, 'lnms' => 0, 'name' => null];
                 continue;
             }
@@ -693,10 +695,10 @@ class Ipam6Module extends AbstractModule
         }
         $items = $request->input('items', []);
         if (! is_array($items) || ! $items) {
-            throw new ApiException('Zaznacz co najmniej jeden prefiks.');
+            throw new ApiException(Lang::t('Zaznacz co najmniej jeden prefiks.'));
         }
         if (count($items) > 200) {
-            throw new ApiException('Najwięcej 200 prefiksów naraz.');
+            throw new ApiException(Lang::t('Najwięcej 200 prefiksów naraz.'));
         }
         $desc = trim((string) $request->input('description', '')) ?: "Przydział AS{$asn} (z RIPE)";
         $comment = self::comment($request) ?? "dodano z RIPE dla AS{$asn}";
@@ -707,7 +709,7 @@ class Ipam6Module extends AbstractModule
             $name = is_array($it) ? mb_substr(trim((string) ($it['name'] ?? '')), 0, 64) : '';
             try {
                 if (! str_contains($cidr, ':') || ! str_contains($cidr, '/')) {
-                    throw new ApiException('Tu dodaje się tylko prefiksy IPv6 (IPv4 w zakładce „Adresy IPv4”).');
+                    throw new ApiException(Lang::t('Tu dodaje się tylko prefiksy IPv6 (IPv4 w zakładce „Adresy IPv4”).'));
                 }
                 $this->manual()->create($space, $cidr, ['role' => 'aggregate', 'name' => $name !== '' ? $name : "AS{$asn}", 'description' => $desc],
                     $comment, $this->context($space));

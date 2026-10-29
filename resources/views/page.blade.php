@@ -59,7 +59,7 @@
 
     @if($nregError)
         <div class="alert alert-danger">
-            <strong>Netella-Reg nie może odczytać swojej bazy.</strong>
+            <strong>{{ nreg_t('Netella-Reg nie może odczytać swojej bazy.') }}</strong>
             <pre style="white-space: pre-wrap; margin: 6px 0 0;">{{ $nregError }}</pre>
         </div>
     @else
@@ -70,7 +70,7 @@
                 </li>
             @endforeach
             <li role="presentation" @if(count($nregTabs) === 0) class="active" @endif>
-                <a href="#nreg-tab-audit" data-key="audit" role="tab" data-toggle="tab">Dziennik zmian</a>
+                <a href="#nreg-tab-audit" data-key="audit" role="tab" data-toggle="tab">{{ nreg_t('Dziennik zmian') }}</a>
             </li>
         </ul>
 
@@ -143,7 +143,7 @@
         return fetch(url, opts).then(function (r) {
             return r.json().catch(function () { return { ok: false, error: 'HTTP ' + r.status }; });
         }).then(function (j) {
-            if (!j.ok) { throw new Error(j.error || 'Błąd'); }
+            if (!j.ok) { throw new Error(j.error || t('Błąd')); }
             return j;
         });
     }
@@ -156,10 +156,10 @@
 
     // Czytelne nazwy pól w dzienniku. Moduły mogą dopisać własne: NReg.fieldLabels.x = '...'.
     var FIELD_LABELS = {
-        vlans: 'VLAN-y', vlan: 'VLAN', name: 'nazwa', description: 'opis', owner: 'właściciel', status: 'status',
-        devices: 'urządzenia', adopted_at: 'przejęty', tagged: 'tagowane', untagged: 'nietagowane', l3: 'L3',
-        subif: 'subinterfejsy', defined: 'w tabeli vlans', disabled: 'wyłączone', device: 'urządzenie',
-        valid_until: 'ważne do'
+        vlans: t('VLAN-y'), vlan: 'VLAN', name: t('nazwa'), description: t('opis'), owner: t('właściciel'), status: t('status'),
+        devices: t('urządzenia'), adopted_at: t('przejęty'), tagged: t('tagowane'), untagged: t('nietagowane'), l3: 'L3',
+        subif: t('subinterfejsy'), defined: t('w tabeli vlans'), disabled: t('wyłączone'), device: t('urządzenie'),
+        valid_until: t('ważne do')
     };
     // Pola pomijane w linii dziennika (powtarzają informację z kolumny "Rekord").
     var SKIP_FIELDS = { count: 1, vlans: 1, device_id: 1, device: 1, hostname: 1, ips: 1, prefix: 1, range: 1, family: 1, port_id: 1, space: 1 };
@@ -167,7 +167,7 @@
     // Zmiany z dziennika w jednej linii: "pole: przed → po · pole2: …".
     function diffHtml(row) {
         var b = row.before || {}, a = row.after || {};
-        if (row.action === 'initial_import') { return 'zaimportowano ' + esc(a.count) + ' rekordów'; }
+        if (row.action === 'initial_import') { return t('zaimportowano {n} rekordów', { n: esc(a.count) }); }
         var keys = Object.keys(b).concat(Object.keys(a)).filter(function (k, i, arr) {
             return arr.indexOf(k) === i && !SKIP_FIELDS[k];
         });
@@ -187,30 +187,31 @@
     function recordLabel(row) {
         var b = row.before || {}, a = row.after || {}, m;
         var list = a.vlans || b.vlans, count = a.count || b.count;
-        if (row.entity_key === '*') { return 'wszystkie'; }
-        if (row.module === 'core') { return 'ustawienia'; }
+        if (row.entity_key === '*') { return t('wszystkie'); }
+        if (row.module === 'core') { return t('ustawienia'); }
         var more = count > 1 ? ' <span class="nreg-muted">(' + count + ')</span>' : '';
+        var entry = ' <span class="nreg-muted">(' + t('wpis') + ')</span>';
         if (list) { return 'VLAN ' + esc(list) + more; }
-        if (a.range || b.range) { return 'zakres ' + esc(a.range || b.range); }
+        if (a.range || b.range) { return t('zakres {range}', { range: esc(a.range || b.range) }); }
         if (a.ips || b.ips) { return 'IP ' + esc(a.ips || b.ips) + more; }
         if (a.prefix || b.prefix) { return esc(a.prefix || b.prefix); }
-        if ((m = /^v(\d+):d(\d+)$/.exec(row.entity_key))) { return 'VLAN ' + m[1] + ' · ' + esc(a.device || b.device || ('urządzenie ' + m[2])); }
-        if ((m = /^v(\d+):m\d+$/.exec(row.entity_key))) { return 'VLAN ' + m[1] + ' <span class="nreg-muted">(wpis)</span>'; }
+        if ((m = /^v(\d+):d(\d+)$/.exec(row.entity_key))) { return 'VLAN ' + m[1] + ' · ' + esc(a.device || b.device || t('urządzenie {id}', { id: m[2] })); }
+        if ((m = /^v(\d+):m\d+$/.exec(row.entity_key))) { return 'VLAN ' + m[1] + entry; }
         if ((m = /^a:([^/]+)\/(\d+):p\d+$/.exec(row.entity_key))) { return 'IP ' + esc(m[1]) + '/' + m[2] + ' · ' + esc(a.device || b.device || '') + ' ' + esc(a['if'] || b['if'] || ''); }
-        if ((m = /^a:([^:]+):m\d+$/.exec(row.entity_key))) { return 'IP ' + esc(m[1]) + ' <span class="nreg-muted">(wpis)</span>'; }
-        if ((m = /^r:([^:]+):m\d+$/.exec(row.entity_key))) { return 'zakres ' + esc(m[1]) + ' <span class="nreg-muted">(wpis)</span>'; }
-        if ((m = /^n:([^:]+):m\d+$/.exec(row.entity_key))) { return esc(m[1]) + ' <span class="nreg-muted">(wpis)</span>'; }
-        if ((m = /^s(\d+)$/.exec(row.entity_key))) { return 'przestrzeń ' + esc(a.name || b.name || m[1]); }
+        if ((m = /^a:([^:]+):m\d+$/.exec(row.entity_key))) { return 'IP ' + esc(m[1]) + entry; }
+        if ((m = /^r:([^:]+):m\d+$/.exec(row.entity_key))) { return t('zakres {range}', { range: esc(m[1]) }) + entry; }
+        if ((m = /^n:([^:]+):m\d+$/.exec(row.entity_key))) { return esc(m[1]) + entry; }
+        if ((m = /^s(\d+)$/.exec(row.entity_key))) { return t('przestrzeń {name}', { name: esc(a.name || b.name || m[1]) }); }
         return esc(row.entity_key);
     }
 
     function who(row) {
-        return row.source === 'sync' ? '<span class="nreg-muted">synchronizacja</span>' : esc(row.username || '?');
+        return row.source === 'sync' ? '<span class="nreg-muted">' + t('synchronizacja') + '</span>' : esc(row.username || '?');
     }
 
     // Jeden wiersz dziennika. withModule: kolumna modułu (w zakładce Dziennik).
     function logRow(r, withModule) {
-        return '<tr title="kliknij, aby rozwinąć"><td class="nreg-mono">' + esc(r.ts) + '</td>'
+        return '<tr title="' + esc(t('kliknij, aby rozwinąć')) + '"><td class="nreg-mono">' + esc(r.ts) + '</td>'
             + (withModule ? '<td>' + esc(r.module) + '</td>' : '')
             + '<td>' + recordLabel(r) + '</td><td>' + esc(r.action_label) + '</td><td>' + who(r) + '</td>'
             + '<td class="nreg-diff">' + diffHtml(r)
@@ -218,8 +219,9 @@
     }
 
     function logTable(rows, withModule) {
-        return '<table class="table table-condensed table-hover nreg-log"><thead><tr><th>Data</th>'
-            + (withModule ? '<th>Moduł</th>' : '') + '<th>Rekord</th><th>Zdarzenie</th><th>Kto</th><th>Zmiany</th></tr></thead><tbody>'
+        return '<table class="table table-condensed table-hover nreg-log"><thead><tr><th>' + t('Data') + '</th>'
+            + (withModule ? '<th>' + t('Moduł') + '</th>' : '') + '<th>' + t('Rekord') + '</th><th>' + t('Zdarzenie') + '</th><th>'
+            + t('Kto') + '</th><th>' + t('Zmiany') + '</th></tr></thead><tbody>'
             + rows.map(function (r) { return logRow(r, withModule); }).join('') + '</tbody></table>';
     }
 
@@ -232,11 +234,16 @@
     // Termin ważności wpisu ręcznego (pola valid_until, expiry, days_left z API).
     function expiryHtml(m) {
         if (!m || !m.valid_until) { return ''; }
-        if (m.expiry === 'expired') { return '<span class="label label-danger" title="wpis nadal zajmuje zasób">termin minął ' + esc(m.valid_until) + '</span>'; }
-        if (m.expiry === 'soon') {
-            return '<span class="label label-warning">do ' + esc(m.valid_until) + ' (' + (m.days_left === 0 ? 'mija dziś' : 'za ' + m.days_left + ' dni') + ')</span>';
+        if (m.expiry === 'expired') {
+            return '<span class="label label-danger" title="' + esc(t('wpis nadal zajmuje zasób')) + '">'
+                + t('termin minął {date}', { date: esc(m.valid_until) }) + '</span>';
         }
-        return '<span class="nreg-muted">do ' + esc(m.valid_until) + '</span>';
+        if (m.expiry === 'soon') {
+            return '<span class="label label-warning">' + (m.days_left === 0
+                ? t('do {date} (mija dziś)', { date: esc(m.valid_until) })
+                : t('do {date} (za {n} dni)', { date: esc(m.valid_until), n: esc(m.days_left) })) + '</span>';
+        }
+        return '<span class="nreg-muted">' + t('do {date}', { date: esc(m.valid_until) }) + '</span>';
     }
 
     window.NReg = {

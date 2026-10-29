@@ -12,6 +12,8 @@
 
 namespace Ispnetella\NetellaReg\Modules\Ipam6;
 
+use Ispnetella\NetellaReg\Core\Lang;
+
 final class Ip6Context
 {
     /**
@@ -66,11 +68,11 @@ final class Ip6Context
                     $best = [$cidr, $p['len']];
                 }
             } else {
-                return [null, "Zakres {$label} przecina albo obejmuje prefiks {$cidr}. Zakres musi leżeć w całości w jednym prefiksie."];
+                return [null, Lang::t('Zakres {label} przecina albo obejmuje prefiks {cidr}. Zakres musi leżeć w całości w jednym prefiksie.', ['label' => $label, 'cidr' => $cidr])];
             }
         }
         if ($best === null) {
-            return [null, "Zakres {$label} nie leży w żadnej sieci z LibreNMS ani w prefiksie ręcznym. Dodaj najpierw prefiks (np. agregat)."];
+            return [null, Lang::t('Zakres {label} nie leży w żadnej sieci z LibreNMS ani w prefiksie ręcznym. Dodaj najpierw prefiks (np. agregat).', ['label' => $label])];
         }
 
         return [$best[0], null];

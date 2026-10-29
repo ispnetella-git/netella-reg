@@ -103,14 +103,14 @@ final class Backup
         $db = Db::connection();
         $dir = self::dir();
         if (! is_dir($dir) && ! @mkdir($dir, 0750, true) && ! is_dir($dir)) {
-            throw new \RuntimeException("Nie można utworzyć katalogu kopii $dir");
+            throw new \RuntimeException(Lang::t('Nie można utworzyć katalogu kopii {dir}', ['dir' => $dir]));
         }
 
         $file = 'netella-reg-' . date('Ymd-His') . '-' . $reason . '.json.gz';
         $tmp = $dir . '/.' . $file . '.tmp';
         $gz = gzopen($tmp, 'wb6');
         if ($gz === false) {
-            throw new \RuntimeException("Nie można zapisać $tmp");
+            throw new \RuntimeException(Lang::t('Nie można zapisać {file}', ['file' => $tmp]));
         }
 
         $rows = [];

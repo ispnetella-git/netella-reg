@@ -18,6 +18,7 @@ namespace Ispnetella\NetellaReg\Hooks;
 use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\Backup;
 use Ispnetella\NetellaReg\Core\Db;
+use Ispnetella\NetellaReg\Core\Lang;
 use Ispnetella\NetellaReg\Core\ModuleRegistry;
 use Ispnetella\NetellaReg\Core\Settings as RegSettings;
 use Ispnetella\NetellaReg\Core\SettingsWatcher;
@@ -68,10 +69,10 @@ class Settings implements SettingsHook
                 'modules' => $modules,
                 'roles' => Access::availableRoles(),
                 'levels' => [
-                    'perm_view_roles' => 'Przeglądanie',
-                    'perm_edit_roles' => 'Edycja',
-                    'perm_delete_roles' => 'Usuwanie',
-                    'perm_admin_roles' => 'Administracja',
+                    'perm_view_roles' => Lang::t('Przeglądanie'),
+                    'perm_edit_roles' => Lang::t('Edycja'),
+                    'perm_delete_roles' => Lang::t('Usuwanie'),
+                    'perm_admin_roles' => Lang::t('Administracja'),
                 ],
                 'pluginName' => Plugin::NAME,
                 'backups' => self::backups(),

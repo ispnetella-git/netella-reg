@@ -20,6 +20,8 @@
 
 namespace Ispnetella\NetellaReg\Modules\Ipam;
 
+use Ispnetella\NetellaReg\Core\Lang;
+
 final class IpInput
 {
     public const MAX_ADDRESSES = 1024;
@@ -32,7 +34,7 @@ final class IpInput
     {
         $text = trim($text);
         if ($text === '') {
-            throw new \InvalidArgumentException('Podaj adres, zakres albo prefiks, np. 10.0.0.0/24 lub 10.0.0.10-20.');
+            throw new \InvalidArgumentException(Lang::t('Podaj adres, zakres albo prefiks, np. 10.0.0.0/24 lub 10.0.0.10-20.'));
         }
 
         $parts = preg_split('/[\s,;]+/', $text, -1, PREG_SPLIT_NO_EMPTY);
@@ -45,7 +47,7 @@ final class IpInput
         $out = [];
         foreach ($parts as $p) {
             if (preg_match('#/(\d{1,2})$#', $p, $m) && (int) $m[1] < 32) {
-                throw new \InvalidArgumentException("Prefiks „{$p}” dodaj osobno - nie łączy się go z adresami w jednym wpisie.");
+                throw new \InvalidArgumentException(Lang::t('Prefiks „{p}” dodaj osobno - nie łączy się go z adresami w jednym wpisie.', ['p' => $p]));
             }
             $p = preg_replace('#/32$#', '', $p);
 
@@ -55,13 +57,13 @@ final class IpInput
                     ? IpCalc::ip2int($m[2])
                     : ($a === null || (int) $m[2] > 255 ? null : (($a & 0xFFFFFF00) | (int) $m[2]));
                 if ($a === null || $b === null) {
-                    throw new \InvalidArgumentException("Nie rozumiem zakresu „{$p}”.");
+                    throw new \InvalidArgumentException(Lang::t('Nie rozumiem zakresu „{p}”.', ['p' => $p]));
                 }
                 if ($a > $b) {
                     [$a, $b] = [$b, $a];
                 }
                 if ($b - $a + 1 > self::MAX_ADDRESSES) {
-                    throw new \InvalidArgumentException('Najwięcej ' . self::MAX_ADDRESSES . ' adresów naraz. Większy blok dodaj jako prefiks.');
+                    throw new \InvalidArgumentException(Lang::t('Najwięcej {n} adresów naraz. Większy blok dodaj jako prefiks.', ['n' => self::MAX_ADDRESSES]));
                 }
                 for ($i = $a; $i <= $b; $i++) {
                     $out[$i] = true;
@@ -69,13 +71,13 @@ final class IpInput
             } else {
                 $ip = IpCalc::ip2int($p);
                 if ($ip === null) {
-                    throw new \InvalidArgumentException("„{$p}” to nie jest adres IPv4.");
+                    throw new \InvalidArgumentException(Lang::t('„{p}” to nie jest adres IPv4.', ['p' => $p]));
                 }
                 $out[$ip] = true;
             }
 
             if (count($out) > self::MAX_ADDRESSES) {
-                throw new \InvalidArgumentException('Najwięcej ' . self::MAX_ADDRESSES . ' adresów naraz. Większy blok dodaj jako prefiks.');
+                throw new \InvalidArgumentException(Lang::t('Najwięcej {n} adresów naraz. Większy blok dodaj jako prefiks.', ['n' => self::MAX_ADDRESSES]));
             }
         }
 
@@ -95,20 +97,20 @@ final class IpInput
     {
         $t = preg_replace('/\s*(-|–)\s*/u', '-', trim($text));
         if (! preg_match('#^(\d{1,3}(?:\.\d{1,3}){3})-(\d{1,3}(?:\.\d{1,3}){3}|\d{1,3})$#', $t, $m)) {
-            throw new \InvalidArgumentException('Zakres podaj jako początek-koniec, np. 10.0.0.10-10.0.0.200 albo 10.0.0.10-200.');
+            throw new \InvalidArgumentException(Lang::t('Zakres podaj jako początek-koniec, np. 10.0.0.10-10.0.0.200 albo 10.0.0.10-200.'));
         }
         $a = IpCalc::ip2int($m[1]);
         $b = str_contains($m[2], '.')
             ? IpCalc::ip2int($m[2])
             : ($a === null || (int) $m[2] > 255 ? null : (($a & 0xFFFFFF00) | (int) $m[2]));
         if ($a === null || $b === null) {
-            throw new \InvalidArgumentException("Nie rozumiem zakresu „{$text}”.");
+            throw new \InvalidArgumentException(Lang::t('Nie rozumiem zakresu „{p}”.', ['p' => $text]));
         }
         if ($a > $b) {
             [$a, $b] = [$b, $a];
         }
         if ($a === $b) {
-            throw new \InvalidArgumentException('Zakres musi mieć co najmniej dwa adresy. Pojedynczy adres dodaj jako adres.');
+            throw new \InvalidArgumentException(Lang::t('Zakres musi mieć co najmniej dwa adresy. Pojedynczy adres dodaj jako adres.'));
         }
 
         return [$a, $b];

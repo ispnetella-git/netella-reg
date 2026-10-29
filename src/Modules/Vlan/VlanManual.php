@@ -34,6 +34,7 @@ use Ispnetella\NetellaReg\Core\ApiException;
 use Ispnetella\NetellaReg\Core\AuditLog;
 use Ispnetella\NetellaReg\Core\Db;
 use Ispnetella\NetellaReg\Core\Expiry;
+use Ispnetella\NetellaReg\Core\Lang;
 
 final class VlanManual
 {
@@ -45,6 +46,12 @@ final class VlanManual
     public const RESERVED = 'reserved';
 
     public const STATUS_LABELS = [self::USED => 'używany', self::RESERVED => 'rezerwacja'];
+
+    /** Etykiety statusów w języku interfejsu (stałe STATUS_LABELS zostają po polsku). */
+    public static function statusLabels(): array
+    {
+        return array_map(fn (string $l) => Lang::t($l), self::STATUS_LABELS);
+    }
 
     /** Najwięcej numerów w jednym dodaniu zakresu. */
     public const MAX_BATCH = 500;
@@ -214,7 +221,7 @@ final class VlanManual
         $r['id'] = (int) $r['id'];
         $r['vlan'] = (int) $r['vlan'];
         $r['batch_id'] = isset($r['batch_id']) ? (int) $r['batch_id'] : null;
-        $r['status_label'] = self::STATUS_LABELS[$r['status']] ?? $r['status'];
+        $r['status_label'] = Lang::t(self::STATUS_LABELS[$r['status']] ?? $r['status']);
 
         return Expiry::present($r, Expiry::today());
     }
@@ -247,7 +254,7 @@ final class VlanManual
             }
             $v = trim((string) ($input[$f] ?? ''));
             if (mb_strlen($v) > $max) {
-                throw new ApiException("Pole „{$f}” może mieć najwyżej {$max} znaków.");
+                throw new ApiException(Lang::t('Pole „{f}” może mieć najwyżej {max} znaków.', ['f' => $f, 'max' => $max]));
             }
             $out[$f] = $v === '' ? null : $v;
         }
@@ -255,7 +262,7 @@ final class VlanManual
         if (array_key_exists('status', $input)) {
             $status = (string) $input['status'];
             if (! isset(self::STATUS_LABELS[$status])) {
-                throw new ApiException('Status musi być „used” albo „reserved”.');
+                throw new ApiException(Lang::t('Status musi być „used” albo „reserved”.'));
             }
             $out['status'] = $status;
         }
@@ -266,7 +273,7 @@ final class VlanManual
         }
 
         if ($requireDescription && ($out['description'] ?? null) === null) {
-            throw new ApiException('Opis jest wymagany.');
+            throw new ApiException(Lang::t('Opis jest wymagany.'));
         }
 
         return $out;
@@ -312,7 +319,7 @@ final class VlanManual
         }
 
         if (count($numbers) > self::MAX_BATCH) {
-            throw new ApiException('Najwięcej ' . self::MAX_BATCH . ' numerów naraz.');
+            throw new ApiException(Lang::t('Najwięcej {max} numerów naraz.', ['max' => self::MAX_BATCH]));
         }
 
         $fields = self::validate($input) + ['status' => self::USED];
@@ -320,16 +327,15 @@ final class VlanManual
 
         $taken = $this->db->table(self::TABLE)->whereNull('deleted_at')->whereIn('vlan', $numbers)->pluck('vlan')->all();
         if ($taken !== []) {
-            throw new ApiException('Te numery mają już wpis ręczny (edytuj go zamiast dodawać nowy): '
-                . VlanRange::compress(array_map('intval', $taken)));
+            throw new ApiException(Lang::t('Te numery mają już wpis ręczny (edytuj go zamiast dodawać nowy): {list}',
+                ['list' => VlanRange::compress(array_map('intval', $taken))]));
         }
 
         $blocked = self::blocked($numbers, $knownToLibreNms);
         if ($blocked !== []) {
             $free = array_values(array_diff($numbers, $blocked));
-            throw new ApiException('Tych numerów nie można dodać ręcznie, bo są już w LibreNMS: '
-                . VlanRange::compress($blocked) . '.'
-                . ($free !== [] ? ' Bez nich zostaje: ' . VlanRange::compress($free) . '.' : ''), 409);
+            throw new ApiException(Lang::t('Tych numerów nie można dodać ręcznie, bo są już w LibreNMS: {list}.', ['list' => VlanRange::compress($blocked)])
+                . ($free !== [] ? ' ' . Lang::t('Bez nich zostaje: {list}.', ['list' => VlanRange::compress($free)]) : ''), 409);
         }
 
         $now = date('Y-m-d H:i:s');
@@ -374,14 +380,14 @@ final class VlanManual
     {
         $before = $this->find($id);
         if ($before === null) {
-            throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
+            throw new ApiException(Lang::t('Nie ma takiego wpisu (mógł zostać usunięty).'), 404);
         }
 
         // Przy edycji opis jest wymagany tylko wtedy, gdy przyszedł w żądaniu
         // (nie można go wyczyścić, ale można zmienić same inne pola).
         $fields = self::validate($input, false);
         if (array_key_exists('description', $fields) && $fields['description'] === null) {
-            throw new ApiException('Opis jest wymagany.');
+            throw new ApiException(Lang::t('Opis jest wymagany.'));
         }
 
         $rows = $group && $before['batch_id'] ? $this->batchRows($before['batch_id']) : [$before];
@@ -437,7 +443,7 @@ final class VlanManual
     {
         $before = $this->find($id);
         if ($before === null) {
-            throw new ApiException('Nie ma takiego wpisu (mógł zostać już usunięty).', 404);
+            throw new ApiException(Lang::t('Nie ma takiego wpisu (mógł zostać już usunięty).'), 404);
         }
 
         $rows = $group && $before['batch_id'] ? $this->batchRows($before['batch_id']) : [$before];

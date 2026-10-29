@@ -15,6 +15,8 @@
 
 namespace Ispnetella\NetellaReg\Modules\Ipam6;
 
+use Ispnetella\NetellaReg\Core\Lang;
+
 final class Ip6Calc
 {
     /** Długość prefiksu, w której blokach liczymy zajętość (sieć IPv6 to zwykle /64). */
@@ -85,16 +87,16 @@ final class Ip6Calc
     {
         $text = trim($text);
         if (! preg_match('#^([0-9a-fA-F:.]+)(?:/(\d{1,3}))?$#', $text, $m)) {
-            throw new \InvalidArgumentException("„{$text}” to nie jest adres ani prefiks IPv6.");
+            throw new \InvalidArgumentException(Lang::t('„{text}” to nie jest adres ani prefiks IPv6.', ['text' => $text]));
         }
         $ip = self::ip2gmp($m[1]);
         $len = isset($m[2]) ? (int) $m[2] : 128;
         if ($ip === null || $len > 128) {
-            throw new \InvalidArgumentException("„{$text}” to nie jest poprawny adres ani prefiks IPv6.");
+            throw new \InvalidArgumentException(Lang::t('„{text}” to nie jest poprawny adres ani prefiks IPv6.', ['text' => $text]));
         }
         $start = self::network($ip, $len);
         if ($strict && gmp_cmp($start, $ip) !== 0) {
-            throw new \InvalidArgumentException("„{$text}” ma ustawione bity hosta. Chodziło o " . self::cidr($start, $len) . '?');
+            throw new \InvalidArgumentException(Lang::t('„{text}” ma ustawione bity hosta. Chodziło o {cidr}?', ['text' => $text, 'cidr' => self::cidr($start, $len)]));
         }
 
         return self::block($start, $len);
@@ -250,18 +252,18 @@ final class Ip6Calc
     {
         $parts = preg_split('/\s*[-–]\s*/u', trim($text));
         if (count($parts) !== 2) {
-            throw new \InvalidArgumentException('Zakres IPv6 zapisz jako pierwszy-ostatni, np. 2001:db8::100-2001:db8::1ff.');
+            throw new \InvalidArgumentException(Lang::t('Zakres IPv6 zapisz jako pierwszy-ostatni, np. 2001:db8::100-2001:db8::1ff.'));
         }
         $a = self::ip2gmp($parts[0]);
         $b = self::ip2gmp($parts[1]);
         if ($a === null || $b === null) {
-            throw new \InvalidArgumentException("Nie rozumiem zakresu „{$text}”: oba końce muszą być pełnymi adresami IPv6.");
+            throw new \InvalidArgumentException(Lang::t('Nie rozumiem zakresu „{text}”: oba końce muszą być pełnymi adresami IPv6.', ['text' => $text]));
         }
         if (gmp_cmp($a, $b) > 0) {
             [$a, $b] = [$b, $a];
         }
         if (gmp_cmp($a, $b) === 0) {
-            throw new \InvalidArgumentException('Zakres musi mieć co najmniej dwa adresy - pojedynczy adres dodaj bez myślnika.');
+            throw new \InvalidArgumentException(Lang::t('Zakres musi mieć co najmniej dwa adresy - pojedynczy adres dodaj bez myślnika.'));
         }
 
         return [$a, $b];

@@ -18,6 +18,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\ApiException;
 use Ispnetella\NetellaReg\Core\AuditLog;
+use Ispnetella\NetellaReg\Core\Lang;
 
 final class IpamSpaces
 {
@@ -80,10 +81,10 @@ final class IpamSpaces
     {
         $name = trim((string) ($input['name'] ?? ''));
         if ($name === '' || mb_strlen($name) > 64) {
-            throw new ApiException('Nazwa przestrzeni jest wymagana (do 64 znaków).');
+            throw new ApiException(Lang::t('Nazwa przestrzeni jest wymagana (do 64 znaków).'));
         }
         if ($this->db->table(self::TABLE)->where('name', $name)->exists()) {
-            throw new ApiException("Przestrzeń „{$name}” już istnieje.");
+            throw new ApiException(Lang::t('Przestrzeń „{name}” już istnieje.', ['name' => $name]));
         }
         $row = [
             'name' => $name,

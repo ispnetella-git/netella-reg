@@ -39,10 +39,10 @@ final class Expiry
         }
         $d = \DateTimeImmutable::createFromFormat('!Y-m-d', $v);
         if ($d === false || $d->format('Y-m-d') !== $v) {
-            throw new ApiException('Termin ważności musi być datą w postaci RRRR-MM-DD.');
+            throw new ApiException(Lang::t('Termin ważności musi być datą w postaci RRRR-MM-DD.'));
         }
         if (! $allowPast && $v < $today) {
-            throw new ApiException('Termin ważności nie może być w przeszłości.');
+            throw new ApiException(Lang::t('Termin ważności nie może być w przeszłości.'));
         }
 
         return $v;

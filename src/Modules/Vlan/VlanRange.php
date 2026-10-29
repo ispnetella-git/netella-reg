@@ -10,6 +10,8 @@
 
 namespace Ispnetella\NetellaReg\Modules\Vlan;
 
+use Ispnetella\NetellaReg\Core\Lang;
+
 final class VlanRange
 {
     /**
@@ -24,7 +26,7 @@ final class VlanRange
         $text = trim(preg_replace('/\s+to\s+/i', '-', $text));
 
         if ($text === '') {
-            throw new \InvalidArgumentException('Podaj numer lub zakres VLAN-ów, np. 1400-1450.');
+            throw new \InvalidArgumentException(Lang::t('Podaj numer lub zakres VLAN-ów, np. 1400-1450.'));
         }
 
         $out = [];
@@ -35,7 +37,7 @@ final class VlanRange
             }
 
             if (! preg_match('/^(\d{1,4})(?:-(\d{1,4}))?$/', $part, $m)) {
-                throw new \InvalidArgumentException("Nie rozumiem fragmentu „{$part}”.");
+                throw new \InvalidArgumentException(Lang::t('Nie rozumiem fragmentu „{part}”.', ['part' => $part]));
             }
 
             $a = (int) $m[1];
@@ -46,7 +48,7 @@ final class VlanRange
             }
 
             if ($a < VlanName::MIN || $b > VlanName::MAX) {
-                throw new \InvalidArgumentException("Numer VLAN poza zakresem 1-4094: {$part}.");
+                throw new \InvalidArgumentException(Lang::t('Numer VLAN poza zakresem 1-4094: {part}.', ['part' => $part]));
             }
 
             for ($v = $a; $v <= $b; $v++) {

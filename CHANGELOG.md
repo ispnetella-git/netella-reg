@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.0 - 2026-10-29
+
+- Interfejs po angielsku (domyślnie) i po polsku: przełącznik języka w nagłówku strony wtyczki i na stronie
+  ustawień (cookie `netella_reg_lang` + localStorage, jak w netella-map). Po angielsku są widoki, JS, komunikaty
+  API i etykiety (role, stany, akcje dziennika). Mechanizm: `Core\Lang` (kluczem jest polski tekst),
+  `nreg_t()` w Blade, `NReg.t()` w JS, słowniki `resources/lang/en/*.php`; test pilnuje, żeby każdy tekst miał
+  tłumaczenie z tymi samymi wstawkami.
+- Po polsku zostają: komendy CLI, logi, komentarze systemowe zapisywane w dzienniku zmian (np. „wrócił po
+  zniknięciu”) i wcześniejsze wpisy w bazie. Bez cookie (cron) linie synchronizacji powstają po angielsku.
+
 ## 0.8.5 - 2026-10-29
 
 - Poprawka 0.8.4: licznik adresów z LibreNMS w zakresie był nadpisywany pustą listą (`lnms`), więc każdy

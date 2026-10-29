@@ -70,7 +70,7 @@ final class SyncRunner
                 $results[$key] = $result;
                 $out("[$key] " . ($result['ok']
                     ? 'OK ' . $result['ms'] . ' ms ' . json_encode($result['summary'], JSON_UNESCAPED_UNICODE)
-                    : 'BŁĄD ' . $result['error']));
+                    : Lang::t('BŁĄD {error}', ['error' => $result['error']])));
             }
         } finally {
             $db->select('SELECT RELEASE_LOCK(?)', [self::LOCK]);

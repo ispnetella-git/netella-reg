@@ -14,6 +14,8 @@
 
 namespace Ispnetella\NetellaReg\Modules\Ipam;
 
+use Ispnetella\NetellaReg\Core\Lang;
+
 final class IpCalc
 {
     public const V4_MAX = 4294967295;
@@ -66,16 +68,16 @@ final class IpCalc
     {
         $text = trim($text);
         if (! preg_match('#^(\d{1,3}(?:\.\d{1,3}){3})(?:/(\d{1,2}))?$#', $text, $m)) {
-            throw new \InvalidArgumentException("„{$text}” to nie jest adres ani prefiks IPv4.");
+            throw new \InvalidArgumentException(Lang::t('„{text}” to nie jest adres ani prefiks IPv4.', ['text' => $text]));
         }
         $ip = self::ip2int($m[1]);
         $len = isset($m[2]) ? (int) $m[2] : 32;
         if ($ip === null || $len > 32) {
-            throw new \InvalidArgumentException("„{$text}” to nie jest poprawny adres ani prefiks IPv4.");
+            throw new \InvalidArgumentException(Lang::t('„{text}” to nie jest poprawny adres ani prefiks IPv4.', ['text' => $text]));
         }
         $start = self::network($ip, $len);
         if ($strict && $start !== $ip) {
-            throw new \InvalidArgumentException("„{$text}” ma ustawione bity hosta. Chodziło o " . self::cidr($start, $len) . '?');
+            throw new \InvalidArgumentException(Lang::t('„{text}” ma ustawione bity hosta. Chodziło o {cidr}?', ['text' => $text, 'cidr' => self::cidr($start, $len)]));
         }
 
         return ['family' => 4, 'start' => $start, 'end' => $start + self::size($len) - 1, 'len' => $len, 'cidr' => self::cidr($start, $len)];

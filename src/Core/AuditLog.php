@@ -180,7 +180,7 @@ final class AuditLog
                 $r = (array) $r;
                 $r['before'] = $r['before'] === null ? null : json_decode($r['before'], true);
                 $r['after'] = $r['after'] === null ? null : json_decode($r['after'], true);
-                $r['action_label'] = self::LABELS[$r['action']] ?? $r['action'];
+                $r['action_label'] = isset(self::LABELS[$r['action']]) ? Lang::t(self::LABELS[$r['action']]) : $r['action'];
 
                 return $r;
             })->all();

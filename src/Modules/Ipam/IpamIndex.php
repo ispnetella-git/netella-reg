@@ -30,6 +30,8 @@
 
 namespace Ispnetella\NetellaReg\Modules\Ipam;
 
+use Ispnetella\NetellaReg\Core\Lang;
+
 final class IpamIndex
 {
     public const FREE = 'f';
@@ -47,6 +49,12 @@ final class IpamIndex
         self::GONE => 'zniknął z LibreNMS (karencja)',
         self::FREE => 'wolny',
     ];
+
+    /** LABELS w języku interfejsu (do odpowiedzi API). */
+    public static function labels(): array
+    {
+        return array_map(fn ($l) => Lang::t($l), self::LABELS);
+    }
 
     private const RANK = [
         self::FREE => 0, self::GONE => 1, self::RESERVED => 2, self::MANUAL => 3, self::STALE => 4, self::LNMS => 5,
@@ -296,14 +304,16 @@ final class IpamIndex
                     $best = $p + ['cidr' => $cidr];
                 }
             } else {
-                return [null, "Zakres {$label} przecina albo obejmuje prefiks {$cidr}. Zakres musi leżeć w całości w jednej sieci albo prefiksie."];
+                return [null, Lang::t('Zakres {range} przecina albo obejmuje prefiks {cidr}. Zakres musi leżeć w całości w jednej sieci albo prefiksie.',
+                    ['range' => $label, 'cidr' => $cidr])];
             }
         }
         if ($best === null) {
-            return [null, "Zakres {$label} nie leży w żadnej sieci z LibreNMS ani w prefiksie ręcznym. Dodaj najpierw prefiks (np. agregat albo sieć)."];
+            return [null, Lang::t('Zakres {range} nie leży w żadnej sieci z LibreNMS ani w prefiksie ręcznym. Dodaj najpierw prefiks (np. agregat albo sieć).',
+                ['range' => $label])];
         }
         if ($best['subnet'] && $best['len'] <= 30 && ($start === $best['start'] || $end === $best['end'])) {
-            return [null, "Zakres {$label} obejmuje adres sieci albo rozgłoszeniowy sieci {$best['cidr']}."];
+            return [null, Lang::t('Zakres {range} obejmuje adres sieci albo rozgłoszeniowy sieci {cidr}.', ['range' => $label, 'cidr' => $best['cidr']])];
         }
 
         return [$best['cidr'], null];
@@ -313,9 +323,9 @@ final class IpamIndex
     public static function implicitLabel(string $cidr): string
     {
         return match ($cidr) {
-            '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16' => 'adresacja prywatna (RFC 1918)',
+            '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16' => Lang::t('adresacja prywatna (RFC 1918)'),
             '100.64.0.0/10' => 'CGNAT (RFC 6598)',
-            default => 'adresacja wewnętrzna',
+            default => Lang::t('adresacja wewnętrzna'),
         };
     }
 

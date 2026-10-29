@@ -26,6 +26,7 @@ use Ispnetella\NetellaReg\Core\ApiException;
 use Ispnetella\NetellaReg\Core\AuditLog;
 use Ispnetella\NetellaReg\Core\Db;
 use Ispnetella\NetellaReg\Core\Expiry;
+use Ispnetella\NetellaReg\Core\Lang;
 use Ispnetella\NetellaReg\Core\Settings;
 use Ispnetella\NetellaReg\Core\Snapshot;
 use Ispnetella\NetellaReg\Core\SyncContext;
@@ -52,7 +53,7 @@ final class IpamModule extends AbstractModule
 
     public function name(): string
     {
-        return 'Adresy IPv4';
+        return Lang::t('Adresy IPv4');
     }
 
     public function schemaVersion(): int
@@ -81,7 +82,7 @@ final class IpamModule extends AbstractModule
             trim((string) Settings::get('ipam_ignore_if', ''))
         );
         $current = $collector->collect();
-        $ctx->log(count($current) . ' adresów w LibreNMS (po pominięciu ignorowanych)');
+        $ctx->log(Lang::t('{n} adresów w LibreNMS (po pominięciu ignorowanych)', ['n' => count($current)]));
 
         // Zakres = adres IPv4 jako liczba: historia sieci znajdzie zdarzenia jej adresów.
         $summary = $ctx->snapshot->apply(self::KEY, self::TYPE, $current, $ctx->now, function (string $key, array $d) {
@@ -158,7 +159,7 @@ final class IpamModule extends AbstractModule
     private function post(Request $request): ?array
     {
         if (! $request->isMethod('POST')) {
-            throw new ApiException('Wymagany POST.', 405);
+            throw new ApiException(Lang::t('Wymagany POST.'), 405);
         }
 
         return null;
@@ -208,7 +209,7 @@ final class IpamModule extends AbstractModule
     {
         $spaces = $this->spaces()->all();
         if (! isset($spaces[$space])) {
-            throw new ApiException('Nie ma takiej przestrzeni adresowej.', 404);
+            throw new ApiException(Lang::t('Nie ma takiej przestrzeni adresowej.'), 404);
         }
 
         return new IpamIndex(
@@ -338,7 +339,7 @@ final class IpamModule extends AbstractModule
     {
         $m = $idx->ranges()[$id] ?? null;
         if ($m === null) {
-            throw new ApiException('Nie ma takiego zakresu w tej przestrzeni (mógł zostać usunięty).', 404);
+            throw new ApiException(Lang::t('Nie ma takiego zakresu w tej przestrzeni (mógł zostać usunięty).'), 404);
         }
 
         return $m;
@@ -373,7 +374,7 @@ final class IpamModule extends AbstractModule
         } else {
             $n = $tree->node($node);
             if ($n === null) {
-                throw new ApiException("Nie ma węzła {$node}.", 404);
+                throw new ApiException(Lang::t('Nie ma węzła {cidr}.', ['cidr' => $node]), 404);
             }
             $children = $n['children'];
             $addr = $n['addr'];
@@ -402,7 +403,7 @@ final class IpamModule extends AbstractModule
             'addresses' => array_map(fn ($ip) => $this->addrInfo($idx, $ip, $dups), array_slice($ips, 0, self::MAX_ADDR)),
             'addresses_total' => count($ips),
             'free' => $node === '' ? [] : $this->treeFree($tree, $node),
-            'labels' => IpamIndex::LABELS,
+            'labels' => IpamIndex::labels(),
             'sync' => SyncRunner::last(self::KEY),
             'v6_count' => count($idx->v6()),
         ];
@@ -424,7 +425,7 @@ final class IpamModule extends AbstractModule
             'addresses' => array_map(fn ($ip) => $this->addrInfo($idx, $ip, $dups), array_slice($ips, 0, self::MAX_ADDR)),
             'addresses_total' => count($ips),
             'free' => [],
-            'labels' => IpamIndex::LABELS,
+            'labels' => IpamIndex::labels(),
             'sync' => SyncRunner::last(self::KEY),
             'v6_count' => count($idx->v6()),
         ];
@@ -448,7 +449,7 @@ final class IpamModule extends AbstractModule
             'addresses' => array_map(fn ($ip) => $this->addrInfo($idx, $ip, $dups), array_slice($ips, 0, 200)),
             'addresses_total' => count($ips),
             'history' => $this->history(['r:' . $m['cidr'] . ':'], [$m['start'], $m['end']]),
-            'roles' => IpamManual::RANGE_ROLES,
+            'roles' => IpamManual::roleLabels(IpamManual::RANGE_ROLES),
         ];
     }
 
@@ -489,7 +490,7 @@ final class IpamModule extends AbstractModule
         $tree = $idx->tree();
         $n = $tree->node($cidr);
         if ($n === null) {
-            throw new ApiException("Nie ma węzła {$cidr}.", 404);
+            throw new ApiException(Lang::t('Nie ma węzła {cidr}.', ['cidr' => $cidr]), 404);
         }
 
         $free = $tree->freeBlocks($cidr, 30);
@@ -503,7 +504,7 @@ final class IpamModule extends AbstractModule
             'free_ranges' => $freeRanges,
             'free_ranges_total' => count($n['free_intervals']),
             'history' => $this->history(["n:{$cidr}:"], [$n['start'], $n['end']]),
-            'roles' => IpamManual::PREFIX_ROLES,
+            'roles' => IpamManual::roleLabels(IpamManual::PREFIX_ROLES),
         ];
     }
 
@@ -537,7 +538,7 @@ final class IpamModule extends AbstractModule
     private function apiSearch(int $space, string $q): array
     {
         if ($q === '') {
-            throw new ApiException('Wpisz adres, prefiks albo tekst.');
+            throw new ApiException(Lang::t('Wpisz adres, prefiks albo tekst.'));
         }
         $idx = $this->index($space);
         $tree = $idx->tree();
@@ -606,7 +607,7 @@ final class IpamModule extends AbstractModule
     private function apiFree(int $space, string $within, int $len, int $count): array
     {
         if ($len < 8 || $len > 32) {
-            throw new ApiException('Maska musi być z zakresu /8-/32.');
+            throw new ApiException(Lang::t('Maska musi być z zakresu /8-/32.'));
         }
         try {
             $w = IpCalc::parseV4($within, true);
@@ -614,7 +615,7 @@ final class IpamModule extends AbstractModule
             throw new ApiException($e->getMessage());
         }
         if ($len < $w['len']) {
-            throw new ApiException("Blok /{$len} jest większy niż {$w['cidr']}.");
+            throw new ApiException(Lang::t('Blok /{len} jest większy niż {cidr}.', ['len' => $len, 'cidr' => $w['cidr']]));
         }
         $idx = $this->index($space);
         // Wolne liczymy w każdym prefiksie, także spoza agregatów (zasada: zawsze pokazujemy wolne miejsce).
@@ -716,9 +717,9 @@ final class IpamModule extends AbstractModule
         $idx = $this->index($space);
         $rows = array_map(function (array $g) use ($idx) {
             if ($g['kind'] === 'prefix') {
-                $g['current'] = $idx->knownNetwork($g['cidr']) ? 'sieć jest w LibreNMS' : null;
+                $g['current'] = $idx->knownNetwork($g['cidr']) ? Lang::t('sieć jest w LibreNMS') : null;
             } elseif ($g['kind'] === 'range') {
-                $g['current'] = $idx->rangeContainer($g['start'], $g['end'])[1] !== null ? 'konflikt z siecią (zobacz Uwagi)' : null;
+                $g['current'] = $idx->rangeContainer($g['start'], $g['end'])[1] !== null ? Lang::t('konflikt z siecią (zobacz Uwagi)') : null;
             } else {
                 $g['current'] = null;
             }
@@ -726,8 +727,8 @@ final class IpamModule extends AbstractModule
             return $g;
         }, $this->manual()->grouped($space));
 
-        return ['rows' => $rows, 'prefix_roles' => IpamManual::PREFIX_ROLES, 'address_roles' => IpamManual::ADDRESS_ROLES,
-            'range_roles' => IpamManual::RANGE_ROLES];
+        return ['rows' => $rows, 'prefix_roles' => IpamManual::roleLabels(IpamManual::PREFIX_ROLES),
+            'address_roles' => IpamManual::roleLabels(IpamManual::ADDRESS_ROLES), 'range_roles' => IpamManual::roleLabels(IpamManual::RANGE_ROLES)];
     }
 
     private function apiManualCreate(int $space, Request $request): array
@@ -742,7 +743,7 @@ final class IpamModule extends AbstractModule
     {
         $entry = $this->manual()->find((int) $request->input('id', 0));
         if ($entry === null) {
-            throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
+            throw new ApiException(Lang::t('Nie ma takiego wpisu (mógł zostać usunięty).'), 404);
         }
 
         return ['entry' => $this->manual()->update($entry['id'], $request->only(self::FORM_FIELDS),
@@ -753,7 +754,7 @@ final class IpamModule extends AbstractModule
     {
         $entry = $this->manual()->find((int) $request->input('id', 0));
         if ($entry === null) {
-            throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
+            throw new ApiException(Lang::t('Nie ma takiego wpisu (mógł zostać usunięty).'), 404);
         }
 
         return ['entry' => $this->manual()->toRange($entry['id'], self::comment($request), $this->index($entry['space_id']))];
@@ -830,14 +831,14 @@ final class IpamModule extends AbstractModule
         }
 
         foreach ($res['prefixes'] as &$p) {
-            $p['sources_label'] = array_map(fn ($s) => RipeLookup::SOURCES[$s] ?? $s, $p['sources']);
+            $p['sources_label'] = RipeLookup::sourceLabels($p['sources']);
             if ($p['family'] !== 4) {
                 $p += ['unsupported' => true, 'checked' => false, 'exists' => null, 'in_aggregate' => null, 'parent' => null, 'lnms' => 0];
                 continue;
             }
             $r = $v4[$p['cidr']];
             $p['unsupported'] = false;
-            $p['exists'] = isset($manual[$p['cidr']]) ? (IpamManual::PREFIX_ROLES[$manual[$p['cidr']]['role']] ?? $manual[$p['cidr']]['role']) : null;
+            $p['exists'] = isset($manual[$p['cidr']]) ? $manual[$p['cidr']]['role_label'] : null;
             $p['in_aggregate'] = null;
             foreach ($manual as $c => $m) {
                 if ($c !== $p['cidr'] && $m['role'] === 'aggregate' && $m['start'] <= $r['start'] && $m['end'] >= $r['end']) {
@@ -873,10 +874,10 @@ final class IpamModule extends AbstractModule
         }
         $items = $request->input('items', []);
         if (! is_array($items) || ! $items) {
-            throw new ApiException('Zaznacz co najmniej jeden prefiks.');
+            throw new ApiException(Lang::t('Zaznacz co najmniej jeden prefiks.'));
         }
         if (count($items) > 200) {
-            throw new ApiException('Najwięcej 200 prefiksów naraz.');
+            throw new ApiException(Lang::t('Najwięcej {n} prefiksów naraz.', ['n' => 200]));
         }
         $desc = trim((string) $request->input('description', '')) ?: "Przydział AS{$asn} (z RIPE)";
         $comment = self::comment($request) ?? "dodano z RIPE dla AS{$asn}";
@@ -888,7 +889,7 @@ final class IpamModule extends AbstractModule
             $name = $name !== '' ? $name : "AS{$asn}"; // nazwa jest wymagana
             try {
                 if ($cidr === '' || str_contains($cidr, ':')) {
-                    throw new ApiException('IPv6 nie jest jeszcze obsługiwane.');
+                    throw new ApiException(Lang::t('IPv6 nie jest jeszcze obsługiwane.'));
                 }
                 $this->manual()->create($space, $cidr, ['role' => 'aggregate', 'name' => $name, 'description' => $desc],
                     $comment, $this->index($space));

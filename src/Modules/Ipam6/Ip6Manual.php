@@ -30,6 +30,7 @@ use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\ApiException;
 use Ispnetella\NetellaReg\Core\AuditLog;
 use Ispnetella\NetellaReg\Core\Expiry;
+use Ispnetella\NetellaReg\Core\Lang;
 use Ispnetella\NetellaReg\Modules\Ipam\IpamManual;
 use Ispnetella\NetellaReg\Modules\Ipam\IpamSpaces;
 
@@ -125,7 +126,8 @@ final class Ip6Manual
             $r[$f] = (int) $r[$f];
         }
         $r['vlan'] = $r['vlan'] === null ? null : (int) $r['vlan'];
-        $r['role_label'] = self::rolesFor($r['kind'])[$r['role']] ?? $r['role'];
+        $roles = self::rolesFor($r['kind']);
+        $r['role_label'] = isset($roles[$r['role']]) ? Lang::t($roles[$r['role']]) : $r['role'];
         if ($r['kind'] === 'range') {
             [$r['first'], $r['last']] = explode('-', $r['cidr'], 2);
             $r['size'] = gmp_strval(gmp_add(gmp_sub(Ip6Calc::fromHex($r['end_hex']), Ip6Calc::fromHex($r['start_hex'])), 1));
@@ -197,14 +199,14 @@ final class Ip6Manual
         $roles = self::rolesFor($p['kind']);
         $fields['role'] ??= array_key_first($roles);
         if (! isset($roles[$fields['role']])) {
-            throw new ApiException('Dozwolone role: ' . implode(', ', array_keys($roles)) . '.');
+            throw new ApiException(Lang::t('Dozwolone role: {roles}.', ['roles' => implode(', ', array_keys($roles))]));
         }
         if (($fields[Expiry::FIELD] ?? null) !== null && $fields[Expiry::FIELD] < Expiry::today()) {
-            throw new ApiException('Termin ważności nie może być w przeszłości.');
+            throw new ApiException(Lang::t('Termin ważności nie może być w przeszłości.'));
         }
         if ($this->db->table(self::TABLE)->where('space_id', $space)->whereNull('deleted_at')->where('kind', $p['kind'])
             ->where('cidr', $p['cidr'])->exists()) {
-            throw new ApiException("{$p['cidr']} ma już wpis ręczny w tej przestrzeni (edytuj go).");
+            throw new ApiException(Lang::t('{cidr} ma już wpis ręczny w tej przestrzeni (edytuj go).', ['cidr' => $p['cidr']]));
         }
         $this->checkEntry($space, $p, $fields['role'], $ctx, null);
 
@@ -225,15 +227,15 @@ final class Ip6Manual
 
     public function update(int $id, array $input, ?string $comment, Ip6Context $ctx): array
     {
-        $before = $this->find($id) ?? throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
+        $before = $this->find($id) ?? throw new ApiException(Lang::t('Nie ma takiego wpisu (mógł zostać usunięty).'), 404);
         $fields = IpamManual::validate($input, false);
         if (array_key_exists('name', $fields) && $fields['name'] === null) {
-            throw new ApiException('Nazwa jest wymagana.');
+            throw new ApiException(Lang::t('Nazwa jest wymagana.'));
         }
         if (isset($fields['role'])) {
             $roles = self::rolesFor($before['kind']);
             if (! isset($roles[$fields['role']])) {
-                throw new ApiException('Dozwolone role: ' . implode(', ', array_keys($roles)) . '.');
+                throw new ApiException(Lang::t('Dozwolone role: {roles}.', ['roles' => implode(', ', array_keys($roles))]));
             }
             if ($fields['role'] !== $before['role']) {
                 $this->checkRole(self::parseTarget($before['cidr']), $fields['role'], $ctx);
@@ -241,7 +243,7 @@ final class Ip6Manual
         }
         $vu = $fields[Expiry::FIELD] ?? null;
         if ($vu !== null && $vu !== $before[Expiry::FIELD] && $vu < Expiry::today()) {
-            throw new ApiException('Termin ważności nie może być w przeszłości.');
+            throw new ApiException(Lang::t('Termin ważności nie może być w przeszłości.'));
         }
         $changed = [];
         foreach (array_intersect_key($fields, array_flip(self::DATA_FIELDS)) as $f => $v) {
@@ -265,7 +267,7 @@ final class Ip6Manual
 
     public function delete(int $id, ?string $comment): string
     {
-        $before = $this->find($id) ?? throw new ApiException('Nie ma takiego wpisu (mógł zostać usunięty).', 404);
+        $before = $this->find($id) ?? throw new ApiException(Lang::t('Nie ma takiego wpisu (mógł zostać usunięty).'), 404);
         $this->db->transaction(function () use ($id, $before, $comment) {
             $this->db->table(self::TABLE)->where('id', $id)->update(['deleted_at' => date('Y-m-d H:i:s'), 'deleted_by' => Access::username()]);
             AuditLog::user(Ipam6Module::KEY, self::TYPE, self::key($before), AuditLog::DELETE, self::view($before), null, $comment);
@@ -284,19 +286,20 @@ final class Ip6Manual
 
         if ($p['kind'] === 'address') {
             if ($ctx->knownAddress($p['start_hex'])) {
-                throw new ApiException("Adresu {$p['cidr']} nie można dodać ręcznie, bo jest już w LibreNMS"
-                    . ($ctx->staleAddress($p['start_hex']) ? ' (na wyłączonym hoście - włącz „Pokaż adresy z wyłączonych hostów”, żeby go zobaczyć).' : '.'), 409);
+                throw new ApiException($ctx->staleAddress($p['start_hex'])
+                    ? Lang::t('Adresu {cidr} nie można dodać ręcznie, bo jest już w LibreNMS (na wyłączonym hoście - włącz „Pokaż adresy z wyłączonych hostów”, żeby go zobaczyć).', ['cidr' => $p['cidr']])
+                    : Lang::t('Adresu {cidr} nie można dodać ręcznie, bo jest już w LibreNMS.', ['cidr' => $p['cidr']]), 409);
             }
         } elseif ($p['kind'] === 'prefix') {
             // Prefiks może objąć cały zakres, ale nie może go przeciąć.
             foreach ($ranges as $r) {
                 if (strcmp($r->start_hex, $p['start_hex']) < 0 || strcmp($r->end_hex, $p['end_hex']) > 0) {
-                    throw new ApiException("Prefiks {$p['cidr']} przecina zakres {$r->cidr}. Zakres musi leżeć w całości w jednym prefiksie.", 409);
+                    throw new ApiException(Lang::t('Prefiks {cidr} przecina zakres {range}. Zakres musi leżeć w całości w jednym prefiksie.', ['cidr' => $p['cidr'], 'range' => $r->cidr]), 409);
                 }
             }
         } else {
             if ($ranges->isNotEmpty()) {
-                throw new ApiException("Zakres {$p['cidr']} nachodzi na zakres {$ranges->first()->cidr}.", 409);
+                throw new ApiException(Lang::t('Zakres {cidr} nachodzi na zakres {other}.', ['cidr' => $p['cidr'], 'other' => $ranges->first()->cidr]), 409);
             }
             $problem = $ctx->rangeContainer($p['start'], $p['end'])[1];
             if ($problem !== null) {
@@ -308,11 +311,10 @@ final class Ip6Manual
     private function checkRole(array $p, string $role, Ip6Context $ctx): void
     {
         if ($p['kind'] === 'prefix' && $role === 'used' && $ctx->knownNetwork($p['cidr'])) {
-            throw new ApiException("Sieci {$p['cidr']} nie można dodać ręcznie jako używanej, bo jest już w LibreNMS. "
-                . 'Jeśli chcesz ją opisać albo zgrupować, dodaj ją jako agregat.', 409);
+            throw new ApiException(Lang::t('Sieci {cidr} nie można dodać ręcznie jako używanej, bo jest już w LibreNMS. Jeśli chcesz ją opisać albo zgrupować, dodaj ją jako agregat.', ['cidr' => $p['cidr']]), 409);
         }
         if ($p['kind'] !== 'address' && $role === 'reserved' && ($n = $ctx->knownInside($p['start'], $p['end'])) > 0) {
-            throw new ApiException("Nie można zarezerwować {$p['cidr']}, bo LibreNMS ma w nim adresy ({$n}).", 409);
+            throw new ApiException(Lang::t('Nie można zarezerwować {cidr}, bo LibreNMS ma w nim adresy ({n}).', ['cidr' => $p['cidr'], 'n' => $n]), 409);
         }
     }
 }

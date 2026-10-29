@@ -91,8 +91,8 @@ final class Db
             $db->getPdo();
         } catch (\Throwable $e) {
             throw new \RuntimeException(
-                'Brak dostępu do bazy wtyczki `' . Settings::database() . "`. Utwórz ją raz jako administrator bazy:\n  "
-                . self::createDatabaseHint() . "\nSzczegóły: " . $e->getMessage()
+                Lang::t('Brak dostępu do bazy wtyczki `{db}`. Utwórz ją raz jako administrator bazy:', ['db' => Settings::database()]) . "\n  "
+                . self::createDatabaseHint() . "\n" . Lang::t('Szczegóły: {error}', ['error' => $e->getMessage()])
             );
         }
 

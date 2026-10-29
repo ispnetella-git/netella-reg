@@ -1,25 +1,25 @@
 {{-- Zakładka Dziennik zmian: wszystkie moduły, zmiany użytkowników i synchronizacji. --}}
 <form class="nreg-filters" id="nreg-audit-form">
     <select class="form-control" name="module">
-        <option value="">wszystkie moduły</option>
-        <option value="core">rdzeń (ustawienia)</option>
+        <option value="">{{ nreg_t('wszystkie moduły') }}</option>
+        <option value="core">{{ nreg_t('rdzeń (ustawienia)') }}</option>
         @foreach($nregBoot['modules'] as $m)
             <option value="{{ $m['key'] }}">{{ $m['name'] }}</option>
         @endforeach
     </select>
     <select class="form-control" name="source">
-        <option value="">każde źródło</option>
-        <option value="user">użytkownicy</option>
-        <option value="sync">synchronizacja</option>
+        <option value="">{{ nreg_t('każde źródło') }}</option>
+        <option value="user">{{ nreg_t('użytkownicy') }}</option>
+        <option value="sync">{{ nreg_t('synchronizacja') }}</option>
     </select>
     <select class="form-control" name="action" id="nreg-audit-action">
-        <option value="">każde zdarzenie</option>
+        <option value="">{{ nreg_t('każde zdarzenie') }}</option>
     </select>
-    <input class="form-control" name="q" placeholder="szukaj: klucz, urządzenie, użytkownik…" style="min-width: 260px;">
-    <button class="btn btn-default btn-sm" type="submit"><i class="fa fa-search"></i> Filtruj</button>
+    <input class="form-control" name="q" placeholder="{{ nreg_t('szukaj: klucz, urządzenie, użytkownik…') }}" style="min-width: 260px;">
+    <button class="btn btn-default btn-sm" type="submit"><i class="fa fa-search"></i> {{ nreg_t('Filtruj') }}</button>
 </form>
 
-<div id="nreg-audit-body"><p class="nreg-muted">Ładowanie…</p></div>
+<div id="nreg-audit-body"><p class="nreg-muted">{{ nreg_t('Ładowanie…') }}</p></div>
 
 <script>
 document.addEventListener('nreg:ready', function () {
@@ -35,7 +35,7 @@ document.addEventListener('nreg:ready', function () {
 
     function load() {
         loaded = true;
-        body.innerHTML = '<p class="nreg-muted">Ładowanie…</p>';
+        body.innerHTML = '<p class="nreg-muted">' + N.t('Ładowanie…') + '</p>';
         N.api('core/audit', params()).then(function (j) {
             if (!labelsFilled) {
                 var sel = document.getElementById('nreg-audit-action');
@@ -44,12 +44,12 @@ document.addEventListener('nreg:ready', function () {
                 });
                 labelsFilled = true;
             }
-            if (!j.rows.length) { body.innerHTML = '<p class="nreg-muted">Brak wpisów.</p>'; return; }
+            if (!j.rows.length) { body.innerHTML = '<p class="nreg-muted">' + N.t('Brak wpisów.') + '</p>'; return; }
             var pages = Math.max(1, Math.ceil(j.total / perPage));
             var h = N.logTable(j.rows, true) + '<div class="nreg-pager">'
-                + '<button class="btn btn-default btn-xs" data-p="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>&laquo; nowsze</button>'
-                + '<span>strona ' + page + ' z ' + pages + ' (' + j.total + ' wpisów)</span>'
-                + '<button class="btn btn-default btn-xs" data-p="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>starsze &raquo;</button></div>';
+                + '<button class="btn btn-default btn-xs" data-p="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>&laquo; ' + N.t('nowsze') + '</button>'
+                + '<span>' + N.t('strona {page} z {pages} ({total} wpisów)', { page: page, pages: pages, total: j.total }) + '</span>'
+                + '<button class="btn btn-default btn-xs" data-p="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>' + N.t('starsze') + ' &raquo;</button></div>';
             body.innerHTML = h;
         }).catch(function (e) {
             body.innerHTML = '<div class="alert alert-danger">' + N.esc(e.message) + '</div>';

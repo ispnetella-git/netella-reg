@@ -18,11 +18,20 @@
 
 namespace Ispnetella\NetellaReg\Modules\Ipam;
 
+use Ispnetella\NetellaReg\Core\Lang;
+
 final class RipeLookup
 {
     public const STAT = 'https://stat.ripe.net/data/';
     public const DB = 'https://rest.db.ripe.net/';
+    /** Etykiety źródeł po polsku; do widoku idą przez Lang::t (sourceLabels). */
     public const SOURCES = ['bgp' => 'ogłaszany w BGP', 'route' => 'obiekt route w RIPE', 'org' => 'przydział organizacji AS'];
+
+    /** @return list<string> etykiety źródeł w języku interfejsu */
+    public static function sourceLabels(array $sources): array
+    {
+        return array_map(fn ($s) => isset(self::SOURCES[$s]) ? Lang::t(self::SOURCES[$s]) : $s, $sources);
+    }
 
     /** Limit czasu na dociąganie przydziałów (s); reszta prefiksów zostaje bez nich. */
     private const BUDGET = 25.0;
@@ -45,14 +54,14 @@ final class RipeLookup
     public static function parseAsn(string $text): int
     {
         if (! preg_match('/^\s*(?:AS\s*)?(\d{1,10})\s*$/i', $text, $m)) {
-            throw new \InvalidArgumentException('Podaj numer AS, np. AS61154 albo 61154.');
+            throw new \InvalidArgumentException(Lang::t('Podaj numer AS, np. AS61154 albo 61154.'));
         }
         $n = (int) $m[1];
         if ($n < 1 || $n > 4294967294 || $n === 23456) {
-            throw new \InvalidArgumentException("AS{$n} to nie jest poprawny publiczny numer AS.");
+            throw new \InvalidArgumentException(Lang::t('AS{n} to nie jest poprawny publiczny numer AS.', ['n' => $n]));
         }
         if (($n >= 64496 && $n <= 131071) || $n >= 4200000000) {
-            throw new \InvalidArgumentException("AS{$n} to numer prywatny albo zarezerwowany - RIPE nie ma dla niego prefiksów.");
+            throw new \InvalidArgumentException(Lang::t('AS{n} to numer prywatny albo zarezerwowany - RIPE nie ma dla niego prefiksów.', ['n' => $n]));
         }
 
         return $n;
@@ -84,12 +93,12 @@ final class RipeLookup
         $ov = $this->get(self::STAT . "as-overview/data.json?resource=AS{$asn}&sourceapp=netella-reg");
         $holder = is_array($ov) ? ($ov['data']['holder'] ?? null) : null;
         if ($ov === null) {
-            $warn[] = 'RIPEstat (opis AS) nie odpowiedział.';
+            $warn[] = Lang::t('RIPEstat (opis AS) nie odpowiedział.');
         }
 
         $ann = $this->get(self::STAT . "announced-prefixes/data.json?resource=AS{$asn}&sourceapp=netella-reg");
         if ($ann === null) {
-            $warn[] = 'RIPEstat (prefiksy ogłaszane w BGP) nie odpowiedział.';
+            $warn[] = Lang::t('RIPEstat (prefiksy ogłaszane w BGP) nie odpowiedział.');
         }
         foreach (is_array($ann) ? ($ann['data']['prefixes'] ?? []) : [] as $p) {
             $add((string) ($p['prefix'] ?? ''), 'bgp');
@@ -98,7 +107,7 @@ final class RipeLookup
         $routes = $this->get(self::DB . "search.json?query-string=AS{$asn}&inverse-attribute=origin&type-filter=route&type-filter=route6"
             . '&flags=no-referenced&flags=no-irt');
         if ($routes === null) {
-            $warn[] = 'Baza RIPE (obiekty route) nie odpowiedziała.';
+            $warn[] = Lang::t('Baza RIPE (obiekty route) nie odpowiedziała.');
         }
         foreach (self::objects($routes) as $o) {
             $a = self::attrs($o);
@@ -134,7 +143,7 @@ final class RipeLookup
         }
 
         if ($ann === null && $routes === null) {
-            throw new \RuntimeException('Nie udało się pobrać danych z RIPE (RIPEstat i baza RIPE nie odpowiadają). Spróbuj później.');
+            throw new \RuntimeException(Lang::t('Nie udało się pobrać danych z RIPE (RIPEstat i baza RIPE nie odpowiadają). Spróbuj później.'));
         }
 
         // Przydział z bazy RIPE dla prefiksów IPv4 bez niego.
@@ -157,7 +166,7 @@ final class RipeLookup
             }
         }
         if ($skipped) {
-            $warn[] = "Baza RIPE odpowiada wolno: bez danych o przydziale zostało {$skipped} prefiksów.";
+            $warn[] = Lang::t('Baza RIPE odpowiada wolno: bez danych o przydziale zostało {n} prefiksów.', ['n' => $skipped]);
         }
 
         $list = array_values($found);

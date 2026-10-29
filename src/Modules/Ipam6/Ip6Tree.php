@@ -26,6 +26,8 @@
 
 namespace Ispnetella\NetellaReg\Modules\Ipam6;
 
+use Ispnetella\NetellaReg\Core\Lang;
+
 final class Ip6Tree
 {
     /** Najdłuższa maska węzła w korzeniu drzewa. */
@@ -169,7 +171,7 @@ final class Ip6Tree
             return;
         }
         foreach (array_keys($groups) as $hex) {
-            $this->addNode(Ip6Calc::fromHex((string) $hex), self::ROOT_LEN, 'virtual', ['label' => 'poza znaną adresacją', 'outside' => true], false);
+            $this->addNode(Ip6Calc::fromHex((string) $hex), self::ROOT_LEN, 'virtual', ['label' => Lang::t('poza znaną adresacją'), 'outside' => true], false);
         }
         $this->relink();
     }

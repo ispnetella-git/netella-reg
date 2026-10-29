@@ -39,6 +39,8 @@
 
 namespace Ispnetella\NetellaReg\Modules\Ipam;
 
+use Ispnetella\NetellaReg\Core\Lang;
+
 final class IpTree
 {
     /** Najdłuższa maska węzła w korzeniu drzewa (drobniejsze grupujemy w /24). */
@@ -138,7 +140,7 @@ final class IpTree
             return;
         }
         foreach (array_keys($groups) as $g) {
-            $this->addNode($g, self::ROOT_LEN, 'virtual', ['label' => 'poza znaną adresacją', 'outside' => true], false);
+            $this->addNode($g, self::ROOT_LEN, 'virtual', ['label' => Lang::t('poza znaną adresacją'), 'outside' => true], false);
         }
         foreach ($this->nodes as &$n) {
             $n['parent'] = null;

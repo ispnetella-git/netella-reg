@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Ispnetella\NetellaReg\Contracts\RegModule;
 use Ispnetella\NetellaReg\Core\Access;
 use Ispnetella\NetellaReg\Core\ApiException;
+use Ispnetella\NetellaReg\Core\Lang;
 
 abstract class AbstractModule implements RegModule
 {
@@ -27,7 +28,7 @@ abstract class AbstractModule implements RegModule
 
     public function api(string $action, Request $request): array
     {
-        throw new ApiException("Nieznana akcja '$action'", 404);
+        throw new ApiException(Lang::t('Nieznana akcja „{action}”', ['action' => $action]), 404);
     }
 
     /** Domyślnie odczyt wymaga view, a każda zmiana edit. */

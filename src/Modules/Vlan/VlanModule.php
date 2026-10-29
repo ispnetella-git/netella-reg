@@ -20,6 +20,7 @@ use Ispnetella\NetellaReg\Core\ApiException;
 use Ispnetella\NetellaReg\Core\AuditLog;
 use Ispnetella\NetellaReg\Core\Db;
 use Ispnetella\NetellaReg\Core\Expiry;
+use Ispnetella\NetellaReg\Core\Lang;
 use Ispnetella\NetellaReg\Core\Settings;
 use Ispnetella\NetellaReg\Core\Snapshot;
 use Ispnetella\NetellaReg\Core\SyncContext;
@@ -43,7 +44,7 @@ final class VlanModule extends AbstractModule
 
     public function name(): string
     {
-        return 'VLAN-y';
+        return Lang::t('VLAN-y');
     }
 
     public function schemaVersion(): int
@@ -61,7 +62,7 @@ final class VlanModule extends AbstractModule
     public function sync(SyncContext $ctx): array
     {
         $current = (new VlanCollector())->collect();
-        $ctx->log(count($current) . ' wystąpień VLAN-ów w LibreNMS');
+        $ctx->log(Lang::t('{n} wystąpień VLAN-ów w LibreNMS', ['n' => count($current)]));
 
         $summary = $ctx->snapshot->apply(self::KEY, self::TYPE, $current, $ctx->now);
 
@@ -110,7 +111,7 @@ final class VlanModule extends AbstractModule
     private function requirePost(Request $request): void
     {
         if (! $request->isMethod('POST')) {
-            throw new ApiException('Wymagany POST.', 405);
+            throw new ApiException(Lang::t('Wymagany POST.'), 405);
         }
     }
 
@@ -130,7 +131,7 @@ final class VlanModule extends AbstractModule
             $now = [];
             $adopted = 0;
             foreach ($g['vlans_list'] as $v) {
-                $label = VlanIndex::LABELS[$index->status($v)];
+                $label = Lang::t(VlanIndex::LABELS[$index->status($v)]);
                 $now[$label] = ($now[$label] ?? 0) + 1;
                 $adopted += empty($index->manual($v)['adopted_at']) ? 0 : 1;
             }
@@ -139,7 +140,7 @@ final class VlanModule extends AbstractModule
             return $g + ['current' => $now, 'adopted_count' => $adopted];
         }, $this->manualRepo()->grouped());
 
-        return ['rows' => $rows, 'status_labels' => VlanManual::STATUS_LABELS];
+        return ['rows' => $rows, 'status_labels' => VlanManual::statusLabels()];
     }
 
     private function apiManualCreate(Request $request): array
@@ -244,7 +245,7 @@ final class VlanModule extends AbstractModule
             'manual' => $index->manualMask(),
             'expired' => $index->expiredMask(),
             'counts' => $index->counts(),
-            'labels' => VlanIndex::LABELS,
+            'labels' => VlanIndex::labels(),
             'sync' => SyncRunner::last(self::KEY),
             'grace_days' => Settings::graceDays(),
             'disabled_mode' => Settings::disabledMode(),
@@ -254,14 +255,14 @@ final class VlanModule extends AbstractModule
     private function apiDetail(int $vlan): array
     {
         if ($vlan < VlanName::MIN || $vlan > VlanName::MAX) {
-            throw new ApiException('Numer VLAN poza zakresem 1-4094.');
+            throw new ApiException(Lang::t('Numer VLAN poza zakresem 1-4094.'));
         }
 
         $index = $this->index();
         $occ = array_map(function (array $r) {
             return $r['data'] + [
                 'state' => $r['state'],
-                'state_label' => VlanIndex::LABELS[$r['state']] ?? $r['state'],
+                'state_label' => Lang::t(VlanIndex::LABELS[$r['state']] ?? $r['state']),
                 'first_seen' => $r['first_seen'],
                 'last_seen' => $r['last_seen'],
                 'gone_at' => $r['gone_at'],
@@ -277,12 +278,12 @@ final class VlanModule extends AbstractModule
         return [
             'vlan' => $vlan,
             'status' => $index->status($vlan),
-            'status_label' => VlanIndex::LABELS[$index->status($vlan)],
+            'status_label' => Lang::t(VlanIndex::LABELS[$index->status($vlan)]),
             'names' => $names,
             // Wpis ręczny: przy numerze z LibreNMS to adnotacja, inaczej źródło statusu.
             'manual' => $index->manual($vlan),
             'manual_group' => $this->groupOf($index->manual($vlan)),
-            'status_labels' => VlanManual::STATUS_LABELS,
+            'status_labels' => VlanManual::statusLabels(),
             'occurrences' => $occ,
             'history' => self::historyOf($vlan),
         ];
@@ -323,7 +324,7 @@ final class VlanModule extends AbstractModule
 
         $summary = [];
         foreach ($byStatus as $s => $list) {
-            $summary[$s] = ['count' => count($list), 'list' => VlanRange::compress($list), 'label' => VlanIndex::LABELS[$s]];
+            $summary[$s] = ['count' => count($list), 'list' => VlanRange::compress($list), 'label' => Lang::t(VlanIndex::LABELS[$s])];
         }
 
         return [
@@ -338,7 +339,7 @@ final class VlanModule extends AbstractModule
     private function apiFree(int $count, int $from, int $to): array
     {
         if ($count < 1 || $count > VlanName::MAX) {
-            throw new ApiException('Liczba numerów musi być z zakresu 1-4094.');
+            throw new ApiException(Lang::t('Liczba numerów musi być z zakresu 1-4094.'));
         }
 
         $index = $this->index();

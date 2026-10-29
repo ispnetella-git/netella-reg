@@ -59,68 +59,68 @@
 </style>
 
 <div class="nreg-toolbar">
-    <label style="margin:0">Przestrzeń:</label>
+    <label style="margin:0">{{ nreg_t('Przestrzeń:') }}</label>
     <select class="form-control" id="nreg-ip-space" style="width:auto;height:30px;padding:4px 8px"></select>
     @if($nregBoot['canAdmin'])
-        <button class="btn btn-default btn-xs" type="button" id="nreg-ip-newspace" title="Nowa przestrzeń adresowa (VRF, klient)"><i class="fa fa-plus"></i></button>
+        <button class="btn btn-default btn-xs" type="button" id="nreg-ip-newspace" title="{{ nreg_t('Nowa przestrzeń adresowa (VRF, klient)') }}"><i class="fa fa-plus"></i></button>
     @endif
     <form id="nreg-ip-search">
-        <input class="form-control" id="nreg-ip-q" placeholder="adres, prefiks albo tekst" style="width: 220px;">
-        <button class="btn btn-primary btn-sm" type="submit"><i class="fa fa-search"></i> Szukaj</button>
+        <input class="form-control" id="nreg-ip-q" placeholder="{{ nreg_t('adres, prefiks albo tekst') }}" style="width: 220px;">
+        <button class="btn btn-primary btn-sm" type="submit"><i class="fa fa-search"></i> {{ nreg_t('Szukaj') }}</button>
     </form>
     <form id="nreg-ip-free">
-        <span>Wolne</span>
+        <span>{{ nreg_t('Wolne') }}</span>
         <input class="form-control nreg-num" type="number" min="8" max="32" value="29" id="nreg-ip-len" style="width:64px !important">
-        <span>w</span>
+        <span>{{ nreg_t('w') }}</span>
         <input class="form-control nreg-mono" id="nreg-ip-within" style="width: 160px;">
-        <button class="btn btn-default btn-sm" type="submit"><i class="fa fa-search"></i> Znajdź</button>
+        <button class="btn btn-default btn-sm" type="submit"><i class="fa fa-search"></i> {{ nreg_t('Znajdź') }}</button>
     </form>
     @if($nregBoot['canEdit'])
-        <button class="btn btn-success btn-sm" id="nreg-ip-add" type="button"><i class="fa fa-plus"></i> Dodaj adresację</button>
-        <button class="btn btn-default btn-sm" id="nreg-ip-ripebtn" type="button" title="Pobierz prefiksy numeru AS z RIPE i dodaj wybrane jako agregaty">
-            <i class="fa fa-globe"></i> Pobierz z RIPE</button>
+        <button class="btn btn-success btn-sm" id="nreg-ip-add" type="button"><i class="fa fa-plus"></i> {{ nreg_t('Dodaj adresację') }}</button>
+        <button class="btn btn-default btn-sm" id="nreg-ip-ripebtn" type="button" title="{{ nreg_t('Pobierz prefiksy numeru AS z RIPE i dodaj wybrane jako agregaty') }}">
+            <i class="fa fa-globe"></i> {{ nreg_t('Pobierz z RIPE') }}</button>
     @endif
-    <label class="nreg-sub" style="margin:0;font-weight:normal;opacity:1" title="Sieci i adresy z LibreNMS spoza adresacji wewnętrznej i prefiksów dodanych ręcznie (np. połączenia BGP na adresacji peerów). Swoje prefiksy publiczne dodaj ręcznie albo przyciskiem „Pobierz z RIPE”.">
-        <input type="checkbox" id="nreg-ip-outside" style="vertical-align:-2px"> Pokaż adresację spoza agregatów</label>
+    <label class="nreg-sub" style="margin:0;font-weight:normal;opacity:1" title="{{ nreg_t('Sieci i adresy z LibreNMS spoza adresacji wewnętrznej i prefiksów dodanych ręcznie (np. połączenia BGP na adresacji peerów). Swoje prefiksy publiczne dodaj ręcznie albo przyciskiem „Pobierz z RIPE”.') }}">
+        <input type="checkbox" id="nreg-ip-outside" style="vertical-align:-2px"> {{ nreg_t('Pokaż adresację spoza agregatów') }}</label>
     @if(($nregBoot['disabledMode'] ?? 'stale') === 'stale')
-        <label class="nreg-sub" style="margin:0;font-weight:normal;opacity:1" title="Adresy z hostów wyłączonych w LibreNMS. Ukryte są w drzewie i szukaniu wolnych jak wolne; dodanie ich ręcznie i tak blokuje LibreNMS.">
-            <input type="checkbox" id="nreg-ip-stale" style="vertical-align:-2px"> Pokaż adresy z wyłączonych hostów</label>
+        <label class="nreg-sub" style="margin:0;font-weight:normal;opacity:1" title="{{ nreg_t('Adresy z hostów wyłączonych w LibreNMS. Ukryte są w drzewie i szukaniu wolnych jak wolne; dodanie ich ręcznie i tak blokuje LibreNMS.') }}">
+            <input type="checkbox" id="nreg-ip-stale" style="vertical-align:-2px"> {{ nreg_t('Pokaż adresy z wyłączonych hostów') }}</label>
     @endif
     <span class="nreg-sub" id="nreg-ip-sync"></span>
 </div>
 
 @if($nregBoot['canEdit'])
     <form class="nreg-form" id="nreg-ip-form" style="display:none" autocomplete="off">
-        <h4 id="nreg-if-title" style="margin-top:0">Dodaj adresację</h4>
+        <h4 id="nreg-if-title" style="margin-top:0">{{ nreg_t('Dodaj adresację') }}</h4>
         <input type="hidden" name="id">
         <input type="hidden" name="group" value="0">
         <div class="row">
             <div class="col-sm-4">
-                <label class="req" for="nreg-if-target">Adres, zakres albo prefiks</label>
-                <input class="form-control nreg-mono" id="nreg-if-target" name="target" placeholder="10.0.0.0/24, 10.0.0.5 albo 10.0.0.10-20">
+                <label class="req" for="nreg-if-target">{{ nreg_t('Adres, zakres albo prefiks') }}</label>
+                <input class="form-control nreg-mono" id="nreg-if-target" name="target" placeholder="{{ nreg_t('10.0.0.0/24, 10.0.0.5 albo 10.0.0.10-20') }}">
                 <select class="form-control input-sm" id="nreg-if-as" name="as" style="display:none;margin-top:4px">
-                    <option value="addresses">osobne adresy (grupa)</option>
-                    <option value="range">jeden zakres (pula DHCP, PPPoE, NAT…)</option>
+                    <option value="addresses">{{ nreg_t('osobne adresy (grupa)') }}</option>
+                    <option value="range">{{ nreg_t('jeden zakres (pula DHCP, PPPoE, NAT…)') }}</option>
                 </select>
             </div>
             <div class="col-sm-3">
-                <label for="nreg-if-role">Rola</label>
+                <label for="nreg-if-role">{{ nreg_t('Rola') }}</label>
                 <select class="form-control" id="nreg-if-role" name="role"></select>
             </div>
             <div class="col-sm-5">
-                <label class="req" for="nreg-if-name">Nazwa</label>
+                <label class="req" for="nreg-if-name">{{ nreg_t('Nazwa') }}</label>
                 <input class="form-control" id="nreg-if-name" name="name" maxlength="64">
             </div>
         </div>
         <div class="row">
             <div class="col-sm-12">
-                <label for="nreg-if-description">Opis</label>
+                <label for="nreg-if-description">{{ nreg_t('Opis') }}</label>
                 <textarea class="form-control" id="nreg-if-description" name="description" rows="2" maxlength="1000"></textarea>
             </div>
         </div>
         <div class="row">
             <div class="col-sm-4">
-                <label for="nreg-if-owner">Właściciel / klient</label>
+                <label for="nreg-if-owner">{{ nreg_t('Właściciel / klient') }}</label>
                 <input class="form-control" id="nreg-if-owner" name="owner" maxlength="128">
             </div>
             <div class="col-sm-2">
@@ -128,49 +128,49 @@
                 <input class="form-control" id="nreg-if-vlan" name="vlan" type="number" min="1" max="4094">
             </div>
             <div class="col-sm-2">
-                <label for="nreg-if-valid">Ważne do</label>
-                <input class="form-control" id="nreg-if-valid" name="valid_until" type="date" title="opcjonalnie; po terminie wpis zostaje, ale jest oznaczony jako przeterminowany">
+                <label for="nreg-if-valid">{{ nreg_t('Ważne do') }}</label>
+                <input class="form-control" id="nreg-if-valid" name="valid_until" type="date" title="{{ nreg_t('opcjonalnie; po terminie wpis zostaje, ale jest oznaczony jako przeterminowany') }}">
             </div>
             <div class="col-sm-4">
-                <label for="nreg-if-devices">Urządzenia / lokalizacja</label>
+                <label for="nreg-if-devices">{{ nreg_t('Urządzenia / lokalizacja') }}</label>
                 <input class="form-control" id="nreg-if-devices" name="devices" maxlength="1000" list="nreg-if-devlist"
-                       placeholder="wybierz host z LibreNMS albo wpisz">
+                       placeholder="{{ nreg_t('wybierz host z LibreNMS albo wpisz') }}">
                 <datalist id="nreg-if-devlist"></datalist>
             </div>
         </div>
         <div class="row">
             <div class="col-sm-12">
-                <label for="nreg-if-comment">Komentarz do zmiany (trafi do dziennika)</label>
+                <label for="nreg-if-comment">{{ nreg_t('Komentarz do zmiany (trafi do dziennika)') }}</label>
                 <input class="form-control" id="nreg-if-comment" name="comment" maxlength="1000">
             </div>
         </div>
-        <button class="btn btn-primary btn-sm" type="submit"><i class="fa fa-save"></i> Zapisz</button>
-        <button class="btn btn-default btn-sm" type="button" id="nreg-if-cancel">Anuluj</button>
+        <button class="btn btn-primary btn-sm" type="submit"><i class="fa fa-save"></i> {{ nreg_t('Zapisz') }}</button>
+        <button class="btn btn-default btn-sm" type="button" id="nreg-if-cancel">{{ nreg_t('Anuluj') }}</button>
         <span class="text-danger" id="nreg-if-error" style="margin-left:10px"></span>
     </form>
 @endif
 
 @if($nregBoot['canEdit'])
     <div class="nreg-form" id="nreg-ip-ripe" style="display:none">
-        <h4 style="margin-top:0">Agregaty z RIPE według numeru AS</h4>
+        <h4 style="margin-top:0">{{ nreg_t('Agregaty z RIPE według numeru AS') }}</h4>
         <form class="nreg-toolbar" id="nreg-ir-form" style="margin:0 0 6px" autocomplete="off">
-            <label for="nreg-ir-asn" style="margin:0">Numer AS:</label>
+            <label for="nreg-ir-asn" style="margin:0">{{ nreg_t('Numer AS:') }}</label>
             <input class="form-control nreg-mono" id="nreg-ir-asn" style="width: 140px;">
-            <button class="btn btn-primary btn-sm" type="submit"><i class="fa fa-download"></i> Pobierz z RIPE</button>
-            <button class="btn btn-default btn-sm" type="button" id="nreg-ir-close">Zamknij</button>
-            <span class="nreg-sub">Źródła: prefiksy ogłaszane w BGP (RIPEstat), obiekty route i przydziały organizacji AS (baza RIPE).</span>
+            <button class="btn btn-primary btn-sm" type="submit"><i class="fa fa-download"></i> {{ nreg_t('Pobierz z RIPE') }}</button>
+            <button class="btn btn-default btn-sm" type="button" id="nreg-ir-close">{{ nreg_t('Zamknij') }}</button>
+            <span class="nreg-sub">{{ nreg_t('Źródła: prefiksy ogłaszane w BGP (RIPEstat), obiekty route i przydziały organizacji AS (baza RIPE).') }}</span>
         </form>
         <div id="nreg-ir-out"></div>
     </div>
 @endif
 
 <div id="nreg-ip-result"></div>
-<details id="nreg-ip-issues"><summary>Uwagi</summary><div></div></details>
-<details id="nreg-ip-manual"><summary>Wpisy ręczne</summary><div></div></details>
+<details id="nreg-ip-issues"><summary>{{ nreg_t('Uwagi') }}</summary><div></div></details>
+<details id="nreg-ip-manual"><summary>{{ nreg_t('Wpisy ręczne') }}</summary><div></div></details>
 
 <div class="nreg-ip-cols">
-    <div class="nreg-ip-left"><div id="nreg-ip-tree"><p class="nreg-muted">Ładowanie drzewa…</p></div></div>
-    <div class="nreg-ip-right" id="nreg-ip-detail"><p class="nreg-muted">Kliknij sieć albo adres, żeby zobaczyć szczegóły.</p></div>
+    <div class="nreg-ip-left"><div id="nreg-ip-tree"><p class="nreg-muted">{{ nreg_t('Ładowanie drzewa…') }}</p></div></div>
+    <div class="nreg-ip-right" id="nreg-ip-detail"><p class="nreg-muted">{{ nreg_t('Kliknij sieć albo adres, żeby zobaczyć szczegóły.') }}</p></div>
 </div>
 
 <script>
@@ -184,22 +184,22 @@ document.addEventListener('nreg:ready', function () {
     var space = 1, labels = {}, prefixRoles = {}, addressRoles = {}, rangeRoles = {}, manualCache = {}, selectedEl = null, loaded = false;
     // Numer ostatniego żądania szczegółów: odpowiedź starszego żądania jest pomijana.
     var detailSeq = 0, DETAIL_HINT = detail.innerHTML;
-    var STATE_BDG = { l: 'LibreNMS', s: 'host wyłączony', m: 'ręczny', r: 'rezerwacja', g: 'zniknął' };
-    var CONFLICT_HINT = 'Adres z LibreNMS leży w zakresie dodanym ręcznie (np. puli NAT albo PPPoE). To może być błąd w konfiguracji sieci.';
+    var STATE_BDG = { l: 'LibreNMS', s: N.t('host wyłączony'), m: N.t('ręczny'), r: N.t('rezerwacja'), g: N.t('zniknął') };
+    var CONFLICT_HINT = N.t('Adres z LibreNMS leży w zakresie dodanym ręcznie (np. puli NAT albo PPPoE). To może być błąd w konfiguracji sieci.');
     // Adresy wyłączonych hostów domyślnie ukryte (traktowane jak wolne); wybór zapamiętany w przeglądarce.
     var staleBox = document.getElementById('nreg-ip-stale'), showStale = !!staleBox && localStorage.getItem('nreg-ip-stale') === '1';
     if (staleBox) { staleBox.checked = showStale; }
     // Adresacja z LibreNMS spoza agregatów i adresacji wewnętrznej domyślnie ukryta.
     var outsideBox = document.getElementById('nreg-ip-outside'), showOutside = localStorage.getItem('nreg-ip-outside') === '1';
     outsideBox.checked = showOutside;
-    var OUTSIDE_HINT = 'Ten adres jest poza agregatami i adresacją wewnętrzną, więc nie ma go w drzewie. Zaznacz „Pokaż adresację spoza agregatów” albo dodaj swój prefiks jako agregat.';
+    var OUTSIDE_HINT = N.t('Ten adres jest poza agregatami i adresacją wewnętrzną, więc nie ma go w drzewie. Zaznacz „Pokaż adresację spoza agregatów” albo dodaj swój prefiks jako agregat.');
 
-    Object.assign(N.fieldLabels, { ips: 'adresy', prefix: 'prefiks', range: 'zakres', role: 'rola', ip: 'adres', len: 'maska', 'if': 'interfejs',
-        alias: 'opis portu', network: 'sieć', ctx: 'VRF', vlan: 'VLAN' });
+    Object.assign(N.fieldLabels, { ips: N.t('adresy'), prefix: N.t('prefiks'), range: N.t('zakres'), role: N.t('rola'), ip: N.t('adres'), len: N.t('maska'), 'if': N.t('interfejs'),
+        alias: N.t('opis portu'), network: N.t('sieć'), ctx: 'VRF', vlan: 'VLAN' });
 
     function alertBox(kind, html) { return '<div class="alert alert-' + kind + '">' + html + '</div>'; }
     // Ikona kopiowania adresacji do schowka (obsługa w handlerze kliknięć zakładki).
-    function copyBtn(text) { return '<a href="#" class="nreg-copy" data-copy="' + esc(text) + '" title="kopiuj ' + esc(text) + '"><i class="fa fa-clipboard"></i></a>'; }
+    function copyBtn(text) { return '<a href="#" class="nreg-copy" data-copy="' + esc(text) + '" title="' + esc(N.t('kopiuj {text}', { text: text })) + '"><i class="fa fa-clipboard"></i></a>'; }
 
     function copyText(text) {
         if (navigator.clipboard && window.isSecureContext) { return navigator.clipboard.writeText(text); }
@@ -218,19 +218,19 @@ document.addEventListener('nreg:ready', function () {
 
     function bar(util) {
         var cls = util >= 90 ? 'c' : (util >= 70 ? 'w' : '');
-        return '<span class="nreg-bar" title="zajętość ' + util + '%"><i class="' + cls + '" style="width:' + Math.min(100, util) + '%"></i></span>';
+        return '<span class="nreg-bar" title="' + esc(N.t('zajętość {util}%', { util: util })) + '"><i class="' + cls + '" style="width:' + Math.min(100, util) + '%"></i></span>';
     }
 
     function nodeBadges(n) {
         var h = '';
-        if (n.virtual) { h += '<span class="nreg-bdg v"' + (n.outside ? ' title="grupa porządkowa: poza agregatami i adresacją wewnętrzną"' : '') + '>grupa /' + n.len + '</span>'; }
-        if (n.sources.indexOf('implicit') >= 0 && !n.manual && !n.state) { h += '<span class="nreg-bdg v" title="ustawienie „Adresacja wewnętrzna”">wewnętrzna</span>'; }
+        if (n.virtual) { h += '<span class="nreg-bdg v"' + (n.outside ? ' title="' + esc(N.t('grupa porządkowa: poza agregatami i adresacją wewnętrzną')) + '"' : '') + '>' + esc(N.t('grupa /{len}', { len: n.len })) + '</span>'; }
+        if (n.sources.indexOf('implicit') >= 0 && !n.manual && !n.state) { h += '<span class="nreg-bdg v" title="' + esc(N.t('ustawienie „Adresacja wewnętrzna”')) + '">' + esc(N.t('wewnętrzna')) + '</span>'; }
         if (n.state) { h += '<span class="nreg-bdg ' + n.state + '">' + esc(STATE_BDG[n.state]) + '</span>'; }
         if (n.manual) {
             h += '<span class="nreg-bdg ' + (n.manual.role === 'reserved' ? 'r' : 'm') + '">' + esc(n.manual.role_label) + '</span>';
-            if (n.manual.expiry === 'expired') { h += '<span class="nreg-bdg d" title="termin ważności ' + esc(n.manual.valid_until) + '">termin minął</span>'; }
+            if (n.manual.expiry === 'expired') { h += '<span class="nreg-bdg d" title="' + esc(N.t('termin ważności {date}', { date: n.manual.valid_until })) + '">' + esc(N.t('termin minął')) + '</span>'; }
         }
-        if (n.range && n.conflicts) { h += '<span class="nreg-bdg d" title="' + esc(CONFLICT_HINT) + '">' + n.conflicts + ' adr. z LibreNMS</span>'; }
+        if (n.range && n.conflicts) { h += '<span class="nreg-bdg d" title="' + esc(CONFLICT_HINT) + '">' + esc(N.t('{n} adr. z LibreNMS', { n: n.conflicts })) + '</span>'; }
         n.vlans.forEach(function (v) { h += '<a class="nreg-bdg v" href="' + esc(can.page) + '?vlan=' + v + '#vlan" title="VLAN ' + v + '">VLAN ' + v + '</a>'; });
         return h;
     }
@@ -243,17 +243,17 @@ document.addEventListener('nreg:ready', function () {
             + '<span class="tg" data-toggle-node="' + esc(n.cidr) + '">' + (expandable ? '▸' : '·') + '</span>'
             + '<span class="cidr" data-open-node="' + esc(n.cidr) + '">' + esc(n.range ? n.first + ' – ' + n.last : n.cidr) + '</span>' + nodeBadges(n)
             + '<span class="lbl" title="' + esc(n.label || '') + '">' + esc(n.label || '') + '</span>'
-            + bar(s.util) + '<span class="cnt" title="zajęte / pojemność, adresów: ' + s.addresses + '">' + s.used + '/' + s.capacity + '</span></div>'
+            + bar(s.util) + '<span class="cnt" title="' + esc(N.t('zajęte / pojemność, adresów: {n}', { n: s.addresses })) + '">' + s.used + '/' + s.capacity + '</span></div>'
             + '<div class="nreg-tc" data-children-of="' + esc(n.cidr) + '" style="display:none"></div>';
     }
 
     function addrRow(a, depth) {
         var who = a.rows.map(function (r) { return r.device + ' ' + r['if'] + (r.alias ? ' (' + r.alias + ')' : ''); });
-        if (a.manual) { who.push((a.manual.name || a.manual.description) + ' [ręczny' + (a.manual.expiry === 'expired' ? ', termin minął' : '') + ']'); }
+        if (a.manual) { who.push((a.manual.name || a.manual.description) + ' [' + (a.manual.expiry === 'expired' ? N.t('ręczny, termin minął') : N.t('ręczny')) + ']'); }
         return '<div class="nreg-ta' + (a.conflict ? ' cf' : '') + '" data-open-ip="' + esc(a.ip) + '" style="padding-left:' + (depth * 16 + 22) + 'px">'
             + '<span class="ip">' + esc(a.ip) + '</span><span class="nreg-bdg ' + a.state + '">' + esc(STATE_BDG[a.state] || a.state) + '</span>'
-            + (a.conflict ? '<span class="nreg-bdg d" title="' + esc(CONFLICT_HINT) + '">w zakresie ręcznym</span>' : '')
-            + (a.dup ? '<span class="nreg-bdg d" title="ten sam adres na kilku urządzeniach">duplikat</span>' : '')
+            + (a.conflict ? '<span class="nreg-bdg d" title="' + esc(CONFLICT_HINT) + '">' + esc(N.t('w zakresie ręcznym')) + '</span>' : '')
+            + (a.dup ? '<span class="nreg-bdg d" title="' + esc(N.t('ten sam adres na kilku urządzeniach')) + '">' + esc(N.t('duplikat')) + '</span>' : '')
             + '<span class="who">' + esc(who.join(' · ')) + '</span></div>';
     }
 
@@ -261,17 +261,17 @@ document.addEventListener('nreg:ready', function () {
     function freeRow(f, depth) {
         var target, text, info;
         if (f.type === 'prefix') {
-            target = f.cidr; text = f.cidr; info = 'wolny · ' + f.size + ' adr.';
+            target = f.cidr; text = f.cidr; info = N.t('wolny · {n} adr.', { n: f.size });
         } else {
             target = f.count === 1 ? f.first : f.first + '-' + f.last;
             text = f.count === 1 ? f.first : f.first + ' – ' + f.last;
-            info = 'wolne · ' + f.count + ' adr.';
+            info = N.t('wolne · {n} adr.', { n: f.count });
         }
         // Do formularza tylko to, co da się dodać jednym wpisem (zakres adresów do 1024).
         var addable = can.canEdit && (f.type === 'prefix' || f.count <= 1024);
-        return '<div class="nreg-tf' + (addable ? ' add' : '') + '"' + (addable ? ' data-add="' + esc(target) + '" title="kliknij, aby dodać wpis ręczny"' : '')
+        return '<div class="nreg-tf' + (addable ? ' add' : '') + '"' + (addable ? ' data-add="' + esc(target) + '" title="' + esc(N.t('kliknij, aby dodać wpis ręczny')) + '"' : '')
             + ' style="padding-left:' + (depth * 16 + 22) + 'px"><span class="ip">' + esc(text) + '</span><span>' + esc(info) + '</span>'
-            + (addable ? '<span class="plus"><i class="fa fa-plus"></i> dodaj</span>' : '') + '</div>';
+            + (addable ? '<span class="plus"><i class="fa fa-plus"></i> ' + esc(N.t('dodaj')) + '</span>' : '') + '</div>';
     }
 
     function depthOf(el) { return parseInt(el.getAttribute('data-depth') || '0', 10); }
@@ -287,10 +287,10 @@ document.addEventListener('nreg:ready', function () {
             items.sort(function (x, y) { return x.n - y.n; });
             var h = items.map(function (i) { return i.html; }).join('');
             if (j.addresses_total > j.addresses.length) {
-                h += '<div class="nreg-muted" style="padding-left:' + (depth * 16 + 22) + 'px;font-size:11px">… i ' + (j.addresses_total - j.addresses.length) + ' więcej</div>';
+                h += '<div class="nreg-muted" style="padding-left:' + (depth * 16 + 22) + 'px;font-size:11px">' + esc(N.t('… i {n} więcej', { n: j.addresses_total - j.addresses.length })) + '</div>';
             }
             container.innerHTML = h || (String(cidr).indexOf('range:') === 0 ? ''
-                : '<p class="nreg-muted" style="padding-left:' + (depth * 16 + 4) + 'px">Brak adresacji w tej przestrzeni.</p>');
+                : '<p class="nreg-muted" style="padding-left:' + (depth * 16 + 4) + 'px">' + esc(N.t('Brak adresacji w tej przestrzeni.')) + '</p>');
             container.querySelectorAll('.nreg-tc').forEach(function (c) { c.setAttribute('data-depth', depth + 1); });
             container.setAttribute('data-loaded', '1');
         });
@@ -306,14 +306,14 @@ document.addEventListener('nreg:ready', function () {
         box.style.display = show ? '' : 'none';
         tg.textContent = show ? '▾' : '▸';
         if (show && !box.getAttribute('data-loaded')) {
-            box.innerHTML = '<p class="nreg-muted" style="font-size:11px;padding-left:20px">Ładowanie…</p>';
+            box.innerHTML = '<p class="nreg-muted" style="font-size:11px;padding-left:20px">' + esc(N.t('Ładowanie…')) + '</p>';
             return loadChildren(cidr, box, depthOf(box));
         }
         return Promise.resolve();
     }
 
     function loadRoot() {
-        treeEl.innerHTML = '<p class="nreg-muted">Ładowanie drzewa…</p>';
+        treeEl.innerHTML = '<p class="nreg-muted">' + esc(N.t('Ładowanie drzewa…')) + '</p>';
         treeEl.setAttribute('data-depth', '0');
         return loadChildren('', treeEl, 0).catch(function (e) { treeEl.innerHTML = alertBox('danger', esc(e.message)); });
     }
@@ -362,17 +362,17 @@ document.addEventListener('nreg:ready', function () {
 
     function renderSync(sync, v6) {
         var el = document.getElementById('nreg-ip-sync');
-        el.innerHTML = sync ? 'Dane z LibreNMS z ' + esc(sync.at) + (sync.ok ? '' : ' <span class="text-danger">(błąd: ' + esc(sync.error) + ')</span>')
-            + (v6 ? ' &middot; IPv6: ' + v6 + ' adresów (bez drzewa)' : '')
-            : '<span class="text-warning">Brak synchronizacji modułu adresacji.</span>';
+        el.innerHTML = sync ? N.t('Dane z LibreNMS z {at}', { at: esc(sync.at) }) + (sync.ok ? '' : ' <span class="text-danger">' + N.t('(błąd: {error})', { error: esc(sync.error) }) + '</span>')
+            + (v6 ? ' &middot; ' + N.t('IPv6: {n} adresów (bez drzewa)', { n: v6 }) : '')
+            : '<span class="text-warning">' + esc(N.t('Brak synchronizacji modułu adresacji.')) + '</span>';
     }
 
     // ---------------------------------------------------------------- szczegóły
 
     function lnmsTable(rows, withIp) {
         if (!rows.length) { return ''; }
-        return '<table class="table table-condensed" style="font-size:12px"><thead><tr><th>Urządzenie</th><th>Interfejs</th><th>Opis portu</th>'
-            + (withIp ? '<th>Adres</th>' : '<th>Maska</th>') + '<th>Stan</th></tr></thead><tbody>'
+        return '<table class="table table-condensed" style="font-size:12px"><thead><tr><th>' + esc(N.t('Urządzenie')) + '</th><th>' + esc(N.t('Interfejs')) + '</th><th>' + esc(N.t('Opis portu')) + '</th>'
+            + (withIp ? '<th>' + esc(N.t('Adres')) + '</th>' : '<th>' + esc(N.t('Maska')) + '</th>') + '<th>' + esc(N.t('Stan')) + '</th></tr></thead><tbody>'
             + rows.map(function (r) {
                 return '<tr><td><a href="' + esc(can.deviceUrl + '/' + r.device_id) + '">' + esc(r.device) + '</a></td><td>' + esc(r['if'])
                     + (r.vlan ? ' <a href="' + esc(can.page) + '?vlan=' + r.vlan + '#vlan">VLAN ' + r.vlan + '</a>' : '') + '</td><td>' + esc(r.alias || '') + '</td>'
@@ -383,100 +383,99 @@ document.addEventListener('nreg:ready', function () {
 
     function manualBlock(m) {
         manualCache[m.id] = m;
-        var h = '<div class="nreg-manual"><strong>Wpis ręczny</strong> <span class="nreg-bdg ' + (m.role === 'reserved' ? 'r' : 'm') + '">' + esc(m.role_label) + '</span> '
-            + (m.adopted_at ? '<span class="label label-primary">przejęty przez LibreNMS ' + esc(m.adopted_at) + '</span>' : '')
-            + '<dl style="margin-top:6px">' + (m.kind === 'range' ? '<dt>Zakres</dt><dd class="nreg-mono">' + esc(m.first + ' – ' + m.last) + copyBtn(m.first + '-' + m.last) + ' (' + m.size + ' adr.)</dd>' : '')
-            + (m.name ? '<dt>Nazwa</dt><dd>' + esc(m.name) + '</dd>' : '')
-            + (m.description ? '<dt>Opis</dt><dd>' + esc(m.description) + '</dd>' : '') + (m.owner ? '<dt>Właściciel</dt><dd>' + esc(m.owner) + '</dd>' : '')
+        var h = '<div class="nreg-manual"><strong>' + esc(N.t('Wpis ręczny')) + '</strong> <span class="nreg-bdg ' + (m.role === 'reserved' ? 'r' : 'm') + '">' + esc(m.role_label) + '</span> '
+            + (m.adopted_at ? '<span class="label label-primary">' + esc(N.t('przejęty przez LibreNMS {at}', { at: m.adopted_at })) + '</span>' : '')
+            + '<dl style="margin-top:6px">' + (m.kind === 'range' ? '<dt>' + esc(N.t('Zakres')) + '</dt><dd class="nreg-mono">' + esc(m.first + ' – ' + m.last) + copyBtn(m.first + '-' + m.last) + ' ' + esc(N.t('({n} adr.)', { n: m.size })) + '</dd>' : '')
+            + (m.name ? '<dt>' + esc(N.t('Nazwa')) + '</dt><dd>' + esc(m.name) + '</dd>' : '')
+            + (m.description ? '<dt>' + esc(N.t('Opis')) + '</dt><dd>' + esc(m.description) + '</dd>' : '') + (m.owner ? '<dt>' + esc(N.t('Właściciel')) + '</dt><dd>' + esc(m.owner) + '</dd>' : '')
             + (m.vlan ? '<dt>VLAN</dt><dd><a href="' + esc(can.page) + '?vlan=' + m.vlan + '#vlan">' + m.vlan + '</a></dd>' : '')
-            + (m.valid_until ? '<dt>Ważne do</dt><dd>' + N.expiryHtml(m) + '</dd>' : '')
-            + (m.devices ? '<dt>Urządzenia</dt><dd>' + esc(m.devices) + '</dd>' : '')
-            + '<dt>Dodał</dt><dd>' + esc(m.created_by || '?') + ', ' + esc(m.created_at) + '</dd></dl><div style="margin-top:6px">';
-        if (can.canEdit) { h += '<button class="btn btn-default btn-xs" type="button" data-edit="' + m.id + '" data-group="0"><i class="fa fa-pencil"></i> Edytuj</button> '; }
-        if (can.canDelete) { h += '<button class="btn btn-danger btn-xs" type="button" data-del="' + m.id + '" data-group="0" data-label="' + esc(m.ip || m.cidr) + '"><i class="fa fa-trash"></i> Usuń</button>'; }
+            + (m.valid_until ? '<dt>' + esc(N.t('Ważne do')) + '</dt><dd>' + N.expiryHtml(m) + '</dd>' : '')
+            + (m.devices ? '<dt>' + esc(N.t('Urządzenia')) + '</dt><dd>' + esc(m.devices) + '</dd>' : '')
+            + '<dt>' + esc(N.t('Dodał')) + '</dt><dd>' + esc(m.created_by || '?') + ', ' + esc(m.created_at) + '</dd></dl><div style="margin-top:6px">';
+        if (can.canEdit) { h += '<button class="btn btn-default btn-xs" type="button" data-edit="' + m.id + '" data-group="0"><i class="fa fa-pencil"></i> ' + esc(N.t('Edytuj')) + '</button> '; }
+        if (can.canDelete) { h += '<button class="btn btn-danger btn-xs" type="button" data-del="' + m.id + '" data-group="0" data-label="' + esc(m.ip || m.cidr) + '"><i class="fa fa-trash"></i> ' + esc(N.t('Usuń')) + '</button>'; }
         return h + '</div></div>';
     }
 
     function openRange(id) {
-        var put = detailLoader('Ładowanie zakresu…');
+        var put = detailLoader(N.t('Ładowanie zakresu…'));
         api('range', { id: id }).then(function (j) {
             var r = j.range, s = r.stats;
             var h = '<h4 class="nreg-mono">' + esc(r.first + ' – ' + r.last) + copyBtn(r.first + '-' + r.last) + ' ' + nodeBadges(r) + '</h4>'
-                + '<dl><dt>Rozmiar</dt><dd>' + s.size + ' adr.</dd>'
-                + '<dt>Zajęte</dt><dd>w całości (wpis ręczny)</dd>'
-                + '<dt>Adresów w środku</dt><dd>' + s.addresses + (r.conflicts ? ', z LibreNMS: ' + r.conflicts : '') + '</dd>'
-                + (j.container ? '<dt>W prefiksie</dt><dd><a href="#" class="nreg-mono" data-open-node="' + esc(j.container) + '">' + esc(j.container) + '</a></dd>' : '')
+                + '<dl><dt>' + esc(N.t('Rozmiar')) + '</dt><dd>' + esc(N.t('{n} adr.', { n: s.size })) + '</dd>'
+                + '<dt>' + esc(N.t('Zajęte')) + '</dt><dd>' + esc(N.t('w całości (wpis ręczny)')) + '</dd>'
+                + '<dt>' + esc(N.t('Adresów w środku')) + '</dt><dd>' + s.addresses + (r.conflicts ? esc(N.t(', z LibreNMS: {n}', { n: r.conflicts })) : '') + '</dd>'
+                + (j.container ? '<dt>' + esc(N.t('W prefiksie')) + '</dt><dd><a href="#" class="nreg-mono" data-open-node="' + esc(j.container) + '">' + esc(j.container) + '</a></dd>' : '')
                 + '</dl>';
             if (j.problem) { h += alertBox('warning', esc(j.problem)); }
-            if (r.conflicts) { h += alertBox('danger', esc(CONFLICT_HINT) + ' Adresów z LibreNMS w zakresie: ' + r.conflicts + ' (na czerwono niżej).'); }
+            if (r.conflicts) { h += alertBox('danger', esc(CONFLICT_HINT) + ' ' + esc(N.t('Adresów z LibreNMS w zakresie: {n} (na czerwono niżej).', { n: r.conflicts }))); }
             h += manualBlock(r.manual);
             if (j.addresses.length) {
-                h += '<h5>Adresy w zakresie (' + j.addresses_total + ')</h5><div class="nreg-chips">' + j.addresses.map(function (a) {
+                h += '<h5>' + esc(N.t('Adresy w zakresie ({n})', { n: j.addresses_total })) + '</h5><div class="nreg-chips">' + j.addresses.map(function (a) {
                     return '<a href="#" data-goto-ip="' + esc(a.ip) + '"' + (a.conflict ? ' class="cf"' : '') + ' title="' + esc(STATE_BDG[a.state] || '') + '">' + esc(a.ip) + '</a>';
                 }).join('') + (j.addresses_total > j.addresses.length ? ' …' : '') + '</div>';
             }
-            h += '<h5>Historia</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
+            h += '<h5>' + esc(N.t('Historia')) + '</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">' + esc(N.t('Brak zmian.')) + '</p>');
             put(h);
         }).catch(function (e) { put(alertBox('danger', esc(e.message))); });
     }
 
     function openNode(cidr) {
         if (cidr.indexOf('range:') === 0) { openRange(cidr.substring(6)); return; }
-        var put = detailLoader('Ładowanie ' + cidr + '…');
+        var put = detailLoader(N.t('Ładowanie {what}…', { what: cidr }));
         api('node', { cidr: cidr }).then(function (j) {
             var n = j.node, s = n.stats;
             var h = '<h4 class="nreg-mono">' + esc(n.cidr) + copyBtn(n.cidr) + ' ' + nodeBadges(n) + '</h4>'
-                + '<dl><dt>Zakres</dt><dd class="nreg-mono">' + esc(n.first) + ' – ' + esc(n.last) + copyBtn(n.first + '-' + n.last) + '</dd>'
-                + '<dt>Rozmiar</dt><dd>' + s.size + (n.subnet && n.len <= 30 ? ' (hostów: ' + s.capacity + ')' : '') + '</dd>'
-                + '<dt>Zajęte</dt><dd>' + s.used + ' z ' + s.capacity + ' (' + s.util + '%) ' + bar(s.util) + '</dd>'
-                + '<dt>Adresów</dt><dd>' + s.addresses + '</dd>'
-                + (n.label ? '<dt>Opis</dt><dd>' + esc(n.label) + '</dd>' : '') + '</dl>';
+                + '<dl><dt>' + esc(N.t('Zakres')) + '</dt><dd class="nreg-mono">' + esc(n.first) + ' – ' + esc(n.last) + copyBtn(n.first + '-' + n.last) + '</dd>'
+                + '<dt>' + esc(N.t('Rozmiar')) + '</dt><dd>' + s.size + (n.subnet && n.len <= 30 ? ' ' + esc(N.t('(hostów: {n})', { n: s.capacity })) : '') + '</dd>'
+                + '<dt>' + esc(N.t('Zajęte')) + '</dt><dd>' + esc(N.t('{used} z {capacity} ({util}%)', { used: s.used, capacity: s.capacity, util: s.util })) + ' ' + bar(s.util) + '</dd>'
+                + '<dt>' + esc(N.t('Adresów')) + '</dt><dd>' + s.addresses + '</dd>'
+                + (n.label ? '<dt>' + esc(N.t('Opis')) + '</dt><dd>' + esc(n.label) + '</dd>' : '') + '</dl>';
             if (n.outside) {
-                h += '<p class="nreg-muted" style="font-size:12px">Grupa /24 porządkuje drzewo: to, co tu leży, jest poza agregatami i adresacją wewnętrzną. '
-                    + 'Wolne miejsce jest liczone dla całej /24. Swój przydział możesz dodać jako agregat (np. z RIPE).</p>';
-            } else if (n.virtual) { h += '<p class="nreg-muted" style="font-size:12px">To poziom grupowania /' + n.len + ' - nie ma tu prawdziwego prefiksu.</p>'; }
-            if (n.lnms.length) { h += '<h5>Na interfejsach (LibreNMS)</h5>' + lnmsTable(n.lnms, true); }
+                h += '<p class="nreg-muted" style="font-size:12px">' + esc(N.t('Grupa /24 porządkuje drzewo: to, co tu leży, jest poza agregatami i adresacją wewnętrzną. Wolne miejsce jest liczone dla całej /24. Swój przydział możesz dodać jako agregat (np. z RIPE).')) + '</p>';
+            } else if (n.virtual) { h += '<p class="nreg-muted" style="font-size:12px">' + esc(N.t('To poziom grupowania /{len} - nie ma tu prawdziwego prefiksu.', { len: n.len })) + '</p>'; }
+            if (n.lnms.length) { h += '<h5>' + esc(N.t('Na interfejsach (LibreNMS)')) + '</h5>' + lnmsTable(n.lnms, true); }
             if (n.manual) { h += manualBlock(n.manual); }
             else if (can.canEdit) {
-                h += '<p><button class="btn btn-success btn-xs" type="button" data-add="' + esc(n.cidr) + '"><i class="fa fa-plus"></i> Opisz ten prefiks (wpis ręczny)</button></p>';
+                h += '<p><button class="btn btn-success btn-xs" type="button" data-add="' + esc(n.cidr) + '"><i class="fa fa-plus"></i> ' + esc(N.t('Opisz ten prefiks (wpis ręczny)')) + '</button></p>';
             }
             if (n.subnet) {
-                h += '<h5>Wolne adresy hostów (' + j.free_ranges_total + ' przedziałów)</h5><div class="nreg-chips">'
+                h += '<h5>' + esc(N.t('Wolne adresy hostów ({n} przedziałów)', { n: j.free_ranges_total })) + '</h5><div class="nreg-chips">'
                     + j.free_ranges.map(function (r) {
                         var t = r.first === r.last ? r.first : r.first + ' – ' + r.last;
-                        return '<a href="#" data-add="' + esc(r.first === r.last ? r.first : r.first + '-' + r.last) + '" title="dodaj jako wpis ręczny">' + esc(t) + ' (' + r.count + ')</a>';
+                        return '<a href="#" data-add="' + esc(r.first === r.last ? r.first : r.first + '-' + r.last) + '" title="' + esc(N.t('dodaj jako wpis ręczny')) + '">' + esc(t) + ' (' + r.count + ')</a>';
                     }).join('') + '</div>';
             } else if (j.free_blocks.length) {
-                h += '<h5>Wolne bloki (największe)</h5><div class="nreg-chips">'
-                    + j.free_blocks.map(function (b) { return '<a href="#" data-add="' + esc(b.cidr) + '" title="dodaj jako wpis ręczny">' + esc(b.cidr) + '</a>'; }).join('') + '</div>';
+                h += '<h5>' + esc(N.t('Wolne bloki (największe)')) + '</h5><div class="nreg-chips">'
+                    + j.free_blocks.map(function (b) { return '<a href="#" data-add="' + esc(b.cidr) + '" title="' + esc(N.t('dodaj jako wpis ręczny')) + '">' + esc(b.cidr) + '</a>'; }).join('') + '</div>';
             }
-            h += '<h5>Historia</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
+            h += '<h5>' + esc(N.t('Historia')) + '</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">' + esc(N.t('Brak zmian.')) + '</p>');
             if (put(h)) { document.getElementById('nreg-ip-within').value = n.cidr; }
         }).catch(function (e) { put(alertBox('danger', esc(e.message))); });
     }
 
     function openIp(ip) {
-        var put = detailLoader('Ładowanie ' + ip + '…');
+        var put = detailLoader(N.t('Ładowanie {what}…', { what: ip }));
         api('search', { q: ip }).then(function (j) {
             var a = j.address;
             var nets = j.path.filter(function (c) { return c.indexOf('range:') !== 0; }), rng = j.path.filter(function (c) { return c.indexOf('range:') === 0; })[0];
             var h = '<h4 class="nreg-mono">' + esc(ip) + copyBtn(ip) + (a ? ' <span class="nreg-bdg ' + a.state + '">' + esc(STATE_BDG[a.state]) + '</span>' : '')
-                + (a && a.dup ? ' <span class="nreg-bdg d">duplikat</span>' : '') + '</h4>'
-                + (nets.length ? '<p style="font-size:12px">Sieć: <a href="#" data-open-node="' + esc(nets[nets.length - 1]) + '" class="nreg-mono">' + esc(nets[nets.length - 1]) + '</a>'
-                    + (rng ? ' &middot; zakres: <a href="#" data-open-node="' + esc(rng) + '">' + esc(a && a.range ? a.range.label + ' (' + a.range.role_label + ')' : 'pokaż') + '</a>' : '') + '</p>' : '');
+                + (a && a.dup ? ' <span class="nreg-bdg d">' + esc(N.t('duplikat')) + '</span>' : '') + '</h4>'
+                + (nets.length ? '<p style="font-size:12px">' + esc(N.t('Sieć:')) + ' <a href="#" data-open-node="' + esc(nets[nets.length - 1]) + '" class="nreg-mono">' + esc(nets[nets.length - 1]) + '</a>'
+                    + (rng ? ' &middot; ' + esc(N.t('zakres:')) + ' <a href="#" data-open-node="' + esc(rng) + '">' + esc(a && a.range ? a.range.label + ' (' + a.range.role_label + ')' : N.t('pokaż')) + '</a>' : '') + '</p>' : '');
             if (!a && j.range) {
-                h += '<p>Adres nie jest wolny: należy do zakresu ' + esc(j.range.label) + ' (' + esc(j.range.role_label) + ').</p>';
+                h += '<p>' + N.t('Adres nie jest wolny: należy do zakresu {label} ({role}).', { label: esc(j.range.label), role: esc(j.range.role_label) }) + '</p>';
             } else if (!a) {
-                h += '<p>Adres jest wolny w tej przestrzeni.</p>';
-                if (can.canEdit) { h += '<p><button class="btn btn-success btn-xs" type="button" data-add="' + esc(ip) + '"><i class="fa fa-plus"></i> Dodaj jako wpis ręczny</button></p>'; }
+                h += '<p>' + esc(N.t('Adres jest wolny w tej przestrzeni.')) + '</p>';
+                if (can.canEdit) { h += '<p><button class="btn btn-success btn-xs" type="button" data-add="' + esc(ip) + '"><i class="fa fa-plus"></i> ' + esc(N.t('Dodaj jako wpis ręczny')) + '</button></p>'; }
             } else {
-                if (a.conflict) { h += alertBox('danger', esc(CONFLICT_HINT) + ' Zakres: ' + esc(a.range.label) + ' (' + esc(a.range.role_label) + ').'); }
+                if (a.conflict) { h += alertBox('danger', esc(CONFLICT_HINT) + ' ' + N.t('Zakres: {label} ({role}).', { label: esc(a.range.label), role: esc(a.range.role_label) })); }
                 if (a.rows.length) { h += '<h5>LibreNMS</h5>' + lnmsTable(a.rows, false); }
-                if (a.dup) { h += '<div class="alert alert-warning" style="padding:6px 10px">Ten adres jest na kilku urządzeniach jednocześnie.</div>'; }
+                if (a.dup) { h += '<div class="alert alert-warning" style="padding:6px 10px">' + esc(N.t('Ten adres jest na kilku urządzeniach jednocześnie.')) + '</div>'; }
                 if (a.manual) { h += manualBlock(a.manual); }
-                if (a.range && !a.rows.length && !a.manual) { h += '<p>Adres należy do zakresu ' + esc(a.range.label) + ' (' + esc(a.range.role_label) + ').</p>'; }
+                if (a.range && !a.rows.length && !a.manual) { h += '<p>' + N.t('Adres należy do zakresu {label} ({role}).', { label: esc(a.range.label), role: esc(a.range.role_label) }) + '</p>'; }
             }
-            h += '<h5>Historia</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
+            h += '<h5>' + esc(N.t('Historia')) + '</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">' + esc(N.t('Brak zmian.')) + '</p>');
             put(h);
         }).catch(function (e) { put(alertBox('danger', esc(e.message))); });
     }
@@ -494,13 +493,13 @@ document.addEventListener('nreg:ready', function () {
                 expandPath(j.path, j.ip); openIp(j.ip); return;
             }
             if (j.kind === 'prefix') {
-                if (!j.exact) { result.innerHTML = alertBox('info', 'Nie ma prefiksu ' + esc(j.cidr) + ' w drzewie. Pokazuję najbliższą sieć, która go zawiera.'); }
+                if (!j.exact) { result.innerHTML = alertBox('info', N.t('Nie ma prefiksu {cidr} w drzewie. Pokazuję najbliższą sieć, która go zawiera.', { cidr: esc(j.cidr) })); }
                 expandPath(j.path); if (j.path.length) { openNode(j.path[j.path.length - 1]); }
                 return;
             }
             clearDetail();
-            if (!j.hits.length) { result.innerHTML = alertBox('warning', 'Nic nie znaleziono dla „' + esc(q) + '”.'); return; }
-            result.innerHTML = alertBox('info', 'Znaleziono ' + j.hits.length + ':<br>' + j.hits.map(function (h) {
+            if (!j.hits.length) { result.innerHTML = alertBox('warning', N.t('Nic nie znaleziono dla „{q}”.', { q: esc(q) })); return; }
+            result.innerHTML = alertBox('info', N.t('Znaleziono {n}:', { n: j.hits.length }) + '<br>' + j.hits.map(function (h) {
                 var go = h.type === 'range' ? 'data-goto-range="' + h.id + '" data-first="' + esc(h.first) + '"'
                     : (h.type === 'address' ? 'data-goto-ip="' : 'data-goto-node="') + esc(h.value) + '"';
                 return '<a href="#" class="nreg-mono" ' + go + '>' + esc(h.value) + '</a> <span class="nreg-muted">' + esc(h.label || '') + '</span>';
@@ -514,10 +513,10 @@ document.addEventListener('nreg:ready', function () {
         api('free', { within: document.getElementById('nreg-ip-within').value.trim(), len: document.getElementById('nreg-ip-len').value, count: 10 })
             .then(function (j) {
                 result.innerHTML = j.blocks.length
-                    ? alertBox('success', 'Wolne /' + j.len + ' w ' + esc(j.within) + ': <span class="nreg-chips">' + j.blocks.map(function (b) {
-                        return '<a href="#" data-add="' + esc(b) + '" title="dodaj jako wpis ręczny">' + esc(b) + '</a>';
+                    ? alertBox('success', N.t('Wolne /{len} w {within}:', { len: j.len, within: esc(j.within) }) + ' <span class="nreg-chips">' + j.blocks.map(function (b) {
+                        return '<a href="#" data-add="' + esc(b) + '" title="' + esc(N.t('dodaj jako wpis ręczny')) + '">' + esc(b) + '</a>';
                     }).join('') + '</span>')
-                    : alertBox('warning', 'Brak wolnych /' + j.len + ' w ' + esc(j.within) + '.');
+                    : alertBox('warning', N.t('Brak wolnych /{len} w {within}.', { len: j.len, within: esc(j.within) }));
             }).catch(function (e2) { result.innerHTML = alertBox('danger', esc(e2.message)); });
     });
 
@@ -527,48 +526,48 @@ document.addEventListener('nreg:ready', function () {
         var box = document.querySelector('#nreg-ip-issues > div');
         return api('issues').then(function (j) {
             var n = j.duplicates.length + j.suspicious.length + j.reserved_conflicts.length + (j.expiry || []).length + (j.range_conflicts || []).length;
-            document.querySelector('#nreg-ip-issues > summary').textContent = 'Uwagi (' + n + ')' + (j.orphans_total ? ', adresy poza sieciami: ' + j.orphans_total : '');
+            document.querySelector('#nreg-ip-issues > summary').textContent = N.t('Uwagi ({n})', { n: n }) + (j.orphans_total ? N.t(', adresy poza sieciami: {n}', { n: j.orphans_total }) : '');
             var h = '';
             if ((j.expiry || []).length) {
-                h += '<h5>Wpisy ręczne po terminie albo z bliskim terminem</h5><p class="nreg-muted" style="font-size:12px">Wpis po terminie nadal zajmuje adresy.'
-                    + ' Przedłuż termin albo usuń wpis.</p>' + j.expiry.map(function (x) {
+                h += '<h5>' + esc(N.t('Wpisy ręczne po terminie albo z bliskim terminem')) + '</h5><p class="nreg-muted" style="font-size:12px">'
+                    + esc(N.t('Wpis po terminie nadal zajmuje adresy. Przedłuż termin albo usuń wpis.')) + '</p>' + j.expiry.map(function (x) {
                         var go = gotoAttr(x);
                         return '<div><a href="#" class="nreg-mono" ' + go + '>' + esc(x.label) + '</a>' + (x.count > 1 ? ' <span class="nreg-muted">(' + x.count + ')</span>' : '')
                             + ' ' + N.expiryHtml(x) + ' ' + esc(x.role_label) + ' · ' + esc(x.name || x.description) + (x.owner ? ' <span class="nreg-muted">(' + esc(x.owner) + ')</span>' : '') + '</div>';
                     }).join('');
             }
             if (j.reserved_conflicts.length) {
-                h += '<h5>Rezerwacje i zakresy ręczne z adresami z LibreNMS</h5><p class="nreg-muted" style="font-size:12px">Adres z LibreNMS'
-                    + ' w rezerwacji albo w zakresie dodanym ręcznie (np. puli NAT, PPPoE) to możliwy błąd w konfiguracji sieci.</p>' + j.reserved_conflicts.map(function (c) {
+                h += '<h5>' + esc(N.t('Rezerwacje i zakresy ręczne z adresami z LibreNMS')) + '</h5><p class="nreg-muted" style="font-size:12px">'
+                    + esc(N.t('Adres z LibreNMS w rezerwacji albo w zakresie dodanym ręcznie (np. puli NAT, PPPoE) to możliwy błąd w konfiguracji sieci.')) + '</p>' + j.reserved_conflicts.map(function (c) {
                     var go = c.range_id ? 'data-goto-range="' + c.range_id + '" data-first="' + esc(c.first) + '"' : 'data-goto-node="' + esc(c.cidr) + '"';
                     return '<div><a href="#" ' + go + ' class="nreg-mono">' + esc(c.cidr) + '</a>' + (c.role_label ? ' <span class="nreg-muted">(' + esc(c.role_label) + ')</span>' : '')
                         + ': ' + esc(c.ips) + ' (' + c.count + ')</div>';
                 }).join('');
             }
             if ((j.range_conflicts || []).length) {
-                h += '<h5>Zakresy poza siecią albo przecięte przez sieć</h5><p class="nreg-muted" style="font-size:12px">Zakres powinien leżeć w całości w jednej sieci'
-                    + ' albo prefiksie. Zwykle znaczy to, że w LibreNMS pojawiła się nowa sieć albo usunięto prefiks ręczny.</p>'
+                h += '<h5>' + esc(N.t('Zakresy poza siecią albo przecięte przez sieć')) + '</h5><p class="nreg-muted" style="font-size:12px">'
+                    + esc(N.t('Zakres powinien leżeć w całości w jednej sieci albo prefiksie. Zwykle znaczy to, że w LibreNMS pojawiła się nowa sieć albo usunięto prefiks ręczny.')) + '</p>'
                     + j.range_conflicts.map(function (c) {
                         return '<div><a href="#" class="nreg-mono" data-goto-range="' + c.id + '" data-first="' + esc(c.first) + '">' + esc(c.label) + '</a>: ' + esc(c.problem) + '</div>';
                     }).join('');
             }
             if (j.duplicates.length) {
-                h += '<h5>Ten sam adres na kilku urządzeniach (' + j.duplicates.length + ')</h5><p class="nreg-muted" style="font-size:12px">Bywa celowe (CGNAT, adresy domyślne, anycast).</p>'
+                h += '<h5>' + esc(N.t('Ten sam adres na kilku urządzeniach ({n})', { n: j.duplicates.length })) + '</h5><p class="nreg-muted" style="font-size:12px">' + esc(N.t('Bywa celowe (CGNAT, adresy domyślne, anycast).')) + '</p>'
                     + j.duplicates.map(function (d) { return '<div><a href="#" data-goto-ip="' + esc(d.ip) + '" class="nreg-mono">' + esc(d.ip) + '</a>: ' + esc(d.devices.join(', ')) + '</div>'; }).join('');
             }
             if (j.suspicious.length) {
-                h += '<h5>Podejrzane maski (krótsze niż /8)</h5>' + j.suspicious.map(function (s) {
+                h += '<h5>' + esc(N.t('Podejrzane maski (krótsze niż /8)')) + '</h5>' + j.suspicious.map(function (s) {
                     return '<div class="nreg-mono">' + esc(s.ip) + '/' + s.len + ' <span class="nreg-muted">' + esc(s.device + ' ' + s['if']) + '</span></div>';
                 }).join('');
             }
             if (j.orphans_total) {
-                h += '<h5>Adresy bez sieci (' + j.orphans_total + ')</h5><p class="nreg-muted" style="font-size:12px">Adresy, które nie należą do żadnej sieci z LibreNMS'
-                    + ' ani do sieci ręcznej, zwykle z maską /32 (loopbacki, aliasy). W drzewie leżą w korzeniu albo w agregacie, poza sieciami.'
-                    + ' Żeby je opisać, obejmij je prefiksem ręcznym (np. agregatem).</p><div class="nreg-chips">'
+                h += '<h5>' + esc(N.t('Adresy bez sieci ({n})', { n: j.orphans_total })) + '</h5><p class="nreg-muted" style="font-size:12px">'
+                    + esc(N.t('Adresy, które nie należą do żadnej sieci z LibreNMS ani do sieci ręcznej, zwykle z maską /32 (loopbacki, aliasy). W drzewie leżą w korzeniu albo w agregacie, poza sieciami. Żeby je opisać, obejmij je prefiksem ręcznym (np. agregatem).'))
+                    + '</p><div class="nreg-chips">'
                     + j.orphans.map(function (o) { return '<a href="#" data-goto-ip="' + esc(o.ip) + '" title="' + esc(o.device + ' ' + o['if']) + '">' + esc(o.ip) + '/' + o.len + '</a>'; }).join('') + '</div>';
             }
-            if (j.v6_count) { h += '<p class="nreg-muted" style="font-size:12px">IPv6: ' + j.v6_count + ' adresów zapisanych, drzewo IPv6 w kolejnej wersji.</p>'; }
-            box.innerHTML = h || '<p class="nreg-muted">Brak uwag.</p>';
+            if (j.v6_count) { h += '<p class="nreg-muted" style="font-size:12px">' + esc(N.t('IPv6: {n} adresów zapisanych, drzewo IPv6 w kolejnej wersji.', { n: j.v6_count })) + '</p>'; }
+            box.innerHTML = h || '<p class="nreg-muted">' + esc(N.t('Brak uwag.')) + '</p>';
         }).catch(function (e) { box.innerHTML = alertBox('danger', esc(e.message)); });
     }
 
@@ -578,21 +577,21 @@ document.addEventListener('nreg:ready', function () {
             prefixRoles = j.prefix_roles; addressRoles = j.address_roles; rangeRoles = j.range_roles;
             manualCache = {};
             j.rows.forEach(function (m) { manualCache[m.id] = m; });
-            document.querySelector('#nreg-ip-manual > summary').textContent = 'Wpisy ręczne (' + j.rows.length + ')';
-            if (!j.rows.length) { box.innerHTML = '<p class="nreg-muted">Brak wpisów ręcznych.</p>'; return; }
-            box.innerHTML = '<table class="table table-condensed table-hover" style="font-size:12px"><thead><tr><th>Adres / prefiks</th><th>Rola</th><th>Ważne do</th><th>Nazwa</th>'
-                + '<th>Opis</th><th>Właściciel</th><th>VLAN</th><th>Dodał</th><th></th></tr></thead><tbody>' + j.rows.map(function (m) {
+            document.querySelector('#nreg-ip-manual > summary').textContent = N.t('Wpisy ręczne ({n})', { n: j.rows.length });
+            if (!j.rows.length) { box.innerHTML = '<p class="nreg-muted">' + esc(N.t('Brak wpisów ręcznych.')) + '</p>'; return; }
+            box.innerHTML = '<table class="table table-condensed table-hover" style="font-size:12px"><thead><tr><th>' + esc(N.t('Adres / prefiks')) + '</th><th>' + esc(N.t('Rola')) + '</th><th>' + esc(N.t('Ważne do')) + '</th><th>' + esc(N.t('Nazwa')) + '</th>'
+                + '<th>' + esc(N.t('Opis')) + '</th><th>' + esc(N.t('Właściciel')) + '</th><th>VLAN</th><th>' + esc(N.t('Dodał')) + '</th><th></th></tr></thead><tbody>' + j.rows.map(function (m) {
                     var many = m.count > 1, go = gotoAttr(m);
                     var btn = '';
-                    if (can.canEdit) { btn += '<button class="btn btn-default btn-xs" type="button" data-edit="' + m.id + '" data-group="' + (many ? 1 : 0) + '"><i class="fa fa-pencil"></i> Edytuj' + (many ? ' grupę (' + m.count + ')' : '') + '</button> '; }
+                    if (can.canEdit) { btn += '<button class="btn btn-default btn-xs" type="button" data-edit="' + m.id + '" data-group="' + (many ? 1 : 0) + '"><i class="fa fa-pencil"></i> ' + esc(many ? N.t('Edytuj grupę ({n})', { n: m.count }) : N.t('Edytuj')) + '</button> '; }
                     // Ciągła grupa adresów (etykieta bez przecinka) może stać się jednym zakresem.
                     if (can.canEdit && many && m.kind === 'address' && m.label.indexOf(',') < 0 && !m.adopted_at) {
-                        btn += '<button class="btn btn-default btn-xs" type="button" data-torange="' + m.id + '" data-label="' + esc(m.label) + '" title="zamień grupę adresów na jeden wpis-zakres (pulę)"><i class="fa fa-compress"></i> Na zakres</button> ';
+                        btn += '<button class="btn btn-default btn-xs" type="button" data-torange="' + m.id + '" data-label="' + esc(m.label) + '" title="' + esc(N.t('zamień grupę adresów na jeden wpis-zakres (pulę)')) + '"><i class="fa fa-compress"></i> ' + esc(N.t('Na zakres')) + '</button> ';
                     }
-                    if (can.canDelete) { btn += '<button class="btn btn-danger btn-xs" type="button" data-del="' + m.id + '" data-group="' + (many ? 1 : 0) + '" data-label="' + esc(m.label) + '"><i class="fa fa-trash"></i> Usuń' + (many ? ' grupę' : '') + '</button>'; }
+                    if (can.canDelete) { btn += '<button class="btn btn-danger btn-xs" type="button" data-del="' + m.id + '" data-group="' + (many ? 1 : 0) + '" data-label="' + esc(m.label) + '"><i class="fa fa-trash"></i> ' + esc(many ? N.t('Usuń grupę') : N.t('Usuń')) + '</button>'; }
                     return '<tr><td><a href="#" class="nreg-mono" ' + go + '>' + esc(m.label) + '</a>' + (many ? ' <span class="nreg-muted">(' + m.count + ')</span>' : '')
-                        + (m.kind === 'range' ? ' <span class="nreg-muted">(zakres, ' + m.size + ' adr.)</span>' : '') + '</td>'
-                        + '<td>' + esc(m.role_label) + (m.adopted_at ? ' <span class="label label-primary">przejęty</span>' : '') + (m.current ? ' <small class="nreg-muted">' + esc(m.current) + '</small>' : '') + '</td>'
+                        + (m.kind === 'range' ? ' <span class="nreg-muted">' + esc(N.t('(zakres, {n} adr.)', { n: m.size })) + '</span>' : '') + '</td>'
+                        + '<td>' + esc(m.role_label) + (m.adopted_at ? ' <span class="label label-primary">' + esc(N.t('przejęty')) + '</span>' : '') + (m.current ? ' <small class="nreg-muted">' + esc(m.current) + '</small>' : '') + '</td>'
                         + '<td>' + (m.adopted_at ? '' : N.expiryHtml(m)) + '</td><td>' + esc(m.name || '') + '</td><td>' + esc(m.description) + '</td><td>' + esc(m.owner || '') + '</td>'
                         + '<td>' + (m.vlan ? '<a href="' + esc(can.page) + '?vlan=' + m.vlan + '#vlan">' + m.vlan + '</a>' : '') + '</td>'
                         + '<td style="font-size:11px">' + esc(m.created_by || '?') + '<br>' + esc(m.created_at) + '</td><td style="white-space:nowrap">' + btn + '</td></tr>';
@@ -645,8 +644,8 @@ document.addEventListener('nreg:ready', function () {
         t.disabled = !!entry;
         updateAs();
         fillRoles(entry ? entry.kind : formKind(), entry ? entry.role : null);
-        document.getElementById('nreg-if-title').textContent = entry ? (group ? 'Edycja grupy ' + entry.label
-            : (entry.kind === 'range' ? 'Edycja zakresu ' : 'Edycja wpisu ') + (entry.ip || entry.cidr)) : 'Dodaj adresację (wpis ręczny)';
+        document.getElementById('nreg-if-title').textContent = entry ? (group ? N.t('Edycja grupy {label}', { label: entry.label })
+            : (entry.kind === 'range' ? N.t('Edycja zakresu {label}', { label: entry.ip || entry.cidr }) : N.t('Edycja wpisu {label}', { label: entry.ip || entry.cidr }))) : N.t('Dodaj adresację (wpis ręczny)');
         if (entry) { ['name', 'description', 'owner', 'vlan', 'devices', 'valid_until'].forEach(function (f) { form.elements[f].value = entry[f] || ''; }); }
         form.style.display = '';
         form.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -661,7 +660,7 @@ document.addEventListener('nreg:ready', function () {
         devicesLoaded = true;
         api('devices').then(function (j) {
             document.getElementById('nreg-if-devlist').innerHTML = j.devices.map(function (d) {
-                var info = [d.hostname !== d.name ? d.hostname : '', d.location || '', d.disabled ? 'wyłączony' : ''].filter(Boolean).join(' · ');
+                var info = [d.hostname !== d.name ? d.hostname : '', d.location || '', d.disabled ? N.t('wyłączony') : ''].filter(Boolean).join(' · ');
                 return '<option value="' + esc(d.name) + '"' + (info ? ' label="' + esc(info) + '"' : '') + '></option>';
             }).join('');
         }).catch(function () { devicesLoaded = false; });
@@ -717,8 +716,10 @@ document.addEventListener('nreg:ready', function () {
             btn.disabled = true; err.textContent = '';
             api(path, data, 'POST').then(function (j) {
                 form.style.display = 'none';
-                result.innerHTML = alertBox('success', id ? 'Zapisano zmiany.' : 'Dodano ' + (j.kind === 'prefix' ? 'prefiks ' : (j.kind === 'range' ? 'zakres ' : j.count + ' adres(ów) jako jedną pozycję: '))
-                    + '<span class="nreg-mono">' + esc(j.label) + '</span>.');
+                var lbl = '<span class="nreg-mono">' + esc(j.label) + '</span>';
+                result.innerHTML = alertBox('success', id ? esc(N.t('Zapisano zmiany.'))
+                    : (j.kind === 'prefix' ? N.t('Dodano prefiks {label}.', { label: lbl })
+                        : (j.kind === 'range' ? N.t('Dodano zakres {label}.', { label: lbl }) : N.t('Dodano {n} adres(ów) jako jedną pozycję: {label}.', { n: j.count, label: lbl }))));
                 clearDetail();
                 return refreshKeep(j.entry);
             }).catch(function (e2) { err.textContent = e2.message; }).then(function () { btn.disabled = false; });
@@ -726,9 +727,10 @@ document.addEventListener('nreg:ready', function () {
     }
 
     function toRange(id, label) {
-        if (!window.confirm('Zamienić grupę adresów ' + label + ' na jeden wpis-zakres? Opis, właściciel i termin przejdą na zakres. Zmiana trafi do dziennika.')) { return; }
+        if (!window.confirm(N.t('Zamienić grupę adresów {label} na jeden wpis-zakres? Opis, właściciel i termin przejdą na zakres. Zmiana trafi do dziennika.', { label: label }))) { return; }
         api('manual_to_range', { id: id }, 'POST').then(function (j) {
-            result.innerHTML = alertBox('success', 'Grupa ' + esc(label) + ' jest teraz zakresem <span class="nreg-mono">' + esc(j.entry.cidr) + '</span> (' + esc(j.entry.role_label) + ').');
+            result.innerHTML = alertBox('success', N.t('Grupa {label} jest teraz zakresem {range} ({role}).', { label: esc(label),
+                range: '<span class="nreg-mono">' + esc(j.entry.cidr) + '</span>', role: esc(j.entry.role_label) }));
             clearDetail();
             return refreshKeep(j.entry);
         }).catch(function (e) { result.innerHTML = alertBox('danger', esc(e.message)); });
@@ -742,11 +744,12 @@ document.addEventListener('nreg:ready', function () {
     }
 
     function deleteEntry(id, label, group) {
-        if (!window.confirm('Usunąć wpis ręczny ' + label + (group ? ' (całą grupę)' : '') + '? Zostanie w dzienniku zmian.')) { return; }
-        var comment = window.prompt('Komentarz do usunięcia (opcjonalnie, trafi do dziennika):', '');
+        if (!window.confirm(group ? N.t('Usunąć wpis ręczny {label} (całą grupę)? Zostanie w dzienniku zmian.', { label: label })
+            : N.t('Usunąć wpis ręczny {label}? Zostanie w dzienniku zmian.', { label: label }))) { return; }
+        var comment = window.prompt(N.t('Komentarz do usunięcia (opcjonalnie, trafi do dziennika):'), '');
         if (comment === null) { return; }
         api('manual_delete', { id: id, comment: comment, group: group }, 'POST').then(function (j) {
-            result.innerHTML = alertBox('success', 'Usunięto wpis ręczny <span class="nreg-mono">' + esc(j.deleted) + '</span>.');
+            result.innerHTML = alertBox('success', N.t('Usunięto wpis ręczny {label}.', { label: '<span class="nreg-mono">' + esc(j.deleted) + '</span>' }));
             clearDetail();
             return refreshKeep(null);
         }).catch(function (e) { result.innerHTML = alertBox('danger', esc(e.message)); });
@@ -757,25 +760,24 @@ document.addEventListener('nreg:ready', function () {
     var ripePanel = document.getElementById('nreg-ip-ripe'), ripeOut = document.getElementById('nreg-ir-out'), ripeData = null;
 
     function ripeState(p) {
-        if (p.unsupported) { return '<span class="nreg-muted">IPv6 - drzewo jeszcze nie obsługuje</span>'; }
+        if (p.unsupported) { return '<span class="nreg-muted">' + esc(N.t('IPv6 - drzewo jeszcze nie obsługuje')) + '</span>'; }
         var out = [];
-        if (p.exists) { out.push('<span class="label label-default">już jest: ' + esc(p.exists) + '</span>'); }
-        if (p.in_aggregate) { out.push('w agregacie <span class="nreg-mono">' + esc(p.in_aggregate) + '</span>'); }
-        if (p.parent) { out.push('w szerszym z listy <span class="nreg-mono">' + esc(p.parent) + '</span>'); }
-        if (p.lnms) { out.push(p.lnms + ' sieci w LibreNMS'); }
-        return out.join('<br>') || '<span class="nreg-muted">brak w rejestrze</span>';
+        if (p.exists) { out.push('<span class="label label-default">' + esc(N.t('już jest: {what}', { what: p.exists })) + '</span>'); }
+        if (p.in_aggregate) { out.push(N.t('w agregacie {cidr}', { cidr: '<span class="nreg-mono">' + esc(p.in_aggregate) + '</span>' })); }
+        if (p.parent) { out.push(N.t('w szerszym z listy {cidr}', { cidr: '<span class="nreg-mono">' + esc(p.parent) + '</span>' })); }
+        if (p.lnms) { out.push(esc(N.t('{n} sieci w LibreNMS', { n: p.lnms }))); }
+        return out.join('<br>') || '<span class="nreg-muted">' + esc(N.t('brak w rejestrze')) + '</span>';
     }
 
     function ripeRender(j) {
         ripeData = j;
         var h = '<p><strong>AS' + j.asn + '</strong>' + (j.holder ? ' &middot; ' + esc(j.holder) : '')
-            + (j.org ? ' &middot; organizacja ' + esc(j.org_name || '') + ' <span class="nreg-mono">' + esc(j.org) + '</span>' : '') + '</p>';
+            + (j.org ? ' &middot; ' + N.t('organizacja {name} {org}', { name: esc(j.org_name || ''), org: '<span class="nreg-mono">' + esc(j.org) + '</span>' }) : '') + '</p>';
         if (j.warnings.length) { h += alertBox('warning', j.warnings.map(esc).join('<br>')); }
-        if (!j.prefixes.length) { ripeOut.innerHTML = h + '<p>RIPE nie zna prefiksów tego AS.</p>'; return; }
-        h += '<p class="nreg-sub" style="opacity:1">Zaznaczone są prefiksy, których nie ma w rejestrze i które nie leżą w agregacie ani w szerszym prefiksie z listy. '
-            + 'Sprawdź kolumnę „Przydział w RIPE”: AS może ogłaszać też adresację klientów albo innych firm.</p>'
-            + '<table class="table table-condensed table-hover"><thead><tr><th><input type="checkbox" id="nreg-ir-all" title="zaznacz wszystkie"></th>'
-            + '<th>Prefiks</th><th>Nazwa agregatu</th><th>Źródło</th><th>Przydział w RIPE</th><th>W rejestrze</th></tr></thead><tbody>';
+        if (!j.prefixes.length) { ripeOut.innerHTML = h + '<p>' + esc(N.t('RIPE nie zna prefiksów tego AS.')) + '</p>'; return; }
+        h += '<p class="nreg-sub" style="opacity:1">' + esc(N.t('Zaznaczone są prefiksy, których nie ma w rejestrze i które nie leżą w agregacie ani w szerszym prefiksie z listy. Sprawdź kolumnę „Przydział w RIPE”: AS może ogłaszać też adresację klientów albo innych firm.')) + '</p>'
+            + '<table class="table table-condensed table-hover"><thead><tr><th><input type="checkbox" id="nreg-ir-all" title="' + esc(N.t('zaznacz wszystkie')) + '"></th>'
+            + '<th>' + esc(N.t('Prefiks')) + '</th><th>' + esc(N.t('Nazwa agregatu')) + '</th><th>' + esc(N.t('Źródło')) + '</th><th>' + esc(N.t('Przydział w RIPE')) + '</th><th>' + esc(N.t('W rejestrze')) + '</th></tr></thead><tbody>';
         j.prefixes.forEach(function (p, i) {
             var off = p.unsupported || !!p.exists, inet = p.inetnum;
             h += '<tr' + (off ? ' class="nreg-muted"' : '') + '><td><input type="checkbox" data-ripe="' + i + '"' + (p.checked ? ' checked' : '') + (off ? ' disabled' : '') + '></td>'
@@ -783,14 +785,14 @@ document.addEventListener('nreg:ready', function () {
                 + '<td>' + (off ? '' : '<input class="form-control nm" data-ripe-name="' + i + '" maxlength="64" value="' + esc(p.name || '') + '">') + '</td>'
                 + '<td>' + esc(p.sources_label.join(', ')) + '</td>'
                 + '<td>' + (inet ? '<span class="nreg-mono">' + esc(inet.range) + '</span> ' + esc(inet.netname || '') + '<br><small>' + esc(inet.status || '')
-                    + (inet.org ? ' &middot; ' + esc(inet.org) : '') + '</small>' : '<span class="nreg-muted">' + (p.family === 4 ? 'brak danych' : '') + '</span>') + '</td>'
+                    + (inet.org ? ' &middot; ' + esc(inet.org) : '') + '</small>' : '<span class="nreg-muted">' + (p.family === 4 ? esc(N.t('brak danych')) : '') + '</span>') + '</td>'
                 + '<td>' + ripeState(p) + '</td></tr>';
         });
-        h += '</tbody></table><div class="row"><div class="col-sm-6"><label for="nreg-ir-desc">Opis agregatów</label>'
-            + '<input class="form-control" id="nreg-ir-desc" maxlength="1000" value="' + esc('Przydział AS' + j.asn + (j.holder ? ' ' + j.holder : '') + ' (z RIPE)') + '"></div>'
-            + '<div class="col-sm-6"><label for="nreg-ir-comment">Komentarz do zmiany (trafi do dziennika)</label>'
-            + '<input class="form-control" id="nreg-ir-comment" maxlength="1000" placeholder="opcjonalnie"></div></div>'
-            + '<button class="btn btn-success btn-sm" type="button" id="nreg-ir-import" style="margin-top:6px"><i class="fa fa-plus"></i> Dodaj zaznaczone jako agregaty</button>'
+        h += '</tbody></table><div class="row"><div class="col-sm-6"><label for="nreg-ir-desc">' + esc(N.t('Opis agregatów')) + '</label>'
+            + '<input class="form-control" id="nreg-ir-desc" maxlength="1000" value="' + esc(j.holder ? N.t('Przydział AS{asn} {holder} (z RIPE)', { asn: j.asn, holder: j.holder }) : N.t('Przydział AS{asn} (z RIPE)', { asn: j.asn })) + '"></div>'
+            + '<div class="col-sm-6"><label for="nreg-ir-comment">' + esc(N.t('Komentarz do zmiany (trafi do dziennika)')) + '</label>'
+            + '<input class="form-control" id="nreg-ir-comment" maxlength="1000" placeholder="' + esc(N.t('opcjonalnie')) + '"></div></div>'
+            + '<button class="btn btn-success btn-sm" type="button" id="nreg-ir-import" style="margin-top:6px"><i class="fa fa-plus"></i> ' + esc(N.t('Dodaj zaznaczone jako agregaty')) + '</button>'
             + ' <span id="nreg-ir-count" class="nreg-sub"></span>';
         ripeOut.innerHTML = h;
         ripeCount();
@@ -805,7 +807,7 @@ document.addEventListener('nreg:ready', function () {
 
     function ripeCount() {
         var el = document.getElementById('nreg-ir-count');
-        if (el) { el.textContent = 'zaznaczono: ' + ripeChecked().length; }
+        if (el) { el.textContent = N.t('zaznaczono: {n}', { n: ripeChecked().length }); }
     }
 
     if (ripePanel) {
@@ -822,7 +824,7 @@ document.addEventListener('nreg:ready', function () {
             e.preventDefault();
             var asn = document.getElementById('nreg-ir-asn').value.trim(), btn = this.querySelector('button[type="submit"]');
             btn.disabled = true;
-            ripeOut.innerHTML = '<p class="nreg-muted">Pobieram dane z RIPE (do kilkunastu sekund)…</p>';
+            ripeOut.innerHTML = '<p class="nreg-muted">' + esc(N.t('Pobieram dane z RIPE (do kilkunastu sekund)…')) + '</p>';
             api('ripe_lookup', { asn: asn }).then(function (j) {
                 localStorage.setItem('nreg-ripe-asn', asn);
                 ripeRender(j);
@@ -837,13 +839,13 @@ document.addEventListener('nreg:ready', function () {
         ripeOut.addEventListener('click', function (e) {
             if (!e.target.closest('#nreg-ir-import')) { return; }
             var items = ripeChecked(), btn = document.getElementById('nreg-ir-import');
-            if (!items.length) { window.alert('Zaznacz co najmniej jeden prefiks.'); return; }
-            if (!window.confirm('Dodać ' + items.length + ' agregat(ów)? Każdy trafi do dziennika zmian.')) { return; }
+            if (!items.length) { window.alert(N.t('Zaznacz co najmniej jeden prefiks.')); return; }
+            if (!window.confirm(N.t('Dodać {n} agregat(ów)? Każdy trafi do dziennika zmian.', { n: items.length }))) { return; }
             btn.disabled = true;
             api('ripe_import', { asn: ripeData.asn, items: items, description: document.getElementById('nreg-ir-desc').value,
                 comment: document.getElementById('nreg-ir-comment').value }, 'POST').then(function (j) {
                 var bad = j.results.filter(function (r) { return !r.ok; });
-                result.innerHTML = alertBox(bad.length ? 'warning' : 'success', 'Dodano agregatów: ' + j.added + ' z ' + j.results.length + '.'
+                result.innerHTML = alertBox(bad.length ? 'warning' : 'success', esc(N.t('Dodano agregatów: {added} z {total}.', { added: j.added, total: j.results.length }))
                     + bad.map(function (r) { return '<br><span class="nreg-mono">' + esc(r.cidr) + '</span>: ' + esc(r.error); }).join(''));
                 ripePanel.style.display = 'none';
                 ripeOut.innerHTML = '';
@@ -878,9 +880,9 @@ document.addEventListener('nreg:ready', function () {
     var newSpace = document.getElementById('nreg-ip-newspace');
     if (newSpace) {
         newSpace.addEventListener('click', function () {
-            var name = window.prompt('Nazwa nowej przestrzeni adresowej (np. VRF albo klient):', '');
+            var name = window.prompt(N.t('Nazwa nowej przestrzeni adresowej (np. VRF albo klient):'), '');
             if (!name) { return; }
-            var vrf = window.prompt('Nazwa VRF w LibreNMS (context_name) przypisywana do tej przestrzeni - opcjonalnie:', '') || '';
+            var vrf = window.prompt(N.t('Nazwa VRF w LibreNMS (context_name) przypisywana do tej przestrzeni - opcjonalnie:'), '') || '';
             N.api('ipam/space_create', { name: name, vrf: vrf }, 'POST').then(function (j) {
                 space = j.space.id; return loadSpaces().then(refreshAll);
             }).catch(function (e) { result.innerHTML = alertBox('danger', esc(e.message)); });
@@ -895,10 +897,10 @@ document.addEventListener('nreg:ready', function () {
             e.preventDefault();
             var icon = t.querySelector('i'), text = t.getAttribute('data-copy');
             copyText(text).then(function () {
-                icon.className = 'fa fa-check'; t.title = 'skopiowano';
+                icon.className = 'fa fa-check'; t.title = N.t('skopiowano');
             }, function () {
-                window.prompt('Skopiuj ręcznie (Ctrl+C):', text);
-            }).then(function () { setTimeout(function () { icon.className = 'fa fa-clipboard'; t.title = 'kopiuj ' + text; }, 1500); });
+                window.prompt(N.t('Skopiuj ręcznie (Ctrl+C):'), text);
+            }).then(function () { setTimeout(function () { icon.className = 'fa fa-clipboard'; t.title = N.t('kopiuj {text}', { text: text }); }, 1500); });
             return;
         }
         if ((t = e.target.closest('[data-toggle-node]'))) { clearDetail(); toggle(t.getAttribute('data-toggle-node')); }
