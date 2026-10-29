@@ -42,6 +42,9 @@
     .nreg-tn.rng { border-left: 3px solid #b57edc; }
     .nreg-tn.rng .cidr { min-width: 235px; }
     .nreg-ta .who { overflow: hidden; text-overflow: ellipsis; opacity: .85; }
+    /* Adres z LibreNMS w zakresie ręcznym: możliwy błąd konfiguracji. */
+    .nreg-ta.cf { background: rgba(217, 83, 79, .14); box-shadow: inset 3px 0 0 #d9534f; }
+    .nreg-chips a.cf { color: #d9534f; font-weight: bold; }
     .nreg-chips a { display: inline-block; font-family: monospace; font-size: 12px; margin: 0 4px 4px 0; padding: 1px 6px; border: 1px solid rgba(128,128,128,.45); border-radius: 3px; }
     .nreg-ip-right h4 { margin-top: 4px; }
     .nreg-copy { margin-left: 4px; font-size: 13px; opacity: .55; cursor: pointer; }
@@ -182,6 +185,7 @@ document.addEventListener('nreg:ready', function () {
     // Numer ostatniego żądania szczegółów: odpowiedź starszego żądania jest pomijana.
     var detailSeq = 0, DETAIL_HINT = detail.innerHTML;
     var STATE_BDG = { l: 'LibreNMS', s: 'host wyłączony', m: 'ręczny', r: 'rezerwacja', g: 'zniknął' };
+    var CONFLICT_HINT = 'Adres z LibreNMS leży w zakresie dodanym ręcznie (np. puli NAT albo PPPoE). To może być błąd w konfiguracji sieci.';
     // Adresy wyłączonych hostów domyślnie ukryte (traktowane jak wolne); wybór zapamiętany w przeglądarce.
     var staleBox = document.getElementById('nreg-ip-stale'), showStale = !!staleBox && localStorage.getItem('nreg-ip-stale') === '1';
     if (staleBox) { staleBox.checked = showStale; }
@@ -226,6 +230,7 @@ document.addEventListener('nreg:ready', function () {
             h += '<span class="nreg-bdg ' + (n.manual.role === 'reserved' ? 'r' : 'm') + '">' + esc(n.manual.role_label) + '</span>';
             if (n.manual.expiry === 'expired') { h += '<span class="nreg-bdg d" title="termin ważności ' + esc(n.manual.valid_until) + '">termin minął</span>'; }
         }
+        if (n.range && n.lnms) { h += '<span class="nreg-bdg d" title="' + esc(CONFLICT_HINT) + '">' + n.lnms + ' adr. z LibreNMS</span>'; }
         n.vlans.forEach(function (v) { h += '<a class="nreg-bdg v" href="' + esc(can.page) + '?vlan=' + v + '#vlan" title="VLAN ' + v + '">VLAN ' + v + '</a>'; });
         return h;
     }
@@ -245,8 +250,9 @@ document.addEventListener('nreg:ready', function () {
     function addrRow(a, depth) {
         var who = a.rows.map(function (r) { return r.device + ' ' + r['if'] + (r.alias ? ' (' + r.alias + ')' : ''); });
         if (a.manual) { who.push((a.manual.name || a.manual.description) + ' [ręczny' + (a.manual.expiry === 'expired' ? ', termin minął' : '') + ']'); }
-        return '<div class="nreg-ta" data-open-ip="' + esc(a.ip) + '" style="padding-left:' + (depth * 16 + 22) + 'px">'
+        return '<div class="nreg-ta' + (a.conflict ? ' cf' : '') + '" data-open-ip="' + esc(a.ip) + '" style="padding-left:' + (depth * 16 + 22) + 'px">'
             + '<span class="ip">' + esc(a.ip) + '</span><span class="nreg-bdg ' + a.state + '">' + esc(STATE_BDG[a.state] || a.state) + '</span>'
+            + (a.conflict ? '<span class="nreg-bdg d" title="' + esc(CONFLICT_HINT) + '">w zakresie ręcznym</span>' : '')
             + (a.dup ? '<span class="nreg-bdg d" title="ten sam adres na kilku urządzeniach">duplikat</span>' : '')
             + '<span class="who">' + esc(who.join(' · ')) + '</span></div>';
     }
@@ -283,7 +289,8 @@ document.addEventListener('nreg:ready', function () {
             if (j.addresses_total > j.addresses.length) {
                 h += '<div class="nreg-muted" style="padding-left:' + (depth * 16 + 22) + 'px;font-size:11px">… i ' + (j.addresses_total - j.addresses.length) + ' więcej</div>';
             }
-            container.innerHTML = h || '<p class="nreg-muted" style="padding-left:' + (depth * 16 + 4) + 'px">Brak adresacji w tej przestrzeni.</p>';
+            container.innerHTML = h || '<p class="nreg-muted" style="padding-left:' + (depth * 16 + 4) + 'px">'
+                + (String(cidr).indexOf('range:') === 0 ? 'Zakres jest przydzielony w całości; LibreNMS nie ma w nim adresów.' : 'Brak adresacji w tej przestrzeni.') + '</p>';
             container.querySelectorAll('.nreg-tc').forEach(function (c) { c.setAttribute('data-depth', depth + 1); });
             container.setAttribute('data-loaded', '1');
         });
@@ -396,15 +403,16 @@ document.addEventListener('nreg:ready', function () {
             var r = j.range, s = r.stats;
             var h = '<h4 class="nreg-mono">' + esc(r.first + ' – ' + r.last) + copyBtn(r.first + '-' + r.last) + ' ' + nodeBadges(r) + '</h4>'
                 + '<dl><dt>Rozmiar</dt><dd>' + s.size + ' adr.</dd>'
-                + '<dt>Zajęte</dt><dd>' + s.used + ' z ' + s.capacity + ' (' + s.util + '%) ' + bar(s.util)
-                + ' <small class="nreg-muted">adresy z LibreNMS i wpisów ręcznych</small></dd>'
+                + '<dt>Zajęte</dt><dd>w całości (wpis ręczny)</dd>'
+                + '<dt>Adresów w środku</dt><dd>' + s.addresses + (r.lnms ? ', z LibreNMS: ' + r.lnms : '') + '</dd>'
                 + (j.container ? '<dt>W prefiksie</dt><dd><a href="#" class="nreg-mono" data-open-node="' + esc(j.container) + '">' + esc(j.container) + '</a></dd>' : '')
                 + '</dl>';
             if (j.problem) { h += alertBox('warning', esc(j.problem)); }
+            if (r.lnms) { h += alertBox('danger', esc(CONFLICT_HINT) + ' Adresów z LibreNMS w zakresie: ' + r.lnms + ' (na czerwono niżej).'); }
             h += manualBlock(r.manual);
             if (j.addresses.length) {
                 h += '<h5>Adresy w zakresie (' + j.addresses_total + ')</h5><div class="nreg-chips">' + j.addresses.map(function (a) {
-                    return '<a href="#" data-goto-ip="' + esc(a.ip) + '" title="' + esc(STATE_BDG[a.state] || '') + '">' + esc(a.ip) + '</a>';
+                    return '<a href="#" data-goto-ip="' + esc(a.ip) + '"' + (a.conflict ? ' class="cf"' : '') + ' title="' + esc(STATE_BDG[a.state] || '') + '">' + esc(a.ip) + '</a>';
                 }).join('') + (j.addresses_total > j.addresses.length ? ' …' : '') + '</div>';
             }
             h += '<h5>Historia</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
@@ -456,14 +464,17 @@ document.addEventListener('nreg:ready', function () {
                 + (a && a.dup ? ' <span class="nreg-bdg d">duplikat</span>' : '') + '</h4>'
                 + (nets.length ? '<p style="font-size:12px">Sieć: <a href="#" data-open-node="' + esc(nets[nets.length - 1]) + '" class="nreg-mono">' + esc(nets[nets.length - 1]) + '</a>'
                     + (rng ? ' &middot; zakres: <a href="#" data-open-node="' + esc(rng) + '">' + esc(a && a.range ? a.range.label + ' (' + a.range.role_label + ')' : 'pokaż') + '</a>' : '') + '</p>' : '');
-            if (!a) {
+            if (!a && j.range) {
+                h += '<p>Adres nie jest wolny: należy do zakresu ' + esc(j.range.label) + ' (' + esc(j.range.role_label) + ').</p>';
+            } else if (!a) {
                 h += '<p>Adres jest wolny w tej przestrzeni.</p>';
                 if (can.canEdit) { h += '<p><button class="btn btn-success btn-xs" type="button" data-add="' + esc(ip) + '"><i class="fa fa-plus"></i> Dodaj jako wpis ręczny</button></p>'; }
             } else {
+                if (a.conflict) { h += alertBox('danger', esc(CONFLICT_HINT) + ' Zakres: ' + esc(a.range.label) + ' (' + esc(a.range.role_label) + ').'); }
                 if (a.rows.length) { h += '<h5>LibreNMS</h5>' + lnmsTable(a.rows, false); }
                 if (a.dup) { h += '<div class="alert alert-warning" style="padding:6px 10px">Ten adres jest na kilku urządzeniach jednocześnie.</div>'; }
                 if (a.manual) { h += manualBlock(a.manual); }
-                if (a.range && !a.rows.length && !a.manual) { h += '<p>Adres jest wolny w zakresie ' + esc(a.range.label) + '.</p>'; }
+                if (a.range && !a.rows.length && !a.manual) { h += '<p>Adres należy do zakresu ' + esc(a.range.label) + ' (' + esc(a.range.role_label) + ').</p>'; }
             }
             h += '<h5>Historia</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
             put(h);
@@ -527,9 +538,11 @@ document.addEventListener('nreg:ready', function () {
                     }).join('');
             }
             if (j.reserved_conflicts.length) {
-                h += '<h5>Rezerwacje z adresami z LibreNMS</h5>' + j.reserved_conflicts.map(function (c) {
+                h += '<h5>Rezerwacje i zakresy ręczne z adresami z LibreNMS</h5><p class="nreg-muted" style="font-size:12px">Adres z LibreNMS'
+                    + ' w rezerwacji albo w zakresie dodanym ręcznie (np. puli NAT, PPPoE) to możliwy błąd w konfiguracji sieci.</p>' + j.reserved_conflicts.map(function (c) {
                     var go = c.range_id ? 'data-goto-range="' + c.range_id + '" data-first="' + esc(c.first) + '"' : 'data-goto-node="' + esc(c.cidr) + '"';
-                    return '<div><a href="#" ' + go + ' class="nreg-mono">' + esc(c.cidr) + '</a>: ' + esc(c.ips) + ' (' + c.count + ')</div>';
+                    return '<div><a href="#" ' + go + ' class="nreg-mono">' + esc(c.cidr) + '</a>' + (c.role_label ? ' <span class="nreg-muted">(' + esc(c.role_label) + ')</span>' : '')
+                        + ': ' + esc(c.ips) + ' (' + c.count + ')</div>';
                 }).join('');
             }
             if ((j.range_conflicts || []).length) {

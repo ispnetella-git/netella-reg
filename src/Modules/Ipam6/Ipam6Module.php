@@ -391,9 +391,29 @@ class Ipam6Module extends AbstractModule
     private function addrInfo(array $data, string $hex): array
     {
         $a = $data['all_addr'][$hex];
+        $r = self::rangeOf($data, $a['ip']);
 
         return ['ip' => Ip6Calc::gmp2ip($a['ip']), 'n' => $hex, 'state' => $a['state'], 'rows' => array_map([self::class, 'lnmsRow'], $a['rows']),
-            'manual' => self::publicManual($a['manual'])];
+            'manual' => self::publicManual($a['manual']), 'range' => self::rangeRef($r),
+            // Adres z LibreNMS w zakresie ręcznym: możliwy błąd konfiguracji sieci.
+            'conflict' => $r !== null && $a['rows'] !== []];
+    }
+
+    /** Zakres ręczny, w którym leży adres, albo null. */
+    private static function rangeOf(array $data, \GMP $ip): ?array
+    {
+        foreach ($data['ranges'] as $r) {
+            if (gmp_cmp($ip, $r['start']) >= 0 && gmp_cmp($ip, $r['end']) <= 0) {
+                return $r;
+            }
+        }
+
+        return null;
+    }
+
+    private static function rangeRef(?array $r): ?array
+    {
+        return $r === null ? null : ['id' => $r['id'], 'label' => $r['cidr'], 'role_label' => $r['role_label']];
     }
 
     /** Adresy (LibreNMS i ręczne) w przedziale - hex, posortowane. */
@@ -407,10 +427,12 @@ class Ipam6Module extends AbstractModule
 
     private function rangeInfo(array $data, array $r): array
     {
-        $inside = count(self::addressesIn($data, $r['start'], $r['end']));
+        $inside = self::addressesIn($data, $r['start'], $r['end']);
+        // Znaczek liczy tylko aktywne hosty; wyłączone widać po włączeniu przełącznika.
+        $lnms = count(array_filter($inside, fn ($hex) => $data['all_addr'][$hex]['state'] === 'l'));
 
         return ['range' => true, 'id' => $r['id'], 'cidr' => $r['cidr'], 'n' => $r['start_hex'], 'len' => 128,
-            'first' => $r['first'], 'last' => $r['last'], 'size' => $r['size'], 'addresses' => $inside,
+            'first' => $r['first'], 'last' => $r['last'], 'size' => $r['size'], 'addresses' => count($inside), 'lnms' => $lnms,
             'label' => $r['name'] ?: $r['description'], 'manual' => self::publicManual($r)];
     }
 
@@ -507,6 +529,7 @@ class Ipam6Module extends AbstractModule
 
             return ['kind' => 'address', 'ip' => Ip6Calc::gmp2ip($p['start']), 'path' => $node ? $tree->path($node) : [],
                 'address' => $known ? $this->addrInfo($data, $hex) : null, 'hidden' => $known && ! isset($data['addr'][$hex]),
+                'range' => self::rangeRef(self::rangeOf($data, $p['start'])),
                 'history' => AuditLog::page(['module' => self::KEY, 'key_prefix' => ['a:' . Ip6Calc::gmp2ip($p['start']) . ':']], 1, 50)['rows']];
         }
         if ($p !== null) {

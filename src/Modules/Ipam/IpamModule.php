@@ -304,7 +304,15 @@ final class IpamModule extends AbstractModule
             'dup' => isset($dups[$ip]),
             'range' => ($r = $idx->rangeOf($ip)) ? ['id' => $r['id'], 'label' => $r['cidr'], 'role_label' => $r['role_label'],
                 'name' => $r['name'] ?: $r['description']] : null,
+            // Adres z LibreNMS w zakresie ręcznym: możliwy błąd konfiguracji sieci.
+            'conflict' => $r !== null && $idx->knownAddress($ip),
         ];
+    }
+
+    /** @return list<int> adresy z aktywnych hostów LibreNMS w zakresie */
+    private function activeInside(IpamIndex $idx, array $m): array
+    {
+        return array_values(array_filter($idx->knownInside($m['start'], $m['end']), fn ($ip) => $idx->status($ip) === IpamIndex::LNMS));
     }
 
     /** Zakres ręczny jako wiersz drzewa (ten sam kształt co węzeł). */
@@ -312,14 +320,16 @@ final class IpamModule extends AbstractModule
     {
         $size = $m['end'] - $m['start'] + 1;
         $used = count($idx->addressesIn($m['start'], $m['end']));
+        // Znaczek na zakresie liczy tylko aktywne hosty (wyłączone są widoczne po włączeniu przełącznika).
+        $lnms = count($this->activeInside($idx, $m));
 
         return [
             'cidr' => 'range:' . $m['id'], 'range' => true, 'id' => $m['id'], 'n' => $m['start'], 'len' => 32,
             'first' => $m['first'], 'last' => $m['last'], 'virtual' => false, 'sources' => ['manual'], 'subnet' => false,
             'state' => null,
-            'stats' => ['size' => $size, 'capacity' => $size, 'addresses' => $used, 'free' => $size - $used, 'used' => $used,
-                'util' => round($used * 100 / $size, 1)],
-            'children' => 0, 'direct' => $used,
+            // Zakres ręczny jest zajęty w całości (jak w węźle nadrzędnym); adresy w środku to tylko informacja.
+            'stats' => ['size' => $size, 'capacity' => $size, 'addresses' => $used, 'free' => 0, 'used' => $size, 'util' => 100],
+            'children' => 0, 'direct' => $used, 'lnms' => $lnms,
             'label' => $m['name'] ?: $m['description'], 'lnms' => [], 'manual' => $m, 'vlans' => $m['vlan'] ? [$m['vlan']] : [],
         ];
     }
@@ -398,26 +408,22 @@ final class IpamModule extends AbstractModule
         ];
     }
 
-    /** Rozwinięty zakres: jego adresy i wolne miejsce. */
+    /**
+     * Rozwinięty zakres: tylko adresy, które w nim są. Wolnego miejsca nie pokazujemy,
+     * bo zakres ręczny jest w całości przydzielony (np. pula NAT, PPPoE).
+     */
     private function apiRangeTree(IpamIndex $idx, int $id): array
     {
         $m = $this->findRange($idx, $id);
         $dups = $idx->duplicates();
         $ips = $idx->addressesIn($m['start'], $m['end']);
-        $free = [];
-        foreach (IpCalc::freeIntervals($m['start'], $m['end'], array_map(fn ($ip) => [$ip, $ip], $ips)) as [$a, $b]) {
-            $free[] = ['type' => 'hosts', 'n' => $a, 'first' => IpCalc::int2ip($a), 'last' => IpCalc::int2ip($b), 'count' => $b - $a + 1];
-            if (count($free) >= self::MAX_FREE) {
-                break;
-            }
-        }
 
         return [
             'node' => $this->rangeInfo($idx, $m),
             'children' => [],
             'addresses' => array_map(fn ($ip) => $this->addrInfo($idx, $ip, $dups), array_slice($ips, 0, self::MAX_ADDR)),
             'addresses_total' => count($ips),
-            'free' => $free,
+            'free' => [],
             'labels' => IpamIndex::LABELS,
             'sync' => SyncRunner::last(self::KEY),
             'v6_count' => count($idx->v6()),
@@ -546,6 +552,7 @@ final class IpamModule extends AbstractModule
 
             return ['kind' => 'address', 'ip' => $q, 'path' => $path, 'hidden' => $idx->hiddenOutside($ip),
                 'address' => $idx->address($ip) ? $this->addrInfo($idx, $ip, $dups) : null,
+                'range' => $range ? ['id' => $range['id'], 'label' => $range['cidr'], 'role_label' => $range['role_label']] : null,
                 'history' => $this->history(['a:' . $q . '/', 'a:' . $q . ':'], [$ip, $ip])];
         }
 
@@ -675,11 +682,13 @@ final class IpamModule extends AbstractModule
                 $conflicts[] = ['cidr' => $cidr, 'ips' => IpInput::compress(array_slice($inside, 0, 50)), 'count' => count($inside)];
             }
         }
-        // Zakresy: rezerwacje z adresami z LibreNMS i zakresy, które przecięła sieć z LibreNMS.
+        // Zakresy: każdy zakres ręczny z adresami z LibreNMS (możliwy błąd konfiguracji)
+        // i zakresy, które przecięła sieć z LibreNMS.
         $rangeConflicts = [];
         foreach ($idx->ranges() as $id => $m) {
-            if ($m['role'] === 'reserved' && ($inside = $idx->knownInside($m['start'], $m['end'])) !== []) {
-                $conflicts[] = ['cidr' => $m['cidr'], 'range_id' => $id, 'first' => $m['first'],
+            $inside = $m['role'] === 'reserved' ? $idx->knownInside($m['start'], $m['end']) : $this->activeInside($idx, $m);
+            if ($inside !== []) {
+                $conflicts[] = ['cidr' => $m['cidr'], 'range_id' => $id, 'first' => $m['first'], 'role_label' => $m['role_label'],
                     'ips' => IpInput::compress(array_slice($inside, 0, 50)), 'count' => count($inside)];
             }
             if (($problem = $idx->rangeContainer($m['start'], $m['end'])[1]) !== null) {

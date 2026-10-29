@@ -26,6 +26,8 @@
     #nreg-tab-ipam6 .bdg.l { background: #337ab7; } #nreg-tab-ipam6 .bdg.s { background: #999; } #nreg-tab-ipam6 .bdg.m { background: #b57edc; }
     #nreg-tab-ipam6 .bdg.r { background: #5bc0de; } #nreg-tab-ipam6 .bdg.v { background: transparent; color: inherit; border: 1px solid rgba(128,128,128,.5); }
     #nreg-tab-ipam6 .ta { display: flex; gap: 8px; font-size: 12px; padding: 1px 4px; white-space: nowrap; cursor: pointer; }
+    #nreg-tab-ipam6 .ta.cf { background: rgba(217, 83, 79, .14); box-shadow: inset 3px 0 0 #d9534f; }
+    #nreg-tab-ipam6 .chips a.cf { color: #d9534f; font-weight: bold; }
     #nreg-tab-ipam6 .ta:hover { background: rgba(128,128,128,.12); }
     #nreg-tab-ipam6 .ta .ip { font-family: monospace; font-size: 13px; min-width: 230px; }
     #nreg-tab-ipam6 .ta .who { overflow: hidden; text-overflow: ellipsis; opacity: .85; }
@@ -165,6 +167,7 @@ document.addEventListener('nreg:ready', function () {
     var spaceSel = document.getElementById('nreg6-space');
     var space = 1, manualCache = {}, selectedEl = null, loaded = false, detailSeq = 0, DETAIL_HINT = detail.innerHTML;
     var STATE_BDG = { l: 'LibreNMS', s: 'host wyłączony', m: 'ręczny', r: 'rezerwacja' };
+    var CONFLICT_HINT = 'Adres z LibreNMS leży w zakresie dodanym ręcznie (np. puli DHCPv6). To może być błąd w konfiguracji sieci.';
     // Role wpisów ręcznych (z manual_list) i rodzaj wpisu po treści pola.
     var ROLES = {
         prefix: { aggregate: 'agregat', pool: 'pula (np. prefiksy dla klientów)', used: 'sieć używana', reserved: 'rezerwacja' },
@@ -230,6 +233,7 @@ document.addEventListener('nreg:ready', function () {
             + '<span class="tg">·</span><span class="cidr" data-open-range="' + r.id + '">' + esc(r.first + ' – ' + r.last) + '</span>'
             + '<span class="bdg ' + (m.role === 'reserved' ? 'r' : 'm') + '">' + esc(m.role_label) + '</span>'
             + (m.expiry === 'expired' ? '<span class="bdg d">termin minął</span>' : '')
+            + (r.lnms ? '<span class="bdg d" title="' + esc(CONFLICT_HINT) + '">' + r.lnms + ' adr. z LibreNMS</span>' : '')
             + '<span class="lbl" title="' + esc(r.label || '') + '">' + esc(r.label || '') + '</span>'
             + '<span class="cnt" title="adresów w zakresie / rozmiar">' + r.addresses + '/' + big(r.size) + ' adr.</span></div>';
     }
@@ -249,8 +253,9 @@ document.addEventListener('nreg:ready', function () {
     function addrRow(a, depth) {
         var who = a.rows.map(function (r) { return r.device + ' ' + r['if'] + (r.alias ? ' (' + r.alias + ')' : ''); });
         if (a.manual) { who.push((a.manual.name || a.manual.description) + ' [ręczny' + (a.manual.expiry === 'expired' ? ', termin minął' : '') + ']'); }
-        return '<div class="ta" data-open-ip="' + esc(a.ip) + '" style="padding-left:' + (depth * 16 + 22) + 'px">'
+        return '<div class="ta' + (a.conflict ? ' cf' : '') + '" data-open-ip="' + esc(a.ip) + '" style="padding-left:' + (depth * 16 + 22) + 'px">'
             + '<span class="ip">' + esc(a.ip) + '</span><span class="bdg ' + a.state + '">' + esc(STATE_BDG[a.state]) + '</span>'
+            + (a.conflict ? '<span class="bdg d" title="' + esc(CONFLICT_HINT) + '">w zakresie ręcznym</span>' : '')
             + '<span class="who">' + esc(who.join(' · ')) + '</span></div>';
     }
 
@@ -407,10 +412,10 @@ document.addEventListener('nreg:ready', function () {
             var h = '<h4 class="nreg-mono">' + esc(r.first + ' – ' + r.last) + copyBtn(r.first + '-' + r.last) + '</h4>'
                 + '<dl><dt>Rozmiar</dt><dd>' + big(r.size) + ' adr.</dd><dt>Adresów w środku</dt><dd>' + j.addresses_total + '</dd>'
                 + (j.container ? '<dt>W prefiksie</dt><dd><a href="#" class="nreg-mono" data-open-node="' + esc(j.container) + '">' + esc(j.container) + '</a></dd>' : '')
-                + '</dl>' + manualBlock(r.manual);
+                + '</dl>' + (r.lnms ? alertBox('danger', esc(CONFLICT_HINT) + ' Adresów z LibreNMS w zakresie: ' + r.lnms + ' (na czerwono niżej).') : '') + manualBlock(r.manual);
             if (j.addresses.length) {
                 h += '<h5>Adresy w zakresie (' + j.addresses_total + ')</h5><div class="chips">' + j.addresses.map(function (a) {
-                    return '<a href="#" data-goto-ip="' + esc(a.ip) + '" title="' + esc(STATE_BDG[a.state] || '') + '">' + esc(a.ip) + '</a>';
+                    return '<a href="#" data-goto-ip="' + esc(a.ip) + '"' + (a.conflict ? ' class="cf"' : '') + ' title="' + esc(STATE_BDG[a.state] || '') + '">' + esc(a.ip) + '</a>';
                 }).join('') + (j.addresses_total > j.addresses.length ? ' …' : '') + '</div>';
             }
             h += '<h5>Historia</h5>' + (j.history.length ? N.logTable(j.history, false) : '<p class="nreg-muted">Brak zmian.</p>');
@@ -424,10 +429,13 @@ document.addEventListener('nreg:ready', function () {
             var a = j.address, net = j.path.length ? j.path[j.path.length - 1] : null;
             var h = '<h4 class="nreg-mono">' + esc(j.ip) + copyBtn(j.ip) + (a ? ' <span class="bdg ' + a.state + '">' + esc(STATE_BDG[a.state]) + '</span>' : '') + '</h4>'
                 + (net ? '<p style="font-size:12px">W prefiksie: <a href="#" data-open-node="' + esc(net) + '" class="nreg-mono">' + esc(net) + '</a></p>' : '');
-            if (!a) {
+            if (!a && j.range) {
+                h += '<p>Adres nie jest wolny: należy do zakresu ' + esc(j.range.label) + ' (' + esc(j.range.role_label) + ').</p>';
+            } else if (!a) {
                 h += '<p>Adres jest wolny w tej przestrzeni.</p>';
                 if (can.canEdit) { h += '<p><button class="btn btn-success btn-xs" type="button" data-add="' + esc(j.ip) + '"><i class="fa fa-plus"></i> Dodaj jako wpis ręczny</button></p>'; }
             } else {
+                if (a.conflict) { h += alertBox('danger', esc(CONFLICT_HINT) + ' Zakres: ' + esc(a.range.label) + ' (' + esc(a.range.role_label) + ').'); }
                 if (a.rows.length) { h += '<h5>LibreNMS</h5>' + lnmsTable(a.rows); }
                 if (a.manual) { h += manualBlock(a.manual); }
             }

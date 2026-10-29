@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.4 - 2026-10-29
+
+- Zakres ręczny (pula NAT, PPPoE, DHCP, adresy statyczne, rezerwacja) jest zajęty w całości: po rozwinięciu
+  nie pokazuje wolnych adresów, licznik w drzewie to rozmiar/rozmiar, adres bez danych w zakresie nie jest
+  „wolny” w szczegółach.
+- Adres z LibreNMS w zakresie ręcznym jest oznaczony na czerwono (wiersz drzewa, szczegóły adresu i zakresu,
+  znaczek „N adr. z LibreNMS” na zakresie) jako możliwy błąd konfiguracji; IPv4: lista w „Uwagach” obejmuje
+  wszystkie zakresy, nie tylko rezerwacje. Znaczek i „Uwagi” liczą aktywne hosty; adresy z wyłączonych hostów
+  są oznaczone, gdy włączony jest przełącznik „Pokaż adresy z wyłączonych hostów”.
+
 ## 0.8.3 - 2026-10-29
 
 - Zakładki nazywają się „Adresy IPv4” i „Adresy IPv6” (wcześniej „Adresacja IP”, „Adresacja IPv6”).
