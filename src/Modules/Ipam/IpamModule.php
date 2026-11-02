@@ -137,7 +137,7 @@ final class IpamModule extends AbstractModule
             'tree' => $this->apiTree($space, trim((string) $request->query('node', ''))),
             'node' => $this->apiNode($space, trim((string) $request->query('cidr', ''))),
             'range' => $this->apiRange($space, (int) $request->query('id', 0)),
-            'search' => $this->apiSearch($space, trim((string) $request->query('q', ''))),
+            'search' => $this->apiSearch($space, trim((string) $request->query('q', '')), trim((string) $request->query('type', ''))),
             'free' => $this->apiFree($space, trim((string) $request->query('within', '')), (int) $request->query('len', 29),
                 (int) $request->query('count', 5)),
             'issues' => $this->apiIssues($space),
@@ -535,8 +535,14 @@ final class IpamModule extends AbstractModule
         }));
     }
 
-    private function apiSearch(int $space, string $q): array
+    /** Lista wyników przy szukaniu po typie adresacji. */
+    private const TYPE_HITS = 500;
+
+    private function apiSearch(int $space, string $q, string $type = ''): array
     {
+        if ($type !== '') {
+            return $this->apiSearchType($space, $q, $type);
+        }
         if ($q === '') {
             throw new ApiException(Lang::t('Wpisz adres, prefiks albo tekst.'));
         }
@@ -602,6 +608,33 @@ final class IpamModule extends AbstractModule
         }
 
         return ['kind' => 'text', 'hits' => $hits];
+    }
+
+    /** Wpisy ręczne danego typu (agregat, pula, NAT...), zawężone zapytaniem (IpamIndex::findManual). */
+    private function apiSearchType(int $space, string $q, string $type): array
+    {
+        $idx = $this->index($space);
+        $tree = $idx->tree();
+        try {
+            $rows = $idx->findManual($type, $q);
+        } catch (\InvalidArgumentException $e) {
+            throw new ApiException($e->getMessage());
+        }
+        $hits = [];
+        foreach (array_slice($rows, 0, self::TYPE_HITS) as $m) {
+            $label = $m['role_label'] . ' · ' . ($m['name'] ?: $m['description']);
+            if ($m['kind'] === 'range') {
+                $hits[] = ['type' => 'range', 'value' => $m['cidr'], 'id' => (int) $m['id'], 'first' => $m['first'], 'label' => $label,
+                    'path' => $this->rangePath($tree, (int) $m['id'])];
+            } elseif ($m['kind'] === 'prefix') {
+                $hits[] = ['type' => 'prefix', 'value' => $m['cidr'], 'label' => $label, 'path' => $tree->path($m['cidr'])];
+            } else {
+                $node = $tree->deepest($m['start']);
+                $hits[] = ['type' => 'address', 'value' => IpCalc::int2ip($m['start']), 'label' => $label, 'path' => $node ? $tree->path($node) : []];
+            }
+        }
+
+        return ['kind' => 'text', 'type' => $type, 'hits' => $hits, 'total' => count($rows)];
     }
 
     private function apiFree(int $space, string $within, int $len, int $count): array

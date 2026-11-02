@@ -42,6 +42,7 @@ return [
     'Nie ma takiego zakresu w tej przestrzeni (mógł zostać usunięty).' => 'No such range in this space (it may have been deleted).',
     'Nie ma węzła {cidr}.' => 'No node {cidr}.',
     'Wpisz adres, prefiks albo tekst.' => 'Enter an address, prefix or text.',
+    'Nieznany typ adresacji: {type}.' => 'Unknown addressing type: {type}.',
     'Maska musi być z zakresu /8-/32.' => 'Mask must be in the range /8-/32.',
     'Blok /{len} jest większy niż {cidr}.' => 'Block /{len} is larger than {cidr}.',
     'Zaznacz co najmniej jeden prefiks.' => 'Select at least one prefix.',

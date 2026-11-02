@@ -266,6 +266,53 @@ final class IpamIndex
     }
 
     /**
+     * Wpisy ręczne danego typu: "prefix", "range", "address" albo "rodzaj:rola"
+     * (np. "prefix:aggregate", "range:nat"). Zapytanie zawęża wynik: adres - wpisy,
+     * które go zawierają; prefiks - wpisy, które na niego nachodzą; tekst - cidr,
+     * rola, nazwa, opis, właściciel, urządzenia. Puste zapytanie = wszystkie.
+     * Wynik posortowany po adresie początkowym.
+     *
+     * @return list<array>
+     */
+    public function findManual(string $type, string $q = ''): array
+    {
+        [$kind, $role] = array_pad(explode(':', $type, 2), 2, null);
+        $rows = match ($kind) {
+            'prefix' => array_values($this->manualPrefixes),
+            'range' => array_values($this->ranges),
+            'address' => array_values(array_filter(array_column($this->addr, 'manual'))),
+            default => throw new \InvalidArgumentException(Lang::t('Nieznany typ adresacji: {type}.', ['type' => $type])),
+        };
+        if ($role !== null && ! isset(IpamManual::rolesFor($kind)[$role])) {
+            throw new \InvalidArgumentException(Lang::t('Nieznany typ adresacji: {type}.', ['type' => $type]));
+        }
+
+        $q = trim($q);
+        $ip = IpCalc::ip2int($q);
+        $pfx = null;
+        if ($ip === null && preg_match('#^\d{1,3}(\.\d{1,3}){3}/\d{1,2}$#', $q)) {
+            $pfx = IpCalc::parseV4($q);
+        }
+        $needle = mb_strtolower($q);
+        $rows = array_filter($rows, function (array $m) use ($role, $q, $ip, $pfx, $needle) {
+            if ($role !== null && $m['role'] !== $role) {
+                return false;
+            }
+
+            return match (true) {
+                $q === '' => true,
+                $ip !== null => $ip >= $m['start'] && $ip <= $m['end'],
+                $pfx !== null => $m['start'] <= $pfx['end'] && $m['end'] >= $pfx['start'],
+                default => str_contains(mb_strtolower(implode(' ', [$m['cidr'], $m['role_label'] ?? '', $m['name'] ?? '',
+                    $m['description'] ?? '', $m['owner'] ?? '', $m['devices'] ?? ''])), $needle),
+            };
+        });
+        usort($rows, fn ($a, $b) => [$a['start'], $a['end']] <=> [$b['start'], $b['end']]);
+
+        return $rows;
+    }
+
+    /**
      * Adresy (dowolny status) w zakresie [a, b].
      *
      * @return list<int>

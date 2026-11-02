@@ -67,6 +67,17 @@
     @endif
     <form id="nreg-ip-search">
         <input class="form-control" id="nreg-ip-q" placeholder="{{ nreg_t('adres, prefiks albo tekst') }}" style="width: 220px;">
+        <select class="form-control" id="nreg-ip-type" style="width:auto;height:30px;padding:4px 8px" title="{{ nreg_t('Szukaj tylko we wpisach ręcznych danego typu. Puste pole szukania pokazuje wszystkie wpisy tego typu.') }}">
+            <option value="">{{ nreg_t('wszystko') }}</option>
+            @foreach(['prefix' => nreg_t('Prefiksy'), 'range' => nreg_t('Zakresy'), 'address' => nreg_t('Adresy ręczne')] as $nregKind => $nregKindLabel)
+                <optgroup label="{{ $nregKindLabel }}">
+                    <option value="{{ $nregKind }}">{{ nreg_t('wszystkie') }} ({{ mb_strtolower($nregKindLabel) }})</option>
+                    @foreach(\Ispnetella\NetellaReg\Modules\Ipam\IpamManual::roleLabels(\Ispnetella\NetellaReg\Modules\Ipam\IpamManual::rolesFor($nregKind)) as $nregRole => $nregRoleLabel)
+                        <option value="{{ $nregKind }}:{{ $nregRole }}">{{ $nregRoleLabel }}</option>
+                    @endforeach
+                </optgroup>
+            @endforeach
+        </select>
         <button class="btn btn-primary btn-sm" type="submit"><i class="fa fa-search"></i> {{ nreg_t('Szukaj') }}</button>
     </form>
     <form id="nreg-ip-free">
@@ -485,10 +496,10 @@ document.addEventListener('nreg:ready', function () {
 
     document.getElementById('nreg-ip-search').addEventListener('submit', function (e) {
         e.preventDefault();
-        var q = document.getElementById('nreg-ip-q').value.trim();
-        if (!q) { return; }
+        var q = document.getElementById('nreg-ip-q').value.trim(), type = document.getElementById('nreg-ip-type').value;
+        if (!q && !type) { return; }
         result.innerHTML = '';
-        api('search', { q: q }).then(function (j) {
+        api('search', type ? { q: q, type: type } : { q: q }).then(function (j) {
             if (j.kind === 'address') {
                 if (j.hidden) { result.innerHTML = alertBox('info', esc(OUTSIDE_HINT)); }
                 expandPath(j.path, j.ip); openIp(j.ip); return;
@@ -499,13 +510,21 @@ document.addEventListener('nreg:ready', function () {
                 return;
             }
             clearDetail();
-            if (!j.hits.length) { result.innerHTML = alertBox('warning', N.t('Nic nie znaleziono dla „{q}”.', { q: esc(q) })); return; }
-            result.innerHTML = alertBox('info', N.t('Znaleziono {n}:', { n: j.hits.length }) + '<br>' + j.hits.map(function (h) {
+            if (!j.hits.length) {
+                result.innerHTML = alertBox('warning', type && !q ? esc(N.t('Brak wpisów tego typu w tej przestrzeni.')) : N.t('Nic nie znaleziono dla „{q}”.', { q: esc(q) }));
+                return;
+            }
+            var found = j.total > j.hits.length ? N.t('Znaleziono {n}, pokazuję pierwsze {m}:', { n: j.total, m: j.hits.length }) : N.t('Znaleziono {n}:', { n: j.hits.length });
+            result.innerHTML = alertBox('info', found + '<br>' + j.hits.map(function (h) {
                 var go = h.type === 'range' ? 'data-goto-range="' + h.id + '" data-first="' + esc(h.first) + '"'
                     : (h.type === 'address' ? 'data-goto-ip="' : 'data-goto-node="') + esc(h.value) + '"';
                 return '<a href="#" class="nreg-mono" ' + go + '>' + esc(h.value) + '</a> <span class="nreg-muted">' + esc(h.label || '') + '</span>';
             }).join('<br>'));
         }).catch(function (e2) { result.innerHTML = alertBox('danger', esc(e2.message)); });
+    });
+    // Wybór typu od razu pokazuje wpisy (z zawężeniem, jeśli coś wpisano).
+    document.getElementById('nreg-ip-type').addEventListener('change', function () {
+        if (this.value || document.getElementById('nreg-ip-q').value.trim()) { document.getElementById('nreg-ip-search').requestSubmit(); }
     });
 
     document.getElementById('nreg-ip-free').addEventListener('submit', function (e) {

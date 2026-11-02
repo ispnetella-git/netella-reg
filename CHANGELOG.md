@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.2 - 2026-11-02
+
+- Adresy IPv4: wyszukiwarka z listą typów adresacji (prefiksy: agregat, pula, rezerwacja, sieć używana;
+  zakresy: pula DHCP, pula PPPoE, NAT, adresy statyczne, rezerwacja; adresy ręczne: używany, rezerwacja,
+  albo wszystkie danego rodzaju). Wybór typu od razu pokazuje wszystkie wpisy tego typu posortowane po adresie
+  (do 500). Wpisany tekst zawęża listę: adres - wpisy, które go zawierają; prefiks - wpisy, które na niego
+  nachodzą; tekst - nazwa, opis, właściciel, urządzenia. API: `search?type=range:nat&q=...`.
+
 ## 0.9.1 - 2026-10-29
 
 - Ikonki kopiowania w drzewach IPv4 i IPv6 w kolorze tekstu (czarne, w ciemnym motywie białe) zamiast niebieskich.

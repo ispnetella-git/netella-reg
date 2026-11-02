@@ -418,6 +418,30 @@ check('kontener: adresacja wewnętrzna', $idxP->rangeContainer($ip('10.9.0.1'), 
 check('wewnętrzna tylko używana', array_keys($idxP->usedImplicit()), ['10.0.0.0/8']);
 check('wewnętrzna w drzewie', $idxP->tree()->roots(), ['10.0.0.0/8']);
 
+// IpamIndex::findManual - szukanie po typie adresacji (agregat, pula, NAT...).
+$mr = fn (int $id, string $a, string $b, string $role, string $name = '') => ['id' => $id, 'family' => 4, 'kind' => 'range', 'cidr' => "$a-$b",
+    'start' => $ip($a), 'end' => $ip($b), 'len' => 32, 'role' => $role, 'name' => $name];
+$ma = fn (int $id, string $a, string $role) => ['id' => $id, 'family' => 4, 'kind' => 'address', 'cidr' => "$a/32", 'start' => $ip($a), 'end' => $ip($a), 'len' => 32, 'role' => $role];
+$idxT = new IpamIndex([], [
+    $mp(1, '45.10.136.0/24', 'aggregate'), $mp(2, '10.0.0.0/8', 'aggregate'), $mp(3, '100.64.0.0/22', 'pool'), $mp(4, '10.5.0.0/24', 'reserved'),
+    $mr(5, '100.64.0.10', '100.64.0.200', 'nat', 'CGNAT KOP'), $mr(6, '10.1.1.100', '10.1.1.199', 'dhcp'), $mr(7, '100.64.1.1', '100.64.1.50', 'nat', 'CGNAT BLA'),
+    $ma(8, '10.9.9.9', 'reserved'), $ma(9, '10.9.9.1', 'used'),
+], 1, [], new DateTimeImmutable('2026-11-02'), 30, 'stale');
+$cidrs = fn (array $rows) => array_column($rows, 'cidr');
+check('typ: agregaty posortowane', $cidrs($idxT->findManual('prefix:aggregate')), ['10.0.0.0/8', '45.10.136.0/24']);
+check('typ: wszystkie prefiksy', $cidrs($idxT->findManual('prefix')), ['10.0.0.0/8', '10.5.0.0/24', '45.10.136.0/24', '100.64.0.0/22']);
+check('typ: pule', $cidrs($idxT->findManual('prefix:pool')), ['100.64.0.0/22']);
+check('typ: NAT', $cidrs($idxT->findManual('range:nat')), ['100.64.0.10-100.64.0.200', '100.64.1.1-100.64.1.50']);
+check('typ: NAT + tekst', $cidrs($idxT->findManual('range:nat', 'bla')), ['100.64.1.1-100.64.1.50']);
+check('typ: NAT + adres w zakresie', $cidrs($idxT->findManual('range:nat', '100.64.0.55')), ['100.64.0.10-100.64.0.200']);
+check('typ: zakresy + prefiks nachodzący', $cidrs($idxT->findManual('range', '100.64.0.0/16')), ['100.64.0.10-100.64.0.200', '100.64.1.1-100.64.1.50']);
+check('typ: agregat zawierający adres', $cidrs($idxT->findManual('prefix:aggregate', '10.200.0.1')), ['10.0.0.0/8']);
+check('typ: adresy ręczne - rezerwacje', $cidrs($idxT->findManual('address:reserved')), ['10.9.9.9/32']);
+check('typ: adresy ręczne - wszystkie', $cidrs($idxT->findManual('address')), ['10.9.9.1/32', '10.9.9.9/32']);
+check('typ: brak trafień', $idxT->findManual('range:pppoe'), []);
+throws('typ: nieznany rodzaj', fn () => $idxT->findManual('vlan'));
+throws('typ: rola z innego rodzaju', fn () => $idxT->findManual('prefix:nat'));
+
 // --- Expiry: termin ważności wpisów ręcznych ---
 $today = '2026-10-27';
 check('expiry pusto', Expiry::parse('', $today), null);

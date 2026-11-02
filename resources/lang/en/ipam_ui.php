@@ -7,6 +7,12 @@ return [
     'Nowa przestrzeń adresowa (VRF, klient)' => 'New address space (VRF, customer)',
     'adres, prefiks albo tekst' => 'address, prefix or text',
     'Szukaj' => 'Search',
+    'Szukaj tylko we wpisach ręcznych danego typu. Puste pole szukania pokazuje wszystkie wpisy tego typu.'
+        => 'Search only manual entries of this type. An empty search box lists all entries of this type.',
+    'wszystko' => 'everything',
+    'Prefiksy' => 'Prefixes',
+    'Zakresy' => 'Ranges',
+    'Adresy ręczne' => 'Manual addresses',
     'Wolne' => 'Free',
     'w' => 'in',
     'Znajdź' => 'Find',
@@ -146,6 +152,8 @@ return [
     'Nie ma prefiksu {cidr} w drzewie. Pokazuję najbliższą sieć, która go zawiera.' => 'Prefix {cidr} is not in the tree. Showing the closest network that contains it.',
     'Nic nie znaleziono dla „{q}”.' => 'Nothing found for “{q}”.',
     'Znaleziono {n}:' => 'Found {n}:',
+    'Brak wpisów tego typu w tej przestrzeni.' => 'No entries of this type in this space.',
+    'Znaleziono {n}, pokazuję pierwsze {m}:' => 'Found {n}, showing the first {m}:',
     'Wolne /{len} w {within}:' => 'Free /{len} in {within}:',
     'Brak wolnych /{len} w {within}.' => 'No free /{len} in {within}.',
 
