@@ -35,7 +35,7 @@ final class VlanModule extends AbstractModule
     public const TYPE = 'occurrence';
 
     /** Pola formularza wpisu ręcznego. */
-    private const FORM_FIELDS = ['name', 'description', 'owner', 'status', 'devices', Expiry::FIELD];
+    private const FORM_FIELDS = ['name', 'description', 'owner', 'status', 'devices', Expiry::FIELD, 'qinq'];
 
     public function key(): string
     {
@@ -49,13 +49,13 @@ final class VlanModule extends AbstractModule
 
     public function schemaVersion(): int
     {
-        return 4;
+        return 5;
     }
 
     public function migrate(Connection $db, int $from): void
     {
         // 1: tylko tabele rdzenia, 2: reg_vlan_manual, 3: grupy (batch_id) i scalenie dziennika,
-        // 4: termin ważności (valid_until, expired_at).
+        // 4: termin ważności (valid_until, expired_at), 5: oznaczenie QinQ (qinq).
         VlanManual::migrate($db, $from);
     }
 
@@ -244,6 +244,7 @@ final class VlanModule extends AbstractModule
             'statuses' => $index->statusString(),
             'manual' => $index->manualMask(),
             'expired' => $index->expiredMask(),
+            'qinq' => $index->qinqMask(),
             'counts' => $index->counts(),
             'labels' => VlanIndex::labels(),
             'sync' => SyncRunner::last(self::KEY),
@@ -317,7 +318,7 @@ final class VlanModule extends AbstractModule
                     'status' => $s,
                     'devices' => array_values(array_unique($devices)),
                     'manual' => $m === null ? null : ['description' => $m['description'], 'owner' => $m['owner'], 'devices' => $m['devices'],
-                        'valid_until' => $m['valid_until'], 'expiry' => $m['expiry']],
+                        'valid_until' => $m['valid_until'], 'expiry' => $m['expiry'], 'qinq' => $m['qinq'] ?? false],
                 ];
             }
         }

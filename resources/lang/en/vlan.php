@@ -66,6 +66,10 @@ return [
     'termin minął' => 'expired',
     'LibreNMS + wpis ręczny' => 'LibreNMS + manual entry',
     'termin minął: {n}' => 'expired: {n}',
+    'QinQ (podwójny tag): {n}' => 'QinQ (double tag): {n}',
+    'QinQ / podwójny tag (S-VLAN)' => 'QinQ / double tag (S-VLAN)',
+    'Numer jest zewnętrznym tagiem (S-VLAN), w którym płyną VLAN-y klienta (dot1q-tunnel, TLS na OLT, second-dot1q). LibreNMS tego nie rozróżnia, dlatego oznaczenie jest ręczne.'
+        => 'The number is an outer tag (S-VLAN) carrying customer VLANs (dot1q-tunnel, TLS on the OLT, second-dot1q). LibreNMS cannot tell this apart, so the flag is set manually.',
     'Brak synchronizacji. Uruchom <code>lnms netella-reg:sync</code> albo dodaj cron.' => 'No sync yet. Run <code>lnms netella-reg:sync</code> or add a cron job.',
     'Dane z LibreNMS z {at}' => 'LibreNMS data from {at}',
     'błąd: {err}' => 'error: {err}',

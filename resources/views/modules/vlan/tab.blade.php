@@ -22,6 +22,10 @@
     .nreg-legend i.mk { box-shadow: inset 0 -6px 0 #b57edc; }
     /* Wpis ręczny po terminie ważności: paski na kolorze statusu. */
     .nreg-vrow i.ex, .nreg-legend i.ex { background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.75) 0 2px, transparent 2px 4px); }
+    /* QinQ (podwójny tag): dwie kreski u góry kwadratu. */
+    .nreg-vrow i.qq, .nreg-legend i.qq { position: relative; }
+    .nreg-vrow i.qq::after, .nreg-legend i.qq::after { content: ''; position: absolute; left: 1px; right: 1px; top: 1px; height: 2px;
+        border-top: 1px solid #111; border-bottom: 1px solid #111; }
     .nreg-v-f { background: #dff0d8; }
     .nreg-v-l { background: #337ab7; }
     .nreg-v-s { background: #999; }
@@ -89,6 +93,11 @@
                 <input class="form-control" id="nreg-vf-name" name="name" maxlength="64" placeholder="{{ nreg_t('np. KLIENT-X-BSA') }}">
             </div>
         </div>
+        <div class="checkbox" style="margin:6px 0 2px">
+            <label title="{{ nreg_t('Numer jest zewnętrznym tagiem (S-VLAN), w którym płyną VLAN-y klienta (dot1q-tunnel, TLS na OLT, second-dot1q). LibreNMS tego nie rozróżnia, dlatego oznaczenie jest ręczne.') }}">
+                <input type="checkbox" name="qinq" value="1"> {{ nreg_t('QinQ / podwójny tag (S-VLAN)') }}
+            </label>
+        </div>
         <div class="row">
             <div class="col-sm-12">
                 <label class="req" for="nreg-vf-description">{{ nreg_t('Opis') }}</label>
@@ -133,8 +142,9 @@ document.addEventListener('nreg:ready', function () {
     var grid = document.getElementById('nreg-vlan-grid'), result = document.getElementById('nreg-vlan-result');
     var detail = document.getElementById('nreg-vlan-detail'), legend = document.getElementById('nreg-vlan-legend');
     var form = document.getElementById('nreg-vlan-form'), manualList = document.getElementById('nreg-vlan-manual-list');
-    var statuses = '', manualMask = '', expiredMask = '', labels = {}, selected = null;
+    var statuses = '', manualMask = '', expiredMask = '', qinqMask = '', labels = {}, selected = null;
     var pick = {}; // numery zaznaczone na mapie (podświetlone), klucz = numer
+    var QINQ_BDG = '<span class="label label-default" title="' + esc(N.t('QinQ / podwójny tag (S-VLAN)')) + '">QinQ</span>';
     var STATE_CSS = { f: 'nreg-v-f', l: 'nreg-v-l', s: 'nreg-v-s', m: 'nreg-v-m', r: 'nreg-v-r', g: 'nreg-v-g' };
 
     function cell(v) { return grid.querySelector('i[data-v="' + v + '"]'); }
@@ -150,10 +160,11 @@ document.addEventListener('nreg:ready', function () {
                 var s = statuses.charAt(v - 1) || 'f', mk = manualMask.charAt(v - 1) === '1';
                 // Pasek u dołu: wpis ręczny przy numerze, który ma też dane LibreNMS.
                 var ex = expiredMask.charAt(v - 1) === '1';
-                var cls = STATE_CSS[s] + (mk && s !== 'm' && s !== 'r' ? ' mk' : '') + (ex ? ' ex' : '');
+                var qq = qinqMask.charAt(v - 1) === '1';
+                var cls = STATE_CSS[s] + (mk && s !== 'm' && s !== 'r' ? ' mk' : '') + (ex ? ' ex' : '') + (qq ? ' qq' : '');
                         // Opis do podpowiedzi (data-t), bez title: natywny dymek pokazuje się z opóźnieniem.
                 h += '<i data-v="' + v + '" class="' + cls + '" data-t="' + esc(labels[s] || s)
-                    + (mk && s !== 'm' && s !== 'r' ? ' + ' + N.t('wpis ręczny') : '') + (ex ? ' · ' + N.t('termin minął') : '') + '"></i>';
+                    + (mk && s !== 'm' && s !== 'r' ? ' + ' + N.t('wpis ręczny') : '') + (ex ? ' · ' + N.t('termin minął') : '') + (qq ? ' · QinQ' : '') + '"></i>';
             }
             h += '</div>';
         }
@@ -166,7 +177,8 @@ document.addEventListener('nreg:ready', function () {
         legend.innerHTML = Object.keys(labels).map(function (s) {
             return '<span><i class="' + STATE_CSS[s] + '"></i>' + esc(labels[s]) + ': <strong>' + (counts[s] || 0) + '</strong></span>';
         }).join('') + '<span><i class="nreg-v-l mk"></i>' + N.t('LibreNMS + wpis ręczny') + '</span>'
-            + '<span><i class="nreg-v-r ex"></i>' + N.t('termin minął: {n}', { n: '<strong>' + (expiredMask.match(/1/g) || []).length + '</strong>' }) + '</span>';
+            + '<span><i class="nreg-v-r ex"></i>' + N.t('termin minął: {n}', { n: '<strong>' + (expiredMask.match(/1/g) || []).length + '</strong>' }) + '</span>'
+            + '<span><i class="nreg-v-l qq"></i>' + N.t('QinQ (podwójny tag): {n}', { n: '<strong>' + (qinqMask.match(/1/g) || []).length + '</strong>' }) + '</span>';
     }
 
     function renderSync(sync) {
@@ -177,7 +189,7 @@ document.addEventListener('nreg:ready', function () {
 
     function loadMap() {
         return N.api('vlan/map').then(function (j) {
-            statuses = j.statuses; manualMask = j.manual || ''; expiredMask = j.expired || ''; labels = j.labels;
+            statuses = j.statuses; manualMask = j.manual || ''; expiredMask = j.expired || ''; qinqMask = j.qinq || ''; labels = j.labels;
             renderLegend(j.counts); renderGrid(); renderSync(j.sync);
         }).catch(function (e) { grid.innerHTML = alertBox('danger', esc(e.message)); });
     }
@@ -236,7 +248,7 @@ document.addEventListener('nreg:ready', function () {
             j.occupied.forEach(function (o) {
                 h += '<tr><td><a href="#" data-vlan="' + o.vlan + '">' + o.vlan + '</a></td><td>' + esc(labels[o.status] || o.status)
                     + '</td><td>' + esc(o.devices.join(', ')) + '</td><td>'
-                    + (o.manual ? esc(o.manual.description) + (o.manual.owner ? ' <span class="nreg-muted">(' + esc(o.manual.owner) + ')</span>' : '') + ' ' + N.expiryHtml(o.manual) : '')
+                    + (o.manual ? (o.manual.qinq ? QINQ_BDG + ' ' : '') + esc(o.manual.description) + (o.manual.owner ? ' <span class="nreg-muted">(' + esc(o.manual.owner) + ')</span>' : '') + ' ' + N.expiryHtml(o.manual) : '')
                     + '</td></tr>';
             });
             result.innerHTML = h + '</tbody></table>';
@@ -291,7 +303,7 @@ document.addEventListener('nreg:ready', function () {
             : '<span class="label label-default">' + N.t('tylko ręcznie') + '</span> ' + N.t('LibreNMS nie widzi tego numeru');
         return '<div class="nreg-manual"><strong>' + N.t('Wpis ręczny') + '</strong> ' + adopted + '<dl style="margin-top:6px">'
             + (grp ? '<dt>' + N.t('Grupa') + '</dt><dd><span class="nreg-mono">' + esc(grp.vlans) + '</span> (' + N.t('{n} numerów dodanych razem', { n: grp.count }) + ')</dd>' : '')
-            + '<dt>' + N.t('Status') + '</dt><dd>' + esc((statusLabels || {})[m.status] || m.status) + '</dd>'
+            + '<dt>' + N.t('Status') + '</dt><dd>' + esc((statusLabels || {})[m.status] || m.status) + (m.qinq ? ' ' + QINQ_BDG : '') + '</dd>'
             + (m.valid_until ? '<dt>' + N.t('Ważne do') + '</dt><dd>' + N.expiryHtml(m) + '</dd>' : '')
             + (m.name ? '<dt>' + N.t('Nazwa') + '</dt><dd>' + esc(m.name) + '</dd>' : '')
             + '<dt>' + N.t('Opis') + '</dt><dd>' + esc(m.description) + '</dd>'
@@ -321,7 +333,7 @@ document.addEventListener('nreg:ready', function () {
                 var first = parseInt(String(m.vlans).split(/[-,]/)[0], 10);
                 var now = Object.keys(m.current).map(function (k) { return esc(k) + (m.count > 1 ? ' ' + m.current[k] : ''); }).join(', ');
                 h += '<tr><td class="nreg-mono"><a href="#" data-vlan="' + first + '">' + esc(m.vlans) + '</a>'
-                    + (m.count > 1 ? ' <span class="nreg-muted">(' + m.count + ')</span>' : '') + '</td><td>' + esc(m.status_label) + '</td>'
+                    + (m.count > 1 ? ' <span class="nreg-muted">(' + m.count + ')</span>' : '') + '</td><td>' + esc(m.status_label) + (m.qinq ? ' ' + QINQ_BDG : '') + '</td>'
                     + '<td>' + (m.adopted_count === m.count ? '' : N.expiryHtml(m)) + '</td><td>' + now + (m.adopted_count ? ' <span class="label label-primary">' + N.t('przejęte: {n}', { n: m.adopted_count }) + '</span>' : '') + '</td>'
                     + '<td>' + esc(m.name || '') + '</td><td>' + esc(m.description) + '</td><td>' + esc(m.owner || '') + '</td>'
                     + '<td>' + esc(m.devices || '') + '</td><td style="font-size:11px">' + esc(m.created_by || '?') + '<br>' + esc(m.created_at) + '</td>'
@@ -346,6 +358,7 @@ document.addEventListener('nreg:ready', function () {
             : (group ? N.t('Edycja grupy VLAN {label} ({n})', { label: label, n: entry.count }) : N.t('Edycja wpisu ręcznego VLAN {label}', { label: label }));
         if (entry) {
             ['status', 'name', 'description', 'owner', 'devices', 'valid_until'].forEach(function (f) { form.elements[f].value = entry[f] || (f === 'status' ? 'used' : ''); });
+            form.elements.qinq.checked = !!entry.qinq;
         }
         form.style.display = '';
         form.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -363,6 +376,7 @@ document.addEventListener('nreg:ready', function () {
             var err = document.getElementById('nreg-vf-error'), btn = form.querySelector('button[type="submit"]');
             var data = {};
             ['status', 'name', 'description', 'owner', 'devices', 'valid_until', 'comment'].forEach(function (f) { data[f] = form.elements[f].value; });
+            data.qinq = form.elements.qinq.checked ? 1 : 0;
             var id = form.elements.id.value, path;
             if (id) { data.id = id; data.group = form.elements.group.value === '1'; path = 'vlan/manual_update'; }
             else { data.range = form.elements.range.value; path = 'vlan/manual_create'; }

@@ -207,6 +207,12 @@ check('manual: maska', [strlen($im->manualMask()), substr_count($im->manualMask(
 check('manual: wolny ciąg omija wpisy', VlanRange::findFreeRun(fn ($v) => $im->isFree($v), 3, 1400), [1402, 1403, 1404]);
 $im2 = new VlanIndex($rows, $now, 30, 'ignore', $manual);
 check('manual+ignore: 200 rezerwacja', $im2->status(200), VlanIndex::RESERVED);
+// QinQ: maska z wpisów ręcznych, także przy numerze z LibreNMS (100).
+$iq = new VlanIndex($rows, $now, 30, 'stale', [100 => ['status' => 'used', 'qinq' => true], 1400 => ['status' => 'used', 'qinq' => false], 2231 => ['status' => 'reserved', 'qinq' => true]]);
+check('qinq: maska', [strlen($iq->qinqMask()), substr_count($iq->qinqMask(), '1'), $iq->qinqMask()[99], $iq->qinqMask()[2230], $iq->qinqMask()[1399]], [4094, 2, '1', '1', '0']);
+check('qinq: bez pola', substr_count($im->qinqMask(), '1'), 0);
+check('qinq: walidacja', [VlanManual::validate(['qinq' => '1'], false), VlanManual::validate(['qinq' => 0], false), VlanManual::validate(['qinq' => 'true'], false), VlanManual::validate([], false)],
+    [['qinq' => true], ['qinq' => false], ['qinq' => true], []]);
 
 // --- blokada dodawania numerów widocznych w LibreNMS ---
 $plain = new VlanIndex($rows, $now, 30, 'stale');

@@ -18,6 +18,11 @@
  * numer, ale jest oznaczony jako "termin minął" (Core\Expiry), a sync()
  * zapisuje jedno zdarzenie "expired" na grupę.
  *
+ * QinQ (qinq, schemat 5): numer jest zewnętrznym tagiem (S-VLAN) z podwójnym
+ * tagowaniem. Tylko oznaczenie ustawiane ręcznie - LibreNMS tego nie rozróżnia
+ * (port dot1q-tunnel widzi jako zwykły untagged). Na mapie widać je także po
+ * przejęciu numeru przez LibreNMS.
+ *
  * Przejęcie przez LibreNMS: gdy numer wpisany ręcznie pojawi się na aktywnym
  * urządzeniu, sync() ustawia adopted_at i dopisuje zdarzenie "adopted"
  * (jedno na grupę). Dane LibreNMS mają wtedy pierwszeństwo.
@@ -60,7 +65,7 @@ final class VlanManual
     private const FIELDS = ['name' => 64, 'description' => 1000, 'owner' => 128, 'devices' => 1000];
 
     /** Pola opisowe - wspólne dla całej grupy. */
-    private const DATA_FIELDS = ['name', 'description', 'owner', 'status', 'devices', Expiry::FIELD];
+    private const DATA_FIELDS = ['name', 'description', 'owner', 'status', 'devices', Expiry::FIELD, 'qinq'];
 
     public function __construct(private readonly Connection $db)
     {
@@ -104,6 +109,12 @@ final class VlanManual
             $schema->table(self::TABLE, function (Blueprint $t) {
                 $t->date(Expiry::FIELD)->nullable()->after('devices')->comment('termin ważności wpisu');
                 $t->dateTime('expired_at')->nullable()->after('adopted_at')->comment('kiedy sync zapisał, że termin minął');
+            });
+        }
+
+        if ($from < 5 && ! $schema->hasColumn(self::TABLE, 'qinq')) {
+            $schema->table(self::TABLE, function (Blueprint $t) {
+                $t->boolean('qinq')->default(false)->after('status')->comment('zewnętrzny tag QinQ (S-VLAN)');
             });
         }
     }
@@ -221,6 +232,7 @@ final class VlanManual
         $r['id'] = (int) $r['id'];
         $r['vlan'] = (int) $r['vlan'];
         $r['batch_id'] = isset($r['batch_id']) ? (int) $r['batch_id'] : null;
+        $r['qinq'] = ! empty($r['qinq']);
         $r['status_label'] = Lang::t(self::STATUS_LABELS[$r['status']] ?? $r['status']);
 
         return Expiry::present($r, Expiry::today());
@@ -229,7 +241,7 @@ final class VlanManual
     /** Stan pojedynczego wpisu do dziennika: bez pól technicznych. */
     private static function auditView(array $r): array
     {
-        return array_intersect_key($r, array_flip(['vlan', 'name', 'description', 'owner', 'status', 'devices', Expiry::FIELD, 'adopted_at']));
+        return array_intersect_key($r, array_flip(['vlan', 'name', 'description', 'owner', 'status', 'qinq', 'devices', Expiry::FIELD, 'adopted_at']));
     }
 
     /** Stan grupy do dziennika: pola wspólne + lista numerów. */
@@ -265,6 +277,10 @@ final class VlanManual
                 throw new ApiException(Lang::t('Status musi być „used” albo „reserved”.'));
             }
             $out['status'] = $status;
+        }
+
+        if (array_key_exists('qinq', $input)) {
+            $out['qinq'] = filter_var($input['qinq'], FILTER_VALIDATE_BOOLEAN);
         }
 
         // Termin w przeszłości odrzucają create() i update() (tylko przy zmianie terminu).

@@ -141,6 +141,17 @@ final class VlanIndex
         return $s;
     }
 
+    /** 4094 znaki: "1" gdy wpis ręczny numeru ma oznaczenie QinQ (także po przejęciu przez LibreNMS). */
+    public function qinqMask(): string
+    {
+        $s = '';
+        for ($v = VlanName::MIN; $v <= VlanName::MAX; $v++) {
+            $s .= empty($this->manual[$v]['qinq']) ? '0' : '1';
+        }
+
+        return $s;
+    }
+
     /** 4094 znaki: "1" gdy numer ma wpis ręczny. */
     public function manualMask(): string
     {

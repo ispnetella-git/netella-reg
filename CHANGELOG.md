@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.3 - 2026-11-03
+
+- VLAN-y: oznaczenie „QinQ / podwójny tag (S-VLAN)” we wpisie ręcznym (pole w formularzu dodawania
+  i edycji, schemat modułu vlan 5: kolumna `qinq`). Na mapie numer QinQ ma dwie kreski u góry kratki
+  (także po przejęciu przez LibreNMS), w legendzie jest ich liczba, a na liście wpisów, w szczegółach
+  i w sprawdzaniu zakresu plakietka „QinQ”. Zmiana pola trafia do dziennika.
+
 ## 0.9.2 - 2026-11-02
 
 - Adresy IPv4: wyszukiwarka z listą typów adresacji (prefiksy: agregat, pula, rezerwacja, sieć używana;
