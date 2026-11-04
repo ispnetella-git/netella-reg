@@ -6,7 +6,10 @@
 
      Zaznaczanie na mapie: przeciągnięcie = zakres, Ctrl (Cmd) + klik lub przeciągnięcie
      dokłada albo zdejmuje numery, Shift + klik = zakres od ostatniego numeru. Zaznaczenie
-     trafia do pola „Zakres” i od razu jest sprawdzane. --}}
+     trafia do pola „Zakres” i od razu jest sprawdzane.
+
+     QinQ: numer z wpisem ręcznym ma pole w formularzu wpisu, numer z LibreNMS
+     (bez wpisu) - przycisk „Oznacz jako QinQ” w szczegółach (vlan/flag_set). --}}
 
 <style>
     .nreg-vgrid { overflow-x: auto; padding-bottom: 6px; user-select: none; }
@@ -246,9 +249,9 @@ document.addEventListener('nreg:ready', function () {
             if (j.summary.f) { h += addButton(j.summary.f.list); }
             h = alertBox('warning', h) + '<table class="table table-condensed"><thead><tr><th>VLAN</th><th>' + N.t('Status') + '</th><th>' + N.t('Urządzenia (LibreNMS)') + '</th><th>' + N.t('Wpis ręczny') + '</th></tr></thead><tbody>';
             j.occupied.forEach(function (o) {
-                h += '<tr><td><a href="#" data-vlan="' + o.vlan + '">' + o.vlan + '</a></td><td>' + esc(labels[o.status] || o.status)
+                h += '<tr><td><a href="#" data-vlan="' + o.vlan + '">' + o.vlan + '</a></td><td>' + esc(labels[o.status] || o.status) + (o.qinq ? ' ' + QINQ_BDG : '')
                     + '</td><td>' + esc(o.devices.join(', ')) + '</td><td>'
-                    + (o.manual ? (o.manual.qinq ? QINQ_BDG + ' ' : '') + esc(o.manual.description) + (o.manual.owner ? ' <span class="nreg-muted">(' + esc(o.manual.owner) + ')</span>' : '') + ' ' + N.expiryHtml(o.manual) : '')
+                    + (o.manual ? esc(o.manual.description) + (o.manual.owner ? ' <span class="nreg-muted">(' + esc(o.manual.owner) + ')</span>' : '') + ' ' + N.expiryHtml(o.manual) : '')
                     + '</td></tr>';
             });
             result.innerHTML = h + '</tbody></table>';
@@ -365,6 +368,28 @@ document.addEventListener('nreg:ready', function () {
         (entry ? form.elements.description : r).focus();
     }
 
+    // Oznaczenie QinQ numeru z LibreNMS (bez wpisu ręcznego).
+    function flagBlock(j) {
+        if (j.flag) {
+            return '<div class="nreg-manual">' + QINQ_BDG + ' ' + N.t('oznaczony jako QinQ (podwójny tag): {who}, {at}', { who: esc(j.flag.updated_by || '?'), at: esc(j.flag.updated_at) })
+                + (can.canEdit ? ' <button class="btn btn-default btn-xs" type="button" data-flag="' + j.vlan + '" data-qinq="0"><i class="fa fa-times"></i> ' + N.t('Zdejmij QinQ') + '</button>' : '')
+                + '<div class="nreg-sub">' + N.t('Oznaczenie zostaje, dopóki LibreNMS widzi numer, i przez karencję po jego zniknięciu. Potem synchronizacja je zdejmuje.') + '</div></div>';
+        }
+        return can.canEdit ? '<p><button class="btn btn-default btn-xs" type="button" data-flag="' + j.vlan + '" data-qinq="1" title="'
+            + esc(N.t('Numer jest zewnętrznym tagiem (S-VLAN), w którym płyną VLAN-y klienta (dot1q-tunnel, TLS na OLT, second-dot1q). LibreNMS tego nie rozróżnia, dlatego oznaczenie jest ręczne.'))
+            + '"><i class="fa fa-tags"></i> ' + N.t('Oznacz jako QinQ') + '</button></p>' : '';
+    }
+
+    function setFlag(v, qinq) {
+        var comment = window.prompt(qinq ? N.t('Oznaczyć VLAN {v} jako QinQ? Komentarz (opcjonalnie, trafi do dziennika):', { v: v })
+            : N.t('Zdjąć oznaczenie QinQ z VLAN-u {v}? Komentarz (opcjonalnie, trafi do dziennika):', { v: v }), '');
+        if (comment === null) { return; }
+        N.api('vlan/flag_set', { vlan: v, qinq: qinq ? 1 : 0, comment: comment }, 'POST').then(function (j) {
+            result.innerHTML = alertBox('success', j.qinq ? N.t('VLAN {v} oznaczony jako QinQ.', { v: j.vlan }) : N.t('Zdjęto oznaczenie QinQ z VLAN-u {v}.', { v: j.vlan }));
+            return refreshAll();
+        }).catch(function (e) { result.innerHTML = alertBox('danger', esc(e.message)); });
+    }
+
     function refreshAll() {
         return Promise.all([loadMap(), loadManualList()]).then(function () { if (selected) { showDetail(selected, true); } });
     }
@@ -417,6 +442,8 @@ document.addEventListener('nreg:ready', function () {
         } else if ((t = e.target.closest('button[data-edit]'))) {
             var id = t.getAttribute('data-edit');
             if (manualCache[id]) { openForm(manualCache[id], null, t.getAttribute('data-group') === '1'); }
+        } else if ((t = e.target.closest('button[data-flag]'))) {
+            setFlag(parseInt(t.getAttribute('data-flag'), 10), t.getAttribute('data-qinq') === '1');
         } else if ((t = e.target.closest('button[data-del]'))) {
             deleteEntry(t.getAttribute('data-del'), t.getAttribute('data-label'), t.getAttribute('data-group') === '1');
         }
@@ -428,7 +455,7 @@ document.addEventListener('nreg:ready', function () {
         var c = cell(v); if (c) { c.classList.add('sel'); }
         if (!quiet) { detail.innerHTML = '<p class="nreg-muted">' + N.t('Ładowanie VLAN-u {v}…', { v: v }) + '</p>'; }
         N.api('vlan/detail', { vlan: v }).then(function (j) {
-            var h = '<h4>VLAN ' + j.vlan + ' &middot; ' + esc(j.status_label)
+            var h = '<h4>VLAN ' + j.vlan + ' &middot; ' + esc(j.status_label) + (j.qinq ? ' ' + QINQ_BDG : '')
                 + (j.names.length ? ' &middot; <span class="nreg-muted">' + esc(j.names.join(' / ')) + '</span>' : '') + '</h4>';
             if (j.names.length > 1) {
                 h += '<div class="alert alert-info" style="padding:6px 10px">' + N.t('Ten numer ma różne nazwy na różnych urządzeniach.') + '</div>';
@@ -441,6 +468,7 @@ document.addEventListener('nreg:ready', function () {
                 // Numerów widocznych w LibreNMS nie da się dodać ręcznie (blokada w API).
                 h += '<p><button class="btn btn-success btn-xs" type="button" data-add="' + j.vlan + '"><i class="fa fa-plus"></i> ' + N.t('Dodaj wpis ręczny') + '</button></p>';
             }
+            if (j.flaggable) { h += flagBlock(j); }
             if (!j.occurrences.length) {
                 h += '<p>' + N.t('LibreNMS nie widział tego numeru na żadnym urządzeniu.') + '</p>';
             } else {

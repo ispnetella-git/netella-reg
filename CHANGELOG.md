@@ -6,6 +6,11 @@
   i edycji, schemat modułu vlan 5: kolumna `qinq`). Na mapie numer QinQ ma dwie kreski u góry kratki
   (także po przejęciu przez LibreNMS), w legendzie jest ich liczba, a na liście wpisów, w szczegółach
   i w sprawdzaniu zakresu plakietka „QinQ”. Zmiana pola trafia do dziennika.
+- VLAN-y: numer widoczny w LibreNMS (bez wpisu ręcznego) można oznaczyć jako QinQ przyciskiem
+  „Oznacz jako QinQ” w szczegółach numeru (tabela `reg_vlan_flag`, API `flag_set`, prawo edycji).
+  Oznaczenie nie zmienia statusu. Zostaje, dopóki LibreNMS widzi numer i przez karencję po zniknięciu;
+  potem albo po dodaniu wpisu ręcznego synchronizacja je zdejmuje (wpis w dzienniku).
+- Dziennik: wartości tak/nie zamiast true/false.
 
 ## 0.9.2 - 2026-11-02
 

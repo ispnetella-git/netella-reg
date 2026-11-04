@@ -157,4 +157,6 @@ return [
     'Kopie zapasowe są dostępne tylko dla administratora wtyczki.' => 'Backups are available only to the plugin administrator.',
     'Nieznana akcja „{action}”' => 'Unknown action “{action}”',
     'Kopie zapasowe może pobrać tylko administrator wtyczki.' => 'Only the plugin administrator can download backups.',
+    'tak' => 'yes',
+    'nie' => 'no',
 ];

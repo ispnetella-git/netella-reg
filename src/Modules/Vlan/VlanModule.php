@@ -5,8 +5,8 @@
  *
  * Dane z LibreNMS przez migawkę (Core\Snapshot) i wpisy ręczne (VlanManual):
  * mapa numerów, sprawdzanie zakresu, szukanie wolnych numerów, dodawanie,
- * edycja i usuwanie wpisów ręcznych, przejmowanie ich przez LibreNMS
- * i historia zmian.
+ * edycja i usuwanie wpisów ręcznych, przejmowanie ich przez LibreNMS,
+ * oznaczenia QinQ numerów z LibreNMS (VlanFlag) i historia zmian.
  *
  * Part of the Netella-Reg LibreNMS plugin. Licencja GPL-3.0-or-later.
  */
@@ -55,8 +55,9 @@ final class VlanModule extends AbstractModule
     public function migrate(Connection $db, int $from): void
     {
         // 1: tylko tabele rdzenia, 2: reg_vlan_manual, 3: grupy (batch_id) i scalenie dziennika,
-        // 4: termin ważności (valid_until, expired_at), 5: oznaczenie QinQ (qinq).
+        // 4: termin ważności (valid_until, expired_at), 5: oznaczenie QinQ (qinq, reg_vlan_flag).
         VlanManual::migrate($db, $from);
+        VlanFlag::migrate($db, $from);
     }
 
     public function sync(SyncContext $ctx): array
@@ -70,6 +71,8 @@ final class VlanModule extends AbstractModule
         $index = $this->index($ctx->now);
         $summary['adopted'] = $this->manualRepo()->adopt(fn (int $v) => $index->inLibreNms($v), $ctx->now);
         $summary['expired'] = $this->manualRepo()->expire($ctx->now);
+        // Oznaczenia QinQ numerów, które zniknęły z LibreNMS po karencji albo dostały wpis ręczny.
+        $summary['flags_removed'] = $this->flagRepo()->prune($index->staleFlags(), $ctx->now);
 
         return $summary;
     }
@@ -79,7 +82,7 @@ final class VlanModule extends AbstractModule
     {
         return match ($action) {
             'manual_delete' => Access::DELETE,
-            'manual_create', 'manual_update' => Access::EDIT,
+            'manual_create', 'manual_update', 'flag_set' => Access::EDIT,
             default => Access::VIEW,
         };
     }
@@ -104,6 +107,7 @@ final class VlanModule extends AbstractModule
             'manual_create' => $this->apiManualCreate($request),
             'manual_update' => $this->apiManualUpdate($request),
             'manual_delete' => $this->apiManualDelete($request),
+            'flag_set' => $this->apiFlagSet($request),
             default => parent::api($action, $request),
         };
     }
@@ -181,9 +185,24 @@ final class VlanModule extends AbstractModule
         return ['deleted' => VlanRange::compress($vlans), 'count' => count($vlans)];
     }
 
+    /** Oznaczenie QinQ numeru z LibreNMS (bez wpisu ręcznego). */
+    private function apiFlagSet(Request $request): array
+    {
+        $this->requirePost($request);
+        $vlan = (int) $request->input('vlan', 0);
+        $qinq = $this->flagRepo()->setQinq($vlan, $request->boolean('qinq'), self::comment($request), $this->index());
+
+        return ['vlan' => $vlan, 'qinq' => $qinq];
+    }
+
     private function manualRepo(): VlanManual
     {
         return new VlanManual(Db::connection());
+    }
+
+    private function flagRepo(): VlanFlag
+    {
+        return new VlanFlag(Db::connection());
     }
 
     /** Grupa wpisu (numery i ich liczba) albo null, gdy wpis jest pojedynczy. */
@@ -232,7 +251,8 @@ final class VlanModule extends AbstractModule
             $now ?? new \DateTimeImmutable(),
             Settings::graceDays(),
             Settings::disabledMode(),
-            $this->manualRepo()->active()
+            $this->manualRepo()->active(),
+            $this->flagRepo()->all()
         );
     }
 
@@ -284,6 +304,10 @@ final class VlanModule extends AbstractModule
             // Wpis ręczny: przy numerze z LibreNMS to adnotacja, inaczej źródło statusu.
             'manual' => $index->manual($vlan),
             'manual_group' => $this->groupOf($index->manual($vlan)),
+            // QinQ: z wpisu ręcznego albo z oznaczenia numeru z LibreNMS (flag).
+            'qinq' => $index->qinq($vlan),
+            'flag' => $index->flag($vlan),
+            'flaggable' => $index->flaggable($vlan) && $index->manual($vlan) === null,
             'status_labels' => VlanManual::statusLabels(),
             'occurrences' => $occ,
             'history' => self::historyOf($vlan),
@@ -317,6 +341,7 @@ final class VlanModule extends AbstractModule
                     'vlan' => $v,
                     'status' => $s,
                     'devices' => array_values(array_unique($devices)),
+                    'qinq' => $index->qinq($v),
                     'manual' => $m === null ? null : ['description' => $m['description'], 'owner' => $m['owner'], 'devices' => $m['devices'],
                         'valid_until' => $m['valid_until'], 'expiry' => $m['expiry'], 'qinq' => $m['qinq'] ?? false],
                 ];

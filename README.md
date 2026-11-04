@@ -181,7 +181,11 @@ z tłumaczeniem w `resources/lang/en/*.php`):
 - **QinQ** (pole „QinQ / podwójny tag (S-VLAN)” we wpisie VLAN): numer jest zewnętrznym tagiem, w którym
   płyną VLAN-y klienta. LibreNMS tego nie rozróżnia (port dot1q-tunnel widzi jako zwykły untagged), więc
   oznaczenie jest ręczne. Na mapie VLAN-ów kratka ma dwie kreski u góry (także po przejęciu numeru przez
-  LibreNMS), na liście wpisów i w szczegółach jest plakietka „QinQ”;
+  LibreNMS), na liście wpisów i w szczegółach jest plakietka „QinQ”. Numer widoczny w LibreNMS (bez wpisu
+  ręcznego) oznacza się przyciskiem „Oznacz jako QinQ” w szczegółach numeru (tabela `reg_vlan_flag`, nie
+  zmienia statusu ani zajętości). Takie oznaczenie trzyma się numeru, dopóki LibreNMS go widzi i przez
+  karencję po zniknięciu; potem (albo gdy numer dostanie wpis ręczny) synchronizacja je zdejmuje i zapisuje
+  to w dzienniku;
 - **termin ważności** (pole „Ważne do” we wpisach VLAN i adresacji, opcjonalne): wpis po terminie
   nie zwalnia się sam. Nadal zajmuje numer albo adres, ale jest oznaczony jako „termin minął”: na mapie
   VLAN-ów kratka w paski, w drzewie adresacji czerwona plakietka, a w liście „Uwagi” adresacji jest
@@ -267,6 +271,7 @@ tylko osoba z prawem administracji.
 | `reg_snapshot` | ostatni stan LibreNMS per moduł i rekord: hash, dane, `first_seen`, `last_seen`, `gone_at` |
 | `reg_state` | klucz-wartość: wyniki synchronizacji, ostatnio widziane ustawienia |
 | `reg_vlan_manual` | moduł VLAN: wpisy ręczne (jeden aktywny na numer, `batch_id` = grupa, usuwanie miękkie, `adopted_at` = przejęcie przez LibreNMS, `qinq` = zewnętrzny tag QinQ) |
+| `reg_vlan_flag` | moduł VLAN: oznaczenia numerów widocznych w LibreNMS (`qinq`), jeden wiersz na numer |
 | `reg_ipam_manual` | adresacja: wpisy ręczne (adres albo prefiks z rolą, przestrzeń, `batch_id`, usuwanie miękkie, `adopted_at`) |
 | `reg_ipam_space` | adresacja: przestrzenie adresowe (Global = 1, pole `vrf` = `context_name` z LibreNMS) |
 

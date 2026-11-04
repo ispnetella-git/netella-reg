@@ -159,10 +159,12 @@
         vlans: t('VLAN-y'), vlan: 'VLAN', name: t('nazwa'), description: t('opis'), owner: t('właściciel'), status: t('status'),
         devices: t('urządzenia'), adopted_at: t('przejęty'), tagged: t('tagowane'), untagged: t('nietagowane'), l3: 'L3',
         subif: t('subinterfejsy'), defined: t('w tabeli vlans'), disabled: t('wyłączone'), device: t('urządzenie'),
-        valid_until: t('ważne do')
+        valid_until: t('ważne do'), qinq: 'QinQ'
     };
     // Pola pomijane w linii dziennika (powtarzają informację z kolumny "Rekord").
     var SKIP_FIELDS = { count: 1, vlans: 1, device_id: 1, device: 1, hostname: 1, ips: 1, prefix: 1, range: 1, family: 1, port_id: 1, space: 1 };
+
+    function yesNo(v) { return typeof v === 'boolean' ? (v ? t('tak') : t('nie')) : v; }
 
     // Zmiany z dziennika w jednej linii: "pole: przed → po · pole2: …".
     function diffHtml(row) {
@@ -175,9 +177,9 @@
             var hasB = row.before !== null && Object.prototype.hasOwnProperty.call(b, k);
             var hasA = row.after !== null && Object.prototype.hasOwnProperty.call(a, k);
             var h = '<span class="nreg-muted">' + esc(FIELD_LABELS[k] || k) + ':</span> ';
-            if (hasB) { h += '<del>' + esc(short(b[k], 80)) + '</del>'; }
+            if (hasB) { h += '<del>' + esc(short(yesNo(b[k]), 80)) + '</del>'; }
             if (hasB && hasA) { h += ' → '; }
-            if (hasA) { h += '<ins>' + esc(short(a[k], 80)) + '</ins>'; }
+            if (hasA) { h += '<ins>' + esc(short(yesNo(a[k]), 80)) + '</ins>'; }
             return h;
         });
         return parts.join('<span class="sep">·</span>');

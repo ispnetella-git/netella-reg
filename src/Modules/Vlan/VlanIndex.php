@@ -19,6 +19,9 @@
  * jako adnotacja (manualMask, manual()). Wpis ręczny po terminie ważności
  * dalej zajmuje numer (expiredMask oznacza go na mapie).
  *
+ * Oznaczenia (VlanFlag, np. QinQ) numerów z LibreNMS nie zmieniają statusu.
+ * Liczą się, dopóki LibreNMS widzi numer albo trwa karencja (flaggable).
+ *
  * Czyste, bez Laravela.
  *
  * Part of the Netella-Reg LibreNMS plugin. Licencja GPL-3.0-or-later.
@@ -66,12 +69,18 @@ final class VlanIndex
     /** @var array<int,array> numer => aktywny wpis ręczny */
     private array $manual = [];
 
+    /** @var array<int,array> numer => oznaczenie (VlanFlag) */
+    private array $flags = [];
+
     /**
      * @param  list<array{key:string,data:array,first_seen:string,last_seen:string,gone_at:?string}>  $rows
      * @param  array<int,array{status:string}>  $manual  numer => wpis ręczny
+     * @param  array<int,array{qinq:bool}>  $flags  numer => oznaczenie (VlanFlag)
      */
-    public function __construct(array $rows, \DateTimeImmutable $now, int $graceDays, string $disabledMode, array $manual = [])
+    public function __construct(array $rows, \DateTimeImmutable $now, int $graceDays, string $disabledMode, array $manual = [], array $flags = [])
     {
+        $this->flags = $flags;
+
         foreach ($manual as $vlan => $entry) {
             $vlan = (int) $vlan;
             if ($vlan < VlanName::MIN || $vlan > VlanName::MAX) {
@@ -141,12 +150,44 @@ final class VlanIndex
         return $s;
     }
 
-    /** 4094 znaki: "1" gdy wpis ręczny numeru ma oznaczenie QinQ (także po przejęciu przez LibreNMS). */
+    /**
+     * Czy numer może mieć oznaczenie bez wpisu ręcznego: LibreNMS go widzi
+     * (także tylko na wyłączonych hostach) albo trwa karencja po zniknięciu.
+     */
+    public function flaggable(int $vlan): bool
+    {
+        return in_array($this->status($vlan), [self::LNMS, self::STALE, self::GONE], true);
+    }
+
+    /** Oznaczenie numeru, gdy się liczy (patrz flaggable i staleFlags), albo null. */
+    public function flag(int $vlan): ?array
+    {
+        return isset($this->flags[$vlan]) && $this->flaggable($vlan) && ! isset($this->manual[$vlan]) ? $this->flags[$vlan] : null;
+    }
+
+    /**
+     * Numery z oznaczeniem, które przestało się liczyć: minęła karencja albo
+     * numer dostał wpis ręczny. sync() je zdejmuje (VlanFlag::prune).
+     *
+     * @return list<int>
+     */
+    public function staleFlags(): array
+    {
+        return array_values(array_filter(array_map('intval', array_keys($this->flags)), fn (int $v) => $this->flag($v) === null));
+    }
+
+    /** Czy numer jest oznaczony jako QinQ: we wpisie ręcznym (także przejętym) albo oznaczeniem numeru z LibreNMS. */
+    public function qinq(int $vlan): bool
+    {
+        return ! empty($this->manual[$vlan]['qinq']) || ! empty($this->flag($vlan)['qinq']);
+    }
+
+    /** 4094 znaki: "1" gdy numer jest oznaczony jako QinQ (qinq()). */
     public function qinqMask(): string
     {
         $s = '';
         for ($v = VlanName::MIN; $v <= VlanName::MAX; $v++) {
-            $s .= empty($this->manual[$v]['qinq']) ? '0' : '1';
+            $s .= $this->qinq($v) ? '1' : '0';
         }
 
         return $s;

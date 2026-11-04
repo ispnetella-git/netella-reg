@@ -213,6 +213,17 @@ check('qinq: maska', [strlen($iq->qinqMask()), substr_count($iq->qinqMask(), '1'
 check('qinq: bez pola', substr_count($im->qinqMask(), '1'), 0);
 check('qinq: walidacja', [VlanManual::validate(['qinq' => '1'], false), VlanManual::validate(['qinq' => 0], false), VlanManual::validate(['qinq' => 'true'], false), VlanManual::validate([], false)],
     [['qinq' => true], ['qinq' => false], ['qinq' => true], []]);
+// QinQ na numerach z LibreNMS (VlanFlag): liczy się przy l/s/g bez wpisu ręcznego.
+$fl = ['qinq' => true, 'updated_at' => '2026-11-04 10:00:00', 'updated_by' => 'x'];
+$ifl = new VlanIndex($rows, $now, 30, 'stale', [1400 => ['status' => 'used', 'qinq' => false]], [100 => $fl, 200 => $fl, 300 => $fl, 400 => $fl, 1400 => $fl, 7 => $fl]);
+check('flag: flaggable l/s/g/f/m', [$ifl->flaggable(100), $ifl->flaggable(200), $ifl->flaggable(300), $ifl->flaggable(400), $ifl->flaggable(1400)], [true, true, true, false, false]);
+check('flag: qinq', [$ifl->qinq(100), $ifl->qinq(200), $ifl->qinq(300), $ifl->qinq(400), $ifl->qinq(1400), $ifl->qinq(7)], [true, true, true, false, false, false]);
+check('flag: maska', substr_count($ifl->qinqMask(), '1'), 3);
+check('flag: status bez zmian', [$ifl->status(100), $ifl->status(300), $ifl->isFree(400)], [VlanIndex::LNMS, VlanIndex::GONE, true]);
+check('flag: do zdjęcia (po karencji, wpis ręczny, wolny)', $ifl->staleFlags(), [400, 1400, 7]);
+check('flag: flag()', [$ifl->flag(100)['updated_by'] ?? null, $ifl->flag(400)], ['x', null]);
+check('flag: karencja 0 zdejmuje zniknięty', (new VlanIndex($rows, $now, 0, 'stale', [], [300 => $fl]))->staleFlags(), [300]);
+check('flag: ignore zdejmuje tylko wyłączone', (new VlanIndex($rows, $now, 30, 'ignore', [], [200 => $fl, 100 => $fl]))->staleFlags(), [200]);
 
 // --- blokada dodawania numerów widocznych w LibreNMS ---
 $plain = new VlanIndex($rows, $now, 30, 'stale');
