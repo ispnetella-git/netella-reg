@@ -1,0 +1,31 @@
+<?php
+
+// Pomoc (partials/help): opis ról wpisów ręcznych.
+return [
+    'pomoc/instrukcja' => 'help',
+    'Krótki opis ról wpisów ręcznych' => 'Short description of manual entry roles',
+    'Role wpisów ręcznych' => 'Manual entry roles',
+    'Dane z LibreNMS mają pierwszeństwo. Wpisy ręczne dopisują to, czego LibreNMS nie widzi, albo opisują to, co widzi. Adresu, VLAN-u ani sieci „używanej” widocznych w LibreNMS nie da się dodać ręcznie (wyjątek: „do zwolnienia”).' => 'LibreNMS data takes precedence. Manual entries add what LibreNMS does not see or describe what it does. An address, VLAN or "network in use" visible in LibreNMS cannot be added manually (exception: "to be released").',
+    'Prefiks' => 'Prefix',
+    'Zakres a-b (leży w jednej sieci albo prefiksie, zajęty w całości)' => 'Range a-b (inside one network or prefix, occupied as a whole)',
+    'Adres (pojedynczy albo kilka naraz)' => 'Address (one or several at once)',
+    'grupuje sieci w drzewie, np. przydział z RIPE; sam nie zajmuje adresów' => 'groups networks in the tree, e.g. a RIPE allocation; does not occupy addresses itself',
+    'blok dla klientów (PPPoE, CGNAT); liczony jak sieć, LibreNMS go nie przejmuje' => 'block for customers (PPPoE, CGNAT); counted as a network, never taken over by LibreNMS',
+    'blok trzymany wolny; nie da się go dodać, gdy LibreNMS ma w nim adresy' => 'block kept free; cannot be added when LibreNMS has addresses in it',
+    'sieć w użyciu, której LibreNMS nie widzi; gdy się pojawi, wpis zostaje jako opis' => 'network in use that LibreNMS does not see; when it appears, the entry stays as a description',
+    'sieć do opróżnienia; można ją oznaczyć także wtedy, gdy jest w LibreNMS' => 'network to be emptied; can be marked even when it is in LibreNMS',
+    'przeznaczenie zakresu; adres z LibreNMS w środku jest zgłaszany jako możliwy błąd' => 'purpose of the range; a LibreNMS address inside is reported as a possible error',
+    'jak wyżej' => 'as above',
+    'zakres trzymany wolny; nie może zawierać adresów z LibreNMS' => 'range kept free; must not contain LibreNMS addresses',
+    'zakres do opróżnienia; adresy z LibreNMS w środku nie są błędem' => 'range to be emptied; LibreNMS addresses inside are not an error',
+    'adres w użyciu, którego LibreNMS nie widzi; gdy się pojawi, wpis zostaje jako opis' => 'address in use that LibreNMS does not see; when it appears, the entry stays as a description',
+    'adres trzymany wolny' => 'address kept free',
+    'adres do zwolnienia; można go oznaczyć także wtedy, gdy jest w LibreNMS' => 'address to be released; can be marked even when it is in LibreNMS',
+    'IPv6: te same role; w zakresach nie ma puli PPPoE ani NAT, pula DHCP to DHCPv6.' => 'IPv6: the same roles; ranges have no PPPoE pool or NAT, the DHCP pool is DHCPv6.',
+    'numer w użyciu, którego LibreNMS nie widzi; gdy się pojawi, wpis zostaje jako opis' => 'number in use that LibreNMS does not see; when it appears, the entry stays as a description',
+    'numer trzymany wolny' => 'number kept free',
+    'zewnętrzny tag (S-VLAN); pole we wpisie albo przycisk „Oznacz jako QinQ” przy numerze z LibreNMS; nie zmienia zajętości' => 'outer tag (S-VLAN); a field in the entry or the "Mark as QinQ" button on a LibreNMS number; does not change occupancy',
+    'Wspólne' => 'Common',
+    'po terminie wpis nadal zajmuje zasób, ale jest oznaczony „termin minął”' => 'after the date the entry still occupies the resource but is marked "expired"',
+    'przez {n} dni po zniknięciu numer albo adres liczy się jako zajęty, potem jest wolny' => 'for {n} days after disappearing the number or address counts as occupied, then it is free',
+];

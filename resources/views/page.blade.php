@@ -44,12 +44,16 @@
     .nreg-manual dl { margin: 0; }
     .nreg-manual dt { float: left; width: 130px; font-weight: normal; opacity: .75; }
     .nreg-manual dd { margin-left: 140px; }
+    .nreg-help h5 { margin: 10px 0 4px; font-weight: 600; }
+    .nreg-help ul { margin-bottom: 6px; padding-left: 18px; }
+    .nreg-help li { margin-bottom: 2px; }
 </style>
 
 <div class="container-fluid nreg">
     <div class="nreg-head">
         <h3>Netella-Reg</h3>
-        <span class="nreg-sub">{{ nreg_t('rejestr VLAN-ów i adresacji') }} &middot; {{ nreg_t('wersja {v}', ['v' => $nregBoot['version']]) }}</span>
+        <span class="nreg-sub">{{ nreg_t('rejestr VLAN-ów i adresacji') }} &middot; {{ nreg_t('wersja {v}', ['v' => $nregBoot['version']]) }}
+            &middot; <a href="#" id="nreg-help-link" title="{{ nreg_t('Krótki opis ról wpisów ręcznych') }}">{{ nreg_t('pomoc/instrukcja') }}</a></span>
         <select class="form-control nreg-lang" id="nreg-lang" title="{{ nreg_t('Język interfejsu') }}">
             @foreach(\Ispnetella\NetellaReg\Core\Lang::LANGS as $code => $label)
                 <option value="{{ $code }}" @if($code === $nregBoot['lang']) selected @endif>{{ $label }}</option>
@@ -57,6 +61,7 @@
         </select>
     </div>
 
+    @include('Netella-Reg::partials.help')
     @if($nregError)
         <div class="alert alert-danger">
             <strong>{{ nreg_t('Netella-Reg nie może odczytać swojej bazy.') }}</strong>
@@ -118,6 +123,11 @@
     })();
     var langSel = document.getElementById('nreg-lang');
     if (langSel) { langSel.addEventListener('change', function () { setLang(langSel.value); location.reload(); }); }
+    // Pomoc (opis ról): zwinięta, link w nagłówku rozwija ją w miejscu.
+    var helpLink = document.getElementById('nreg-help-link'), helpBox = document.getElementById('nreg-help');
+    if (helpLink && helpBox) {
+        helpLink.addEventListener('click', function (e) { e.preventDefault(); helpBox.style.display = helpBox.style.display === 'none' ? '' : 'none'; });
+    }
 
     function esc(v) {
         return String(v === null || v === undefined ? '' : v)

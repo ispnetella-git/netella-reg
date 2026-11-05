@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.5 - 2026-11-05
+
+- Link „pomoc/instrukcja” w nagłówku (jak we wtyczce ZTE ONU): zwinięty panel ze zwięzłym opisem ról
+  prefiksów, zakresów i adresów (IPv4/IPv6), wpisów VLAN, QinQ, terminu ważności i karencji.
+
 ## 0.9.4 - 2026-11-05
 
 - Adresy IPv4 i IPv6: rola „do zwolnienia” dla adresów, prefiksów i zakresów (adresacja, którą trzeba

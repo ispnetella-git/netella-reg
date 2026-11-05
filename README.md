@@ -167,7 +167,8 @@ Przejście na GitHuba: podmień wpis `repositories.netella-reg` na
 
 Strona `/plugin/Netella-Reg` (język: przełącznik English / Polski w nagłówku, domyślnie angielski;
 wybór pamięta przeglądarka; nowe teksty dodaje się jako `Lang::t('polski tekst')` / `nreg_t()` / `NReg.t()`
-z tłumaczeniem w `resources/lang/en/*.php`):
+z tłumaczeniem w `resources/lang/en/*.php`). Link „pomoc/instrukcja” w nagłówku rozwija zwięzły
+opis ról wpisów ręcznych (`partials/help.blade.php`; listy ról idą z kodu, opisy są w widoku):
 - zakładka **VLAN-y**: mapa 1–4094 (kolor = status). Kliknięcie numeru pokazuje urządzenia, porty
   tagowane i nietagowane, interfejsy L3, subinterfejsy, daty widzenia i historię zmian. Pole
   „Zakres” sprawdza np. `1400-1450` (także `1400 to 1450` i listy po przecinku). Zakres można też
