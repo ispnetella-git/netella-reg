@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.4 - 2026-11-05
+
+- Adresy IPv4 i IPv6: rola „do zwolnienia” dla adresów, prefiksów i zakresów (adresacja, którą trzeba
+  opróżnić). Można ją dodać także na adresie i sieci widocznych w LibreNMS, wpis nie jest przejmowany,
+  adresy z LibreNMS w takim zakresie nie są konfliktem. Prefiks z tą rolą liczony jak sieć. W drzewie
+  i na liście wpisów ciemnoczerwony tekst i znaczek. Rola jest też w liście typów wyszukiwarki.
+
 ## 0.9.3 - 2026-11-03
 
 - VLAN-y: oznaczenie „QinQ / podwójny tag (S-VLAN)” we wpisie ręcznym (pole w formularzu dodawania

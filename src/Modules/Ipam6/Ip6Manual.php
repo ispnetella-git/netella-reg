@@ -45,18 +45,24 @@ final class Ip6Manual
         'pool' => 'pula (np. prefiksy dla klientów)',
         'used' => 'sieć używana',
         'reserved' => 'rezerwacja',
+        'release' => 'do zwolnienia',
     ];
 
     public const ADDRESS_ROLES = [
         'used' => 'używany',
         'reserved' => 'rezerwacja',
+        'release' => 'do zwolnienia',
     ];
 
     public const RANGE_ROLES = [
         'dhcp' => 'pula DHCPv6',
         'static' => 'adresy statyczne',
         'reserved' => 'rezerwacja',
+        'release' => 'do zwolnienia',
     ];
+
+    /** Rola "do zwolnienia" (jak IpamManual::RELEASE): dozwolona na adresach z LibreNMS. */
+    public const RELEASE = 'release';
 
     private const DATA_FIELDS = ['role', 'name', 'description', 'owner', 'vlan', 'devices', Expiry::FIELD];
 
@@ -285,7 +291,7 @@ final class Ip6Manual
             ->where('start_hex', '<=', $p['end_hex'])->where('end_hex', '>=', $p['start_hex'])->get();
 
         if ($p['kind'] === 'address') {
-            if ($ctx->knownAddress($p['start_hex'])) {
+            if ($role !== self::RELEASE && $ctx->knownAddress($p['start_hex'])) {
                 throw new ApiException($ctx->staleAddress($p['start_hex'])
                     ? Lang::t('Adresu {cidr} nie można dodać ręcznie, bo jest już w LibreNMS (na wyłączonym hoście - włącz „Pokaż adresy z wyłączonych hostów”, żeby go zobaczyć).', ['cidr' => $p['cidr']])
                     : Lang::t('Adresu {cidr} nie można dodać ręcznie, bo jest już w LibreNMS.', ['cidr' => $p['cidr']]), 409);

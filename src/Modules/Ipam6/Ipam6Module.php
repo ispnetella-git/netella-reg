@@ -315,11 +315,11 @@ class Ipam6Module extends AbstractModule
         foreach ($viewNets as $cidr => $nrows) {
             $c = $real[$cidr];
             // Rola wpisu ręcznego na tym samym prefiksie wygrywa (agregat = blok, nie sieć).
-            $sub = isset($manual[$cidr]) ? $manual[$cidr]['role'] === 'used' : true;
+            $sub = isset($manual[$cidr]) ? in_array($manual[$cidr]['role'], ['used', Ip6Manual::RELEASE], true) : true;
             $prefixes[] = ['start' => $c['start'], 'len' => $c['len'], 'src' => 'lnms', 'subnet' => $sub];
         }
         foreach ($manual as $m) {
-            $prefixes[] = ['start' => $m['start'], 'len' => $m['len'], 'src' => 'manual', 'subnet' => $m['role'] === 'used'];
+            $prefixes[] = ['start' => $m['start'], 'len' => $m['len'], 'src' => 'manual', 'subnet' => in_array($m['role'], ['used', Ip6Manual::RELEASE], true)];
         }
         foreach ($implicit as $p) {
             $used = false;
@@ -398,7 +398,7 @@ class Ipam6Module extends AbstractModule
         return ['ip' => Ip6Calc::gmp2ip($a['ip']), 'n' => $hex, 'state' => $a['state'], 'rows' => array_map([self::class, 'lnmsRow'], $a['rows']),
             'manual' => self::publicManual($a['manual']), 'range' => self::rangeRef($r),
             // Adres z LibreNMS w zakresie ręcznym: możliwy błąd konfiguracji sieci.
-            'conflict' => $r !== null && $a['rows'] !== []];
+            'conflict' => $r !== null && $r['role'] !== Ip6Manual::RELEASE && $a['rows'] !== []];
     }
 
     /** Zakres ręczny, w którym leży adres, albo null. */
@@ -431,7 +431,7 @@ class Ipam6Module extends AbstractModule
     {
         $inside = self::addressesIn($data, $r['start'], $r['end']);
         // Znaczek liczy tylko aktywne hosty; wyłączone widać po włączeniu przełącznika.
-        $lnms = count(array_filter($inside, fn ($hex) => $data['all_addr'][$hex]['state'] === 'l'));
+        $lnms = $r['role'] === Ip6Manual::RELEASE ? 0 : count(array_filter($inside, fn ($hex) => $data['all_addr'][$hex]['state'] === 'l'));
 
         return ['range' => true, 'id' => $r['id'], 'cidr' => $r['cidr'], 'n' => $r['start_hex'], 'len' => 128,
             'first' => $r['first'], 'last' => $r['last'], 'size' => $r['size'], 'addresses' => count($inside), 'conflicts' => $lnms,

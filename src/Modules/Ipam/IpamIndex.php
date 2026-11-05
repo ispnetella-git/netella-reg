@@ -427,7 +427,7 @@ final class IpamIndex
     public function isSubnet(string $cidr): bool
     {
         if (isset($this->manualPrefixes[$cidr])) {
-            return in_array($this->manualPrefixes[$cidr]['role'], ['used', 'pool'], true);
+            return in_array($this->manualPrefixes[$cidr]['role'], ['used', 'pool', IpamManual::RELEASE], true);
         }
 
         return isset($this->networks[$cidr]);

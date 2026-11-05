@@ -305,8 +305,9 @@ final class IpamModule extends AbstractModule
             'dup' => isset($dups[$ip]),
             'range' => ($r = $idx->rangeOf($ip)) ? ['id' => $r['id'], 'label' => $r['cidr'], 'role_label' => $r['role_label'],
                 'name' => $r['name'] ?: $r['description']] : null,
-            // Adres z LibreNMS w zakresie ręcznym: możliwy błąd konfiguracji sieci.
-            'conflict' => $r !== null && $idx->knownAddress($ip),
+            // Adres z LibreNMS w zakresie ręcznym: możliwy błąd konfiguracji sieci
+            // (poza zakresem "do zwolnienia" - tam adresy z LibreNMS są oczekiwane).
+            'conflict' => $r !== null && $r['role'] !== IpamManual::RELEASE && $idx->knownAddress($ip),
         ];
     }
 
@@ -322,7 +323,7 @@ final class IpamModule extends AbstractModule
         $size = $m['end'] - $m['start'] + 1;
         $used = count($idx->addressesIn($m['start'], $m['end']));
         // Znaczek na zakresie liczy tylko aktywne hosty (wyłączone są widoczne po włączeniu przełącznika).
-        $lnms = count($this->activeInside($idx, $m));
+        $lnms = $m['role'] === IpamManual::RELEASE ? 0 : count($this->activeInside($idx, $m));
 
         return [
             'cidr' => 'range:' . $m['id'], 'range' => true, 'id' => $m['id'], 'n' => $m['start'], 'len' => 32,
@@ -720,7 +721,11 @@ final class IpamModule extends AbstractModule
         // i zakresy, które przecięła sieć z LibreNMS.
         $rangeConflicts = [];
         foreach ($idx->ranges() as $id => $m) {
-            $inside = $m['role'] === 'reserved' ? $idx->knownInside($m['start'], $m['end']) : $this->activeInside($idx, $m);
+            $inside = match ($m['role']) {
+                'reserved' => $idx->knownInside($m['start'], $m['end']),
+                IpamManual::RELEASE => [], // do zwolnienia: adresy z LibreNMS są oczekiwane
+                default => $this->activeInside($idx, $m),
+            };
             if ($inside !== []) {
                 $conflicts[] = ['cidr' => $m['cidr'], 'range_id' => $id, 'first' => $m['first'], 'role_label' => $m['role_label'],
                     'ips' => IpInput::compress(array_slice($inside, 0, 50)), 'count' => count($inside)];

@@ -23,6 +23,7 @@ return [
     'pula PPPoE' => 'PPPoE pool',
     'NAT' => 'NAT',
     'adresy statyczne' => 'static addresses',
+    'do zwolnienia' => 'to be released',
 
     // Źródła RIPE (RipeLookup::SOURCES)
     'ogłaszany w BGP' => 'announced in BGP',

@@ -418,6 +418,13 @@ check('kontener: sieć LibreNMS bez wpisu - adres sieci zabroniony', $nat([])->r
 check('kontener: sieć LibreNMS + agregat - cały blok', $nat([$mp(1, '45.10.136.0/24', 'aggregate')])->rangeContainer($ip('45.10.136.0'), $ip('45.10.136.255')),
     ['45.10.136.0/24', null]);
 check('kontener: sieć LibreNMS + pula - nadal sieć', $nat([$mp(1, '45.10.136.0/24', 'pool')])->rangeContainer($ip('45.10.136.0'), $ip('45.10.136.255'))[0], null);
+// Rola "do zwolnienia": we wszystkich rodzajach (v4 i v6), prefiks liczony jak sieć, adres zajęty.
+check('release: role v4', [isset(IpamManual::rolesFor('prefix')['release']), isset(IpamManual::rolesFor('range')['release']), isset(IpamManual::rolesFor('address')['release'])], [true, true, true]);
+check('release: role v6', [isset(Ip6Manual::PREFIX_ROLES['release']), isset(Ip6Manual::RANGE_ROLES['release']), isset(Ip6Manual::ADDRESS_ROLES['release'])], [true, true, true]);
+check('release: prefiks jak sieć', [$nat([$mp(1, '45.10.136.0/24', 'release')])->isSubnet('45.10.136.0/24'), $idxR->isSubnet('10.3.0.0/16')], [true, false]);
+$relA = ['id' => 9, 'family' => 4, 'kind' => 'address', 'cidr' => '45.10.136.10/32', 'start' => $ip('45.10.136.10'), 'end' => $ip('45.10.136.10'), 'len' => 32, 'role' => 'release'];
+$relIdx = $nat([$relA]);
+check('release: adres z LibreNMS z wpisem', [$relIdx->status($ip('45.10.136.10')), ($relIdx->address($ip('45.10.136.10'))['manual']['role'] ?? null)], [IpamIndex::LNMS, 'release']);
 // Bez adresacji spoza agregatów: peer BGP na publicznej /30 znika, prywatna i agregaty zostają.
 $outIdx = fn (bool $show, array $manual = []) => new IpamIndex(
     [$lrow('83.2.56.77', 31), $lrow('10.1.1.1', 24), $lrow('45.10.136.10', 24), $lrow('193.0.0.1', 32)], $manual, 1, [],

@@ -11,6 +11,7 @@
  *              pool       pula - np. PPPoE, CGNAT; hosty liczone jak w sieci
  *              reserved   rezerwacja - blok trzymany wolny
  *              used       sieć używana, której LibreNMS nie widzi
+ *              release    do zwolnienia - sieć, którą trzeba opróżnić
  *   range    zakres a-b jako jeden wpis (schemat 3), z rolą: pula DHCP, pula
  *            PPPoE, NAT, adresy statyczne, rezerwacja. Granice nie muszą pasować
  *            do maski, ale zakres musi leżeć w jednej sieci albo prefiksie
@@ -26,6 +27,11 @@
  *   - zakresu "rezerwacja" z adresami z LibreNMS - też nie; zakresy innych
  *     ról mogą je zawierać (np. brama w puli).
  *   Zakresy nie są przejmowane przez LibreNMS.
+ *
+ * Rola "do zwolnienia" (release, wszystkie rodzaje): adres, sieć albo zakres,
+ * które trzeba opróżnić. Zwykle są jeszcze w użyciu, więc blokady LibreNMS
+ * jej nie dotyczą (można ją dodać na adresie i sieci z LibreNMS), a wpis nie
+ * jest przejmowany. Zajmuje jak "używany"; po zwolnieniu wpis usuwa się ręcznie.
  *
  * Przejęcie: adres albo sieć "używana" wpisane ręcznie, które pojawią się
  * w LibreNMS, dostają adopted_at i zdarzenie "adopted" (jedno na grupę).
@@ -61,11 +67,13 @@ final class IpamManual
         'pool' => 'pula',
         'reserved' => 'rezerwacja',
         'used' => 'sieć używana',
+        'release' => 'do zwolnienia',
     ];
 
     public const ADDRESS_ROLES = [
         'used' => 'używany',
         'reserved' => 'rezerwacja',
+        'release' => 'do zwolnienia',
     ];
 
     public const RANGE_ROLES = [
@@ -74,7 +82,11 @@ final class IpamManual
         'nat' => 'NAT',
         'static' => 'adresy statyczne',
         'reserved' => 'rezerwacja',
+        'release' => 'do zwolnienia',
     ];
+
+    /** Rola "do zwolnienia": dozwolona także na adresach i sieciach z LibreNMS, bez przejmowania. */
+    public const RELEASE = 'release';
 
     private const FIELDS = ['name' => 64, 'description' => 1000, 'owner' => 128, 'devices' => 1000];
 
@@ -395,7 +407,7 @@ final class IpamManual
             if ($taken !== []) {
                 throw new ApiException(Lang::t('Te adresy mają już wpis ręczny (edytuj go): {ips}.', ['ips' => IpInput::compress($taken)]));
             }
-            $blocked = array_values(array_filter($ips, fn ($ip) => $index->knownAddress($ip)));
+            $blocked = $fields['role'] === self::RELEASE ? [] : array_values(array_filter($ips, fn ($ip) => $index->knownAddress($ip)));
             if ($blocked !== []) {
                 $free = array_values(array_diff($ips, $blocked));
                 $stale = array_filter($blocked, fn ($ip) => $index->status($ip) === IpamIndex::STALE);
@@ -593,6 +605,9 @@ final class IpamManual
             ->where('kind', '!=', 'range')->get() as $r) {
             $idx = $indexes[(int) $r->space_id] ?? null;
             if ($idx === null) {
+                continue;
+            }
+            if ($r->role === self::RELEASE) {
                 continue;
             }
             $hit = $r->kind === 'address'

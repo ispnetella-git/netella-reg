@@ -64,6 +64,10 @@ to jeden rekord (host, interfejs, opis portu, maska, VLAN z nazwy interfejsu).
 - **Blokady:** adresu widocznego w LibreNMS nie da się dodać. Sieci z LibreNMS nie da się dodać jako
   „sieć używana” (można jako agregat, żeby ją opisać). Rezerwacji nie da się dodać, gdy LibreNMS ma
   w prefiksie adresy. Przejęcie przez LibreNMS działa jak w module VLAN.
+- **Do zwolnienia** (rola we wszystkich rodzajach wpisów, IPv4 i IPv6): adres, prefiks albo zakres,
+  który trzeba opróżnić. Blokady LibreNMS jej nie dotyczą (można ją dodać na adresie i sieci z LibreNMS),
+  wpis nie jest przejmowany, a adresy z LibreNMS w takim zakresie nie są zgłaszane jako konflikt.
+  W drzewie i na liście wpisów ciemnoczerwony tekst i znaczek. Po zwolnieniu wpis usuwa się ręcznie.
 - **Przestrzenie adresowe:** „Global” plus przestrzenie dodawane przez administratora (przycisk „+”).
   Adres z LibreNMS trafia do przestrzeni, której pole VRF równa się jego `context_name`.
 - **Uwagi:** ten sam adres na kilku aktywnych urządzeniach, maski krótsze niż /8, adresy poza

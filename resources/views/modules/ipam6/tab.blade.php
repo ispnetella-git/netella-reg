@@ -43,6 +43,10 @@
     #nreg-tab-ipam6 .copy:hover { opacity: 1; text-decoration: none; }
     #nreg-tab-ipam6 .tn.rng { border-left: 3px solid #b57edc; }
     #nreg-tab-ipam6 .bdg.d { background: #d9534f; }
+    /* Rola „do zwolnienia”: ciemnoczerwony tekst wiersza i znaczek. */
+    #nreg-tab-ipam6 .bdg.x { background: #a94442; }
+    #nreg-tab-ipam6 .tn.rel .cidr, #nreg-tab-ipam6 .tn.rel .lbl, #nreg-tab-ipam6 .ta.rel .ip, #nreg-tab-ipam6 .ta.rel .who,
+    #nreg6-manual tr.rel td, #nreg6-manual tr.rel a { color: #a94442; }
     #nreg6-manual summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
     #nreg6-ripe { max-width: 1200px; }
     #nreg6-rout table { font-size: 12px; margin-bottom: 6px; }
@@ -217,13 +221,17 @@ document.addEventListener('nreg:ready', function () {
 
     // ---------------------------------------------------------------- drzewo
 
+    // Kolor znaczka roli wpisu ręcznego: rezerwacja, do zwolnienia, pozostałe.
+    function roleCls(role) { return role === 'reserved' ? 'r' : (role === 'release' ? 'x' : 'm'); }
+    function isRelease(m) { return !!m && m.role === 'release'; }
+
     function badges(n) {
         var h = '';
         if (n.virtual) { h += '<span class="bdg v"' + (n.outside ? ' title="' + esc(N.t('grupa porządkowa: poza agregatami i adresacją wewnętrzną')) + '"' : '') + '>' + esc(N.t('grupa /{len}', { len: n.len })) + '</span>'; }
         if (n.sources.indexOf('implicit') >= 0 && !n.manual && !n.state) { h += '<span class="bdg v">' + esc(N.t('wewnętrzna')) + '</span>'; }
         if (n.state) { h += '<span class="bdg ' + n.state + '">' + esc(STATE_BDG[n.state]) + '</span>'; }
         if (n.manual) {
-            h += '<span class="bdg ' + (n.manual.role === 'reserved' ? 'r' : 'm') + '">' + esc(n.manual.role_label) + '</span>';
+            h += '<span class="bdg ' + roleCls(n.manual.role) + '">' + esc(n.manual.role_label) + '</span>';
             if (n.manual.expiry === 'expired') { h += '<span class="bdg d">' + esc(N.t('termin minął')) + '</span>'; }
         }
         return h;
@@ -231,9 +239,9 @@ document.addEventListener('nreg:ready', function () {
 
     function rangeRow(r, depth) {
         var m = r.manual;
-        return '<div class="tn rng" style="padding-left:' + (depth * 16 + 4) + 'px">'
+        return '<div class="tn rng' + (isRelease(m) ? ' rel' : '') + '" style="padding-left:' + (depth * 16 + 4) + 'px">'
             + '<span class="tg">·</span><span class="cidr" data-open-range="' + r.id + '">' + esc(r.first + ' – ' + r.last) + '</span>'
-            + '<span class="bdg ' + (m.role === 'reserved' ? 'r' : 'm') + '">' + esc(m.role_label) + '</span>'
+            + '<span class="bdg ' + roleCls(m.role) + '">' + esc(m.role_label) + '</span>'
             + (m.expiry === 'expired' ? '<span class="bdg d">' + esc(N.t('termin minął')) + '</span>' : '')
             + (r.conflicts ? '<span class="bdg d" title="' + esc(CONFLICT_HINT) + '">' + esc(N.t('{n} adr. z LibreNMS', { n: r.conflicts })) + '</span>' : '')
             + '<span class="lbl" title="' + esc(r.label || '') + '">' + esc(r.label || '') + '</span>'
@@ -243,7 +251,7 @@ document.addEventListener('nreg:ready', function () {
     function nodeRow(n, depth) {
         if (n.range) { return rangeRow(n, depth); }
         var s = n.stats;
-        return '<div class="tn" data-cidr="' + esc(n.cidr) + '" style="padding-left:' + (depth * 16 + 4) + 'px">'
+        return '<div class="tn' + (isRelease(n.manual) ? ' rel' : '') + '" data-cidr="' + esc(n.cidr) + '" style="padding-left:' + (depth * 16 + 4) + 'px">'
             + '<span class="tg" data-toggle-node="' + esc(n.cidr) + '">' + (n.len < 128 ? '▸' : '·') + '</span>'
             + '<span class="cidr" data-open-node="' + esc(n.cidr) + '">' + esc(n.cidr) + '</span>' + badges(n)
             + '<span class="lbl" title="' + esc(n.label || '') + '">' + esc(n.label || '') + '</span>'
@@ -255,7 +263,7 @@ document.addEventListener('nreg:ready', function () {
     function addrRow(a, depth) {
         var who = a.rows.map(function (r) { return r.device + ' ' + r['if'] + (r.alias ? ' (' + r.alias + ')' : ''); });
         if (a.manual) { who.push((a.manual.name || a.manual.description) + ' [' + (a.manual.expiry === 'expired' ? N.t('ręczny, termin minął') : N.t('ręczny')) + ']'); }
-        return '<div class="ta' + (a.conflict ? ' cf' : '') + '" data-open-ip="' + esc(a.ip) + '" style="padding-left:' + (depth * 16 + 22) + 'px">'
+        return '<div class="ta' + (a.conflict ? ' cf' : '') + (isRelease(a.manual) ? ' rel' : '') + '" data-open-ip="' + esc(a.ip) + '" style="padding-left:' + (depth * 16 + 22) + 'px">'
             + '<span class="ip">' + esc(a.ip) + '</span><span class="bdg ' + a.state + '">' + esc(STATE_BDG[a.state]) + '</span>'
             + (a.conflict ? '<span class="bdg d" title="' + esc(CONFLICT_HINT) + '">' + esc(N.t('w zakresie ręcznym')) + '</span>' : '')
             + '<span class="who">' + esc(who.join(' · ')) + '</span></div>';
@@ -365,7 +373,7 @@ document.addEventListener('nreg:ready', function () {
 
     function manualBlock(m) {
         manualCache[m.id] = m;
-        var h = '<div class="nreg-manual"><strong>' + N.t('Wpis ręczny') + '</strong> <span class="bdg ' + (m.role === 'reserved' ? 'r' : 'm') + '">' + esc(m.role_label) + '</span>'
+        var h = '<div class="nreg-manual"><strong>' + N.t('Wpis ręczny') + '</strong> <span class="bdg ' + roleCls(m.role) + '">' + esc(m.role_label) + '</span>'
             + '<dl style="margin-top:6px">' + (m.kind === 'range' ? '<dt>' + N.t('Zakres') + '</dt><dd class="nreg-mono" style="word-break:break-all">' + esc(m.first + ' – ' + m.last)
                 + copyBtn(m.first + '-' + m.last) + ' (' + big(m.size) + ' ' + esc(N.t('adr.')) + ')</dd>' : '')
             + (m.name ? '<dt>' + N.t('Nazwa') + '</dt><dd>' + esc(m.name) + '</dd>' : '')
@@ -459,7 +467,7 @@ document.addEventListener('nreg:ready', function () {
                 + '<th>' + N.t('Nazwa') + '</th><th>' + N.t('Opis') + '</th><th>' + N.t('Właściciel') + '</th><th>' + N.t('Dodał') + '</th></tr></thead><tbody>'
                 + j.rows.map(function (m) {
                     var go = m.kind === 'range' ? 'data-goto-range="' + m.id + '"' : (m.kind === 'address' ? 'data-goto-ip="' : 'data-goto-node="') + (m.kind === 'range' ? '' : esc(m.cidr) + '"');
-                    return '<tr><td class="nreg-mono" style="word-break:break-all"><a href="#" ' + go + '>' + esc(m.kind === 'range' ? m.first + ' – ' + m.last : m.cidr) + '</a></td><td>' + esc(m.role_label) + '</td>'
+                    return '<tr' + (isRelease(m) ? ' class="rel"' : '') + '><td class="nreg-mono" style="word-break:break-all"><a href="#" ' + go + '>' + esc(m.kind === 'range' ? m.first + ' – ' + m.last : m.cidr) + '</a></td><td>' + esc(m.role_label) + '</td>'
                         + '<td>' + N.expiryHtml(m) + '</td><td>' + esc(m.name || '') + '</td><td>' + esc(m.description || '') + '</td><td>' + esc(m.owner || '') + '</td>'
                         + '<td style="font-size:11px">' + esc(m.created_by || '?') + '<br>' + esc(m.created_at) + '</td></tr>';
                 }).join('') + '</tbody></table>';
