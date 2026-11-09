@@ -554,14 +554,7 @@ final class IpamModule extends AbstractModule
         // Adres IPv4: najgłębszy węzeł i szczegóły adresu.
         $ip = IpCalc::ip2int($q);
         if ($ip !== null) {
-            $node = $tree->deepest($ip);
-            $range = $idx->rangeOf($ip);
-            $path = $range ? $this->rangePath($tree, $range['id']) : ($node ? $tree->path($node) : []);
-
-            return ['kind' => 'address', 'ip' => $q, 'path' => $path, 'hidden' => $idx->hiddenOutside($ip),
-                'address' => $idx->address($ip) ? $this->addrInfo($idx, $ip, $dups) : null,
-                'range' => $range ? ['id' => $range['id'], 'label' => $range['cidr'], 'role_label' => $range['role_label']] : null,
-                'history' => $this->history(['a:' . $q . '/', 'a:' . $q . ':'], [$ip, $ip])];
+            return $this->addressResult($idx, $ip, $dups);
         }
 
         // Prefiks: dokładny węzeł albo najgłębszy, który go zawiera.
@@ -574,6 +567,12 @@ final class IpamModule extends AbstractModule
             $node = $tree->node($c['cidr']) ? $c['cidr'] : $tree->deepest($c['start']);
 
             return ['kind' => 'prefix', 'cidr' => $c['cidr'], 'exact' => $node === $c['cidr'], 'path' => $node ? $tree->path($node) : []];
+        }
+
+        // Niepełny adres (172.16.30, 10.): najbliższy wpis w tym bloku.
+        $partial = IpCalc::partial($q);
+        if ($partial !== null) {
+            return $this->searchPartial($idx, $q, $partial[0], $partial[1]);
         }
 
         // Tekst: opisy wpisów ręcznych, nazwy urządzeń i interfejsów, opisy portów.
@@ -609,6 +608,66 @@ final class IpamModule extends AbstractModule
         }
 
         return ['kind' => 'text', 'hits' => $hits];
+    }
+
+    /** Wynik szukania adresu: ścieżka w drzewie, szczegóły i historia. */
+    private function addressResult(IpamIndex $idx, int $ip, array $dups): array
+    {
+        $tree = $idx->tree();
+        $q = IpCalc::int2ip($ip);
+        $node = $tree->deepest($ip);
+        $range = $idx->rangeOf($ip);
+        $path = $range ? $this->rangePath($tree, $range['id']) : ($node ? $tree->path($node) : []);
+
+        return ['kind' => 'address', 'ip' => $q, 'path' => $path, 'hidden' => $idx->hiddenOutside($ip),
+            'address' => $idx->address($ip) ? $this->addrInfo($idx, $ip, $dups) : null,
+            'range' => $range ? ['id' => $range['id'], 'label' => $range['cidr'], 'role_label' => $range['role_label']] : null,
+            'history' => $this->history(['a:' . $q . '/', 'a:' . $q . ':'], [$ip, $ip])];
+    }
+
+    /**
+     * Najbliższy wpis w bloku niepełnego adresu: węzeł drzewa, zakres albo
+     * adres o najniższym adresie (przy remisie węzeł, potem zakres). Gdy w
+     * bloku nic nie ma, najgłębsza sieć, która go zawiera.
+     */
+    private function searchPartial(IpamIndex $idx, string $q, int $start, int $len): array
+    {
+        $tree = $idx->tree();
+        $end = $start + IpCalc::size($len) - 1;
+        $block = IpCalc::cidr($start, $len);
+
+        $best = null;
+        $node = $tree->firstWithin($start, $end);
+        if ($node !== null) {
+            $best = ['node', $tree->node($node)['start'], $node];
+        }
+        foreach ($idx->ranges() as $id => $r) {
+            if ($r['start'] >= $start && $r['start'] <= $end && ($best === null || $r['start'] < $best[1])) {
+                $best = ['range', $r['start'], $id];
+            }
+        }
+        foreach (array_keys($idx->addresses()) as $ip) {
+            if ($ip >= $start && $ip <= $end && ($best === null || $ip < $best[1])) {
+                $best = ['address', $ip, $ip];
+            }
+        }
+
+        if ($best === null) {
+            $node = $tree->deepest($start);
+
+            return ['kind' => 'prefix', 'cidr' => $block, 'exact' => false, 'partial' => $q, 'path' => $node ? $tree->path($node) : []];
+        }
+        if ($best[0] === 'node') {
+            return ['kind' => 'prefix', 'cidr' => $best[2], 'exact' => true, 'partial' => $q, 'path' => $tree->path($best[2])];
+        }
+        if ($best[0] === 'range') {
+            $r = $idx->ranges()[$best[2]];
+
+            return ['kind' => 'range', 'id' => $best[2], 'first' => $r['first'], 'label' => $r['cidr'], 'partial' => $q,
+                'path' => $this->rangePath($tree, $best[2])];
+        }
+
+        return $this->addressResult($idx, $best[2], $idx->duplicates()) + ['partial' => $q];
     }
 
     /** Wpisy ręczne danego typu (agregat, pula, NAT...), zawężone zapytaniem (IpamIndex::findManual). */

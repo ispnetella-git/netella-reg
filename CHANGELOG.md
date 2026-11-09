@@ -1,5 +1,12 @@
 # Changelog
 
+
+## 0.9.6 - 2026-11-09
+
+- Adresy IPv4, „Szukaj”: niepełny adres (np. `172.16.30`, `172.16` albo `10.` z kropką na końcu) rozwija
+  drzewo i zaznacza najbliższy pasujący wpis w tym bloku: pierwszy węzeł, zakres albo adres o najniższym
+  adresie. Gdy w bloku nic nie ma, pokazuje najbliższą sieć, która go zawiera. Sama liczba bez kropki
+  nadal szuka tekstu.
 ## 0.9.5 - 2026-11-05
 
 - Link „pomoc/instrukcja” w nagłówku (jak we wtyczce ZTE ONU): zwinięty panel ze zwięzłym opisem ról

@@ -31,7 +31,7 @@ to jeden rekord (host, interfejs, opis portu, maska, VLAN z nazwy interfejsu).
   W sieciach liczą się hosty, bez adresu sieci i rozgłoszeniowego.
 - **Szczegóły sieci:** interfejsy z LibreNMS, wpis ręczny, wolne bloki (w agregatach i grupach) albo
   wolne adresy hostów (w sieciach), historia. Kliknięcie wolnego bloku otwiera formularz dodania.
-- **Szukaj:** adres (rozwija drzewo do niego), prefiks albo tekst (opisy, urządzenia, interfejsy).
+- **Szukaj:** adres (rozwija drzewo do niego), niepełny adres IPv4 (np. `172.16.30` albo `10.`: pokazuje najbliższy wpis w tym bloku), prefiks albo tekst (opisy, urządzenia, interfejsy).
 - **Wolne /N w prefiksie:** pierwsze wolne, wyrównane bloki danej maski w dowolnym prefiksie.
 - **Dodaj adresację** (prawo edycji): `10.0.0.0/24` (prefiks z rolą agregat, pula, rezerwacja albo
   sieć używana), `10.0.0.5`, `10.0.0.10-20`, `10.0.0.10-10.0.0.40` albo lista adresów (do 1024 naraz,

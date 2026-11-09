@@ -364,6 +364,18 @@ check('tree: brak wirtualnego /8 nad siecią', [$t16->node('172.19.0.0/16')['par
 $tAgg = new IpTree([$pfx('10.0.0.0/16', 'manual', false), $pfx('10.0.5.0/30')], [], [8, 16, 24]);
 check('tree: wirtualny /24 w agregacie', IpTree::isVirtual($tAgg->node('10.0.5.0/24')), true);
 
+// Szukanie po niepełnym adresie: blok i pierwszy węzeł w nim.
+check('partial 172.16.30', IpCalc::partial('172.16.30'), [$ip('172.16.30.0'), 24]);
+check('partial 10.', IpCalc::partial('10.'), [$ip('10.0.0.0'), 8]);
+check('partial 10.0.', IpCalc::partial('10.0.'), [$ip('10.0.0.0'), 16]);
+check('partial sama liczba to tekst', IpCalc::partial('172'), null);
+check('partial oktet > 255', IpCalc::partial('172.300'), null);
+check('partial pełny adres to nie blok', IpCalc::partial('10.0.0.1'), null);
+check('firstWithin 10.0.5', $tAgg->firstWithin($ip('10.0.5.0'), $ip('10.0.5.255')), '10.0.5.0/24');
+check('firstWithin 10.0', $tAgg->firstWithin($ip('10.0.0.0'), $ip('10.0.255.255')), '10.0.0.0/16');
+check('firstWithin 10.0.4 pusty', $tAgg->firstWithin($ip('10.0.4.0'), $ip('10.0.4.255')), null);
+check('firstWithin 172.19.0 w sieci /16', $t16->firstWithin($ip('172.19.0.0'), $ip('172.19.0.255')), null);
+
 // Wolne miejsce do drzewa: dziecko wirtualne liczy się w całości.
 check('gaps agregatu /16', array_map(fn ($g) => [IpCalc::int2ip($g[0]), IpCalc::int2ip($g[1])], $tAgg->gaps('10.0.0.0/16')),
     [['10.0.0.0', '10.0.4.255'], ['10.0.6.0', '10.0.255.255']]);

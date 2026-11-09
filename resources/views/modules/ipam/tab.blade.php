@@ -507,12 +507,22 @@ document.addEventListener('nreg:ready', function () {
         if (!q && !type) { return; }
         result.innerHTML = '';
         api('search', type ? { q: q, type: type } : { q: q }).then(function (j) {
+            // Niepełny adres (np. 172.16.30): pokazujemy pierwszy pasujący wpis.
+            if (j.partial) {
+                var hit = j.kind === 'address' ? j.ip : (j.kind === 'range' ? j.label : j.cidr);
+                result.innerHTML = alertBox('info', j.kind === 'prefix' && !j.exact
+                    ? N.t('W bloku {cidr} nie ma wpisów. Pokazuję najbliższą sieć, która go zawiera.', { cidr: esc(j.cidr) })
+                    : N.t('Najbliższy wpis pasujący do „{q}”: {hit}', { q: esc(j.partial), hit: '<span class="nreg-mono">' + esc(hit) + '</span>' }));
+            }
+            if (j.kind === 'range') {
+                expandPath(j.path); openRange(j.id); return;
+            }
             if (j.kind === 'address') {
-                if (j.hidden) { result.innerHTML = alertBox('info', esc(OUTSIDE_HINT)); }
+                if (j.hidden) { result.innerHTML += alertBox('info', esc(OUTSIDE_HINT)); }
                 expandPath(j.path, j.ip); openIp(j.ip); return;
             }
             if (j.kind === 'prefix') {
-                if (!j.exact) { result.innerHTML = alertBox('info', N.t('Nie ma prefiksu {cidr} w drzewie. Pokazuję najbliższą sieć, która go zawiera.', { cidr: esc(j.cidr) })); }
+                if (!j.exact && !j.partial) { result.innerHTML = alertBox('info', N.t('Nie ma prefiksu {cidr} w drzewie. Pokazuję najbliższą sieć, która go zawiera.', { cidr: esc(j.cidr) })); }
                 expandPath(j.path); if (j.path.length) { openNode(j.path[j.path.length - 1]); }
                 return;
             }

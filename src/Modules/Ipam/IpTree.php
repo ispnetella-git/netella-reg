@@ -363,6 +363,37 @@ final class IpTree
         return $cidr;
     }
 
+    /**
+     * Pierwszy (najniższy adres, przy remisie najszerszy) węzeł leżący w całości
+     * w przedziale albo null. Do szukania po niepełnym adresie (np. 172.16.30).
+     */
+    public function firstWithin(int $start, int $end): ?string
+    {
+        $lo = 0;
+        $hi = count($this->sorted) - 1;
+        $first = count($this->sorted);
+        while ($lo <= $hi) {
+            $mid = intdiv($lo + $hi, 2);
+            if ($this->nodes[$this->sorted[$mid]]['start'] >= $start) {
+                $first = $mid;
+                $hi = $mid - 1;
+            } else {
+                $lo = $mid + 1;
+            }
+        }
+        for ($i = $first; $i < count($this->sorted); $i++) {
+            $n = $this->nodes[$this->sorted[$i]];
+            if ($n['start'] > $end) {
+                break;
+            }
+            if ($n['end'] <= $end) {
+                return $n['cidr'];
+            }
+        }
+
+        return null;
+    }
+
     private function computeStats(): void
     {
         // Od najdłuższych masek: dzieci są policzone przed rodzicem.

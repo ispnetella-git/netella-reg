@@ -240,4 +240,28 @@ final class IpCalc
     {
         return $len >= 31 ? self::size($len) : self::size($len) - 2;
     }
+
+    /**
+     * Niepełny adres IPv4: 1-3 oktety, przy jednym wymagana kropka na końcu
+     * (sama liczba to szukanie tekstu). Zwraca [początek, maska] bloku albo null.
+     *
+     * @return array{0:int,1:int}|null
+     */
+    public static function partial(string $q): ?array
+    {
+        if (! preg_match('#^\d{1,3}(\.\d{1,3}){1,2}\.?$|^\d{1,3}\.$#', $q)) {
+            return null;
+        }
+        $octets = explode('.', rtrim($q, '.'));
+        $ip = 0;
+        foreach ($octets as $o) {
+            if ((int) $o > 255) {
+                return null;
+            }
+            $ip = ($ip << 8) | (int) $o;
+        }
+        $len = 8 * count($octets);
+
+        return [$ip << (32 - $len), $len];
+    }
 }

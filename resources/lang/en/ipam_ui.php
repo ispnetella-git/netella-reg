@@ -151,6 +151,8 @@ return [
     // Wyszukiwanie i wolne
     'Nie ma prefiksu {cidr} w drzewie. Pokazuję najbliższą sieć, która go zawiera.' => 'Prefix {cidr} is not in the tree. Showing the closest network that contains it.',
     'Nic nie znaleziono dla „{q}”.' => 'Nothing found for “{q}”.',
+    'W bloku {cidr} nie ma wpisów. Pokazuję najbliższą sieć, która go zawiera.' => 'There are no entries in block {cidr}. Showing the closest network that contains it.',
+    'Najbliższy wpis pasujący do „{q}”: {hit}' => 'Closest entry matching “{q}”: {hit}',
     'Znaleziono {n}:' => 'Found {n}:',
     'Brak wpisów tego typu w tej przestrzeni.' => 'No entries of this type in this space.',
     'Znaleziono {n}, pokazuję pierwsze {m}:' => 'Found {n}, showing the first {m}:',
