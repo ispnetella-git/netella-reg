@@ -52,6 +52,11 @@
         <input class="form-control nreg-mono" id="nreg-vlan-range" placeholder="{{ nreg_t('np. 1400-1450') }}" style="width: 180px;">
         <button class="btn btn-primary btn-sm" type="submit"><i class="fa fa-check"></i> {{ nreg_t('Sprawdź') }}</button>
     </form>
+    <form id="nreg-vlan-search">
+        <input class="form-control" id="nreg-vlan-q" placeholder="{{ nreg_t('szukaj w opisach') }}" style="width: 180px;"
+               title="{{ nreg_t('Nazwa VLAN-u w LibreNMS oraz nazwa, opis i właściciel wpisu ręcznego') }}">
+        <button class="btn btn-primary btn-sm" type="submit"><i class="fa fa-search"></i> {{ nreg_t('Szukaj') }}</button>
+    </form>
     <form id="nreg-vlan-free">
         <span>{{ nreg_t('Znajdź') }}</span>
         <input class="form-control nreg-num" type="number" min="1" max="4094" value="1" id="nreg-vlan-count">
@@ -252,6 +257,31 @@ document.addEventListener('nreg:ready', function () {
                 h += '<tr><td><a href="#" data-vlan="' + o.vlan + '">' + o.vlan + '</a></td><td>' + esc(labels[o.status] || o.status) + (o.qinq ? ' ' + QINQ_BDG : '')
                     + '</td><td>' + esc(o.devices.join(', ')) + '</td><td>'
                     + (o.manual ? esc(o.manual.description) + (o.manual.owner ? ' <span class="nreg-muted">(' + esc(o.manual.owner) + ')</span>' : '') + ' ' + N.expiryHtml(o.manual) : '')
+                    + '</td></tr>';
+            });
+            result.innerHTML = h + '</tbody></table>';
+        }).catch(function (e) { result.innerHTML = alertBox('danger', esc(e.message)); });
+    }
+
+    // Szukanie po opisie: nazwa w LibreNMS, nazwa, opis i właściciel wpisu ręcznego.
+    function searchText(q) {
+        q = q.trim();
+        if (!q) { return; }
+        result.innerHTML = '<p class="nreg-muted">' + N.t('Szukam…') + '</p>';
+        N.api('vlan/search', { q: q }).then(function (j) {
+            highlight(j.hits.map(function (o) { return o.vlan; }));
+            if (!j.hits.length) {
+                result.innerHTML = alertBox('warning', N.t('Nic nie znaleziono dla „{q}”.', { q: esc(j.q) }));
+                return;
+            }
+            var found = j.total > j.hits.length ? N.t('Znaleziono {n}, pokazuję pierwsze {m}:', { n: j.total, m: j.hits.length }) : N.t('Znaleziono {n}:', { n: j.hits.length });
+            var h = alertBox('info', '<strong>' + found + '</strong> <span class="nreg-mono">' + esc(compress(j.hits.map(function (o) { return o.vlan; }))) + '</span>')
+                + '<table class="table table-condensed"><thead><tr><th>VLAN</th><th>' + N.t('Status') + '</th><th>' + N.t('Nazwa w LibreNMS') + '</th><th>' + N.t('Urządzenia (LibreNMS)') + '</th><th>' + N.t('Wpis ręczny') + '</th></tr></thead><tbody>';
+            j.hits.forEach(function (o) {
+                var m = o.manual;
+                h += '<tr><td><a href="#" data-vlan="' + o.vlan + '">' + o.vlan + '</a></td><td>' + esc(labels[o.status] || o.status) + (o.qinq ? ' ' + QINQ_BDG : '')
+                    + '</td><td>' + esc(o.names.join(', ')) + '</td><td>' + esc(o.devices.join(', ')) + '</td><td>'
+                    + (m ? (m.name ? '<strong>' + esc(m.name) + '</strong> ' : '') + esc(m.description) + (m.owner ? ' <span class="nreg-muted">(' + esc(m.owner) + ')</span>' : '') + ' ' + N.expiryHtml(m) : '')
                     + '</td></tr>';
             });
             result.innerHTML = h + '</tbody></table>';
@@ -562,6 +592,9 @@ document.addEventListener('nreg:ready', function () {
         e.preventDefault(); check(document.getElementById('nreg-vlan-range').value);
     });
     document.getElementById('nreg-vlan-free').addEventListener('submit', function (e) { e.preventDefault(); findFree(); });
+    document.getElementById('nreg-vlan-search').addEventListener('submit', function (e) {
+        e.preventDefault(); searchText(document.getElementById('nreg-vlan-q').value);
+    });
 
     var syncBtn = document.getElementById('nreg-vlan-syncnow');
     if (syncBtn) {

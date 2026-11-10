@@ -98,6 +98,7 @@ final class VlanModule extends AbstractModule
             'map' => $this->apiMap(),
             'detail' => $this->apiDetail((int) $request->query('vlan', 0)),
             'check' => $this->apiCheck((string) $request->query('range', '')),
+            'search' => $this->apiSearch((string) $request->query('q', '')),
             'free' => $this->apiFree(
                 (int) $request->query('count', 1),
                 (int) $request->query('from', VlanName::MIN),
@@ -360,6 +361,41 @@ final class VlanModule extends AbstractModule
             'summary' => $summary,
             'occupied' => $items,
         ];
+    }
+
+    /** Lista wyników szukania po opisie. */
+    private const SEARCH_HITS = 500;
+
+    /** Szukanie po opisie: nazwa VLAN-u w LibreNMS, nazwa, opis i właściciel wpisu ręcznego. */
+    private function apiSearch(string $q): array
+    {
+        $q = trim($q);
+        if ($q === '') {
+            throw new ApiException(Lang::t('Wpisz fragment opisu.'));
+        }
+        $index = $this->index();
+        $all = $index->search($q);
+        $hits = [];
+        foreach (array_slice($all, 0, self::SEARCH_HITS, true) as $v => $h) {
+            $devices = [];
+            foreach ($index->occurrences($v) as $o) {
+                if ($o['state'] !== VlanIndex::FREE) {
+                    $devices[] = $o['data']['device'] ?? '?';
+                }
+            }
+            $m = $h['manual'] ?? $index->manual($v);
+            $hits[] = [
+                'vlan' => $v,
+                'status' => $index->status($v),
+                'qinq' => $index->qinq($v),
+                'names' => $h['names'],
+                'devices' => array_values(array_unique($devices)),
+                'manual' => $m === null ? null : ['name' => $m['name'] ?? '', 'description' => $m['description'] ?? '', 'owner' => $m['owner'] ?? '',
+                    'valid_until' => $m['valid_until'] ?? null, 'expiry' => $m['expiry'] ?? null],
+            ];
+        }
+
+        return ['q' => $q, 'total' => count($all), 'hits' => $hits];
     }
 
     private function apiFree(int $count, int $from, int $to): array

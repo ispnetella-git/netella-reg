@@ -207,6 +207,14 @@ check('manual: maska', [strlen($im->manualMask()), substr_count($im->manualMask(
 check('manual: wolny ciąg omija wpisy', VlanRange::findFreeRun(fn ($v) => $im->isFree($v), 3, 1400), [1402, 1403, 1404]);
 $im2 = new VlanIndex($rows, $now, 30, 'ignore', $manual);
 check('manual+ignore: 200 rezerwacja', $im2->status(200), VlanIndex::RESERVED);
+// Szukanie po opisie: nazwa z LibreNMS (bez wystąpień po karencji), nazwa/opis/właściciel wpisu.
+$named = fn (int $vlan, int $dev, string $name, ?string $gone = null) => array_replace_recursive($row($vlan, $dev, false, $gone), ['data' => ['name' => $name]]);
+$is = new VlanIndex([$named(10, 1, 'KLIENT-Kowalski'), $named(10, 2, 'klient-kowalski'), $named(20, 1, 'MGMT'), $named(30, 1, 'Kowalski-old', '2026-08-01 00:00:00')],
+    $now, 30, 'stale', [20 => ['status' => 'used', 'name' => '', 'description' => 'zarządzanie OLT', 'owner' => ''], 1500 => ['status' => 'reserved', 'name' => 'BSA', 'description' => '', 'owner' => 'Kowalski sp.']]);
+check('search: nazwa LibreNMS bez wielkości liter, wpis właściciel, po karencji pominięty', array_keys($is->search('KOWALSKI')), [10, 1500]);
+check('search: nazwy z LibreNMS', $is->search('kowal')[10]['names'], ['KLIENT-Kowalski', 'klient-kowalski']);
+check('search: opis wpisu ręcznego', [array_keys($is->search('olt')), $is->search('olt')[20]['names']], [[20], []]);
+check('search: pusty tekst', $is->search('  '), []);
 // QinQ: maska z wpisów ręcznych, także przy numerze z LibreNMS (100).
 $iq = new VlanIndex($rows, $now, 30, 'stale', [100 => ['status' => 'used', 'qinq' => true], 1400 => ['status' => 'used', 'qinq' => false], 2231 => ['status' => 'reserved', 'qinq' => true]]);
 check('qinq: maska', [strlen($iq->qinqMask()), substr_count($iq->qinqMask(), '1'), $iq->qinqMask()[99], $iq->qinqMask()[2230], $iq->qinqMask()[1399]], [4094, 2, '1', '1', '0']);

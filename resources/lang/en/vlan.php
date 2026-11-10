@@ -146,4 +146,11 @@ return [
     'Zdjęto oznaczenie QinQ z VLAN-u {v}.' => 'Removed the QinQ mark from VLAN {v}.',
     'Ten numer ma wpis ręczny. Zaznacz QinQ w edycji wpisu.' => 'This number has a manual entry. Tick QinQ when editing the entry.',
     'LibreNMS nie widzi tego numeru. Dodaj wpis ręczny i zaznacz w nim QinQ.' => 'LibreNMS does not see this number. Add a manual entry and tick QinQ in it.',
+
+    // Szukanie po opisie
+    'Wpisz fragment opisu.' => 'Enter part of a description.',
+    'szukaj w opisach' => 'search descriptions',
+    'Nazwa VLAN-u w LibreNMS oraz nazwa, opis i właściciel wpisu ręcznego' => 'VLAN name in LibreNMS and the name, description and owner of the manual entry',
+    'Szukam…' => 'Searching…',
+    'Nazwa w LibreNMS' => 'Name in LibreNMS',
 ];

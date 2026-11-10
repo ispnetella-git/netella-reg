@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.7 - 2026-11-10
+
+- VLAN-y: pole „szukaj w opisach” w pasku narzędzi. Szuka fragmentu tekstu (bez rozróżniania wielkości
+  liter) w nazwach VLAN-ów z LibreNMS (bez wystąpień po karencji) oraz w nazwie, opisie i właścicielu
+  wpisów ręcznych. Wyniki są zaznaczone na mapie i wypisane w tabeli (status, QinQ, nazwy, urządzenia,
+  wpis ręczny); numer otwiera szczegóły.
+
 ## 0.9.6 - 2026-11-09
 
 - Adresy IPv4, „Szukaj”: niepełny adres (np. `172.16.30`, `172.16` albo `10.` z kropką na końcu) rozwija

@@ -119,6 +119,39 @@ final class VlanIndex
         return $this->manual[$vlan] ?? null;
     }
 
+    /**
+     * Numery, których opis zawiera tekst (bez rozróżniania wielkości liter):
+     * nazwa VLAN-u w LibreNMS (bez wystąpień po karencji) albo nazwa, opis
+     * i właściciel wpisu ręcznego.
+     *
+     * @return array<int,array{names:list<string>,manual:?array}> numer => pasujące nazwy z LibreNMS i wpis ręczny
+     */
+    public function search(string $q): array
+    {
+        $needle = mb_strtolower(trim($q));
+        if ($needle === '') {
+            return [];
+        }
+        $out = [];
+        foreach ($this->occurrences as $vlan => $rows) {
+            foreach ($rows as $r) {
+                $name = (string) ($r['data']['name'] ?? '');
+                if ($r['state'] !== self::FREE && $name !== '' && str_contains(mb_strtolower($name), $needle)) {
+                    $out[$vlan]['names'][$name] = true;
+                }
+            }
+        }
+        foreach ($this->manual as $vlan => $m) {
+            $text = implode(' ', [$m['name'] ?? '', $m['description'] ?? '', $m['owner'] ?? '']);
+            if (str_contains(mb_strtolower($text), $needle)) {
+                $out[$vlan]['manual'] = $m;
+            }
+        }
+        ksort($out);
+
+        return array_map(fn ($h) => ['names' => array_keys($h['names'] ?? []), 'manual' => $h['manual'] ?? null], $out);
+    }
+
     /** Czy numer jest teraz na aktywnym urządzeniu w LibreNMS. */
     public function inLibreNms(int $vlan): bool
     {

@@ -174,7 +174,9 @@ opis ról wpisów ręcznych (`partials/help.blade.php`; listy ról idą z kodu, 
   „Zakres” sprawdza np. `1400-1450` (także `1400 to 1450` i listy po przecinku). Zakres można też
   zaznaczyć na mapie: przeciągnięcie myszą, Ctrl + klik (dokłada albo zdejmuje numer), Shift + klik
   (od ostatniego numeru), Esc czyści; zaznaczenie od razu jest sprawdzane. „Znajdź N
-  kolejnych wolnych” szuka pierwszego wolnego ciągu numerów;
+  kolejnych wolnych” szuka pierwszego wolnego ciągu numerów. „Szukaj w opisach” znajduje numery po
+  fragmencie nazwy VLAN-u w LibreNMS albo nazwy, opisu i właściciela wpisu ręcznego (wyniki
+  zaznaczone na mapie, z tabelą);
 - **Dodaj VLAN** (prawo edycji): wpis ręczny dla numeru lub zakresu (do 500 numerów naraz).
   Wymagany jest opis. Opcjonalnie: nazwa, właściciel, status (używany albo rezerwacja), urządzenia
   i komentarz do dziennika. Wpis można dodać też z wyniku sprawdzania zakresu i ze szczegółów
